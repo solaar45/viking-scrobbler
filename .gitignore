@@ -1,0 +1,4 @@
+/backend/_build/
+/backend/deps/
+/frontend/node_modules/
+/frontend/dist/
