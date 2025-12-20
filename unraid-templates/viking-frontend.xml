@@ -1,0 +1,16 @@
+<?xml version="1.0"?>
+<Container version="2">
+  <Name>viking-frontend</Name>
+  <Repository>solaar45/viking-frontend:latest</Repository>
+  <Registry>https://hub.docker.com/r/solaar45/viking-frontend</Registry>
+  <Network>bridge</Network>
+  <Shell>sh</Shell>
+  <Privileged>false</Privileged>
+  <Support>https://github.com/solaar45/viking-scrobbler</Support>
+  <Project>https://github.com/solaar45/viking-scrobbler</Project>
+  <Overview>Viking Scrobbler Frontend - React + Vite + Tailwind CSS</Overview>
+  <Category>Tools:</Category>
+  <WebUI>http://[IP]:[PORT:8080]/</WebUI>
+  <Icon>https://raw.githubusercontent.com/docker-library/docs/master/node/logo.png</Icon>
+  <Config Name="WebUI Port" Target="80" Default="8080" Mode="tcp" Description="Frontend Web Port" Type="Port" Display="always" Required="true" Mask="false">8080</Config>
+</Container>
