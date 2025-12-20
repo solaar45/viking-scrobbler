@@ -1,25 +1,14 @@
 services:
-  backend:
-    build: ./backend/app_api
-    container_name: viking-backend
+  viking:
+    build: .
+    container_name: viking-scrobbler
     environment:
       - MIX_ENV=prod
       - PHX_SERVER=true
       - PORT=4000
       - DATABASE_PATH=/app/data/app_api.db
-      - SECRET_KEY_BASE=oTERoTrA7aqWV02aohUD6VYoJWTsWmIsHw6kH9Dg7BAMqNc8VAESii4wC0qKCBRR
     ports:
       - "4000:4000"
     volumes:
       - ./data:/app/data
-
-  frontend:
-    build: 
-      context: ./frontend/app_web
-      args:
-        - VITE_API_URL=http://localhost:4000
-    container_name: viking-frontend
-    depends_on:
-      - backend
-    ports:
-      - "8080:80"
+    restart: unless-stopped

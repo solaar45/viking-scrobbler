@@ -1,0 +1,21 @@
+# Git
+.git
+.gitignore
+
+# Build artifacts
+backend/app_api/_build
+backend/app_api/deps
+frontend/app_web/node_modules
+frontend/app_web/dist
+
+# Data
+data/
+
+# Docs
+*.md
+.github/
+unraid-templates/
+
+# Docker
+docker-compose*.yml
+.dockerignore
