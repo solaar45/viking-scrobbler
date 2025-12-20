@@ -1,12 +1,12 @@
 services:
-  viking:
+  app:
     build: .
     container_name: viking-scrobbler
     environment:
       - MIX_ENV=prod
       - PHX_SERVER=true
       - PORT=4000
-      - DATABASE_PATH=/app/data/app_api.db
+      - DATABASE_PATH=/app/data/viking.db
     ports:
       - "4000:4000"
     volumes:

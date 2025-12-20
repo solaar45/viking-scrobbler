@@ -2,3 +2,15 @@
 /backend/deps/
 /frontend/node_modules/
 /frontend/dist/
+# Runtime Data
+data/
+*.db
+*.db-shm
+*.db-wal
+.secret_key_base
+
+# Environment
+.env
+.env.local
+EOF
+

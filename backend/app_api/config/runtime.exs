@@ -1,18 +1,14 @@
 import Config
 
 if config_env() == :prod do
-  database_path =
-    System.get_env("DATABASE_PATH") ||
-      raise """
-      environment variable DATABASE_PATH is missing.
-      For example: /app/data/app_api.db
-      """
-
+  # SQLite Config
+  database_path = System.get_env("DATABASE_PATH") || "/app/data/viking.db"
+  
   config :app_api, AppApi.Repo,
     database: database_path,
     pool_size: String.to_integer(System.get_env("POOL_SIZE") || "5")
 
-  # Secret wird vom Entrypoint-Script bereitgestellt
+  # Secret Key
   secret_key_base =
     System.get_env("SECRET_KEY_BASE") ||
       raise """

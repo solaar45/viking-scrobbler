@@ -2,13 +2,43 @@
 <Container version="2">
   <Name>viking-scrobbler</Name>
   <Repository>solaar45/viking-scrobbler:latest</Repository>
+  <Registry>https://hub.docker.com/r/solaar45/viking-scrobbler</Registry>
   <Network>bridge</Network>
-  <Overview>Viking Scrobbler - Music scrobbling (auto-generates secrets)</Overview>
+  <MyIP/>
+  <Shell>sh</Shell>
+  <Privileged>false</Privileged>
+  <Support>https://github.com/solaar45/viking</Support>
+  <Project>https://github.com/solaar45/viking</Project>
+  <Overview>Viking Scrobbler - Music scrobbling web app with Elixir/Phoenix backend and React/TypeScript frontend. Auto-configures database and secrets on first run.</Overview>
   <Category>Music: Tools:</Category>
   <WebUI>http://[IP]:[PORT:4000]/</WebUI>
+  <TemplateURL>https://raw.githubusercontent.com/solaar45/viking/main/unraid-templates/viking-scrobbler.xml</TemplateURL>
   <Icon>https://raw.githubusercontent.com/elixir-lang/elixir-lang.github.com/master/images/logo/logo.png</Icon>
-  <Config Name="WebUI Port" Target="4000" Default="4000" Mode="tcp" Type="Port" Display="always" Required="true">4000</Config>
-  <Config Name="Data Directory" Target="/app/data" Default="/mnt/user/appdata/viking/data" Mode="rw" Description="Database and auto-generated secrets" Type="Path" Display="always" Required="true">/mnt/user/appdata/viking/data</Config>
-  <Config Name="MIX_ENV" Target="MIX_ENV" Default="prod" Type="Variable" Display="advanced" Required="false">prod</Config>
-  <Config Name="DATABASE_PATH" Target="DATABASE_PATH" Default="/app/data/app_api.db" Type="Variable" Display="advanced" Required="false">/app/data/app_api.db</Config>
+  <ExtraParams>--link viking-db:db</ExtraParams>
+  <PostArgs/>
+  <CPUset/>
+  <DateInstalled/>
+  <DonateText/>
+  <DonateLink/>
+  <Requires>PostgreSQL database container named 'viking-db'</Requires>
+  
+  <Config Name="WebUI Port" Target="4000" Default="4000" Mode="tcp" Description="Web Interface Port" Type="Port" Display="always" Required="true" Mask="false">4000</Config>
+  
+  <Config Name="Data Directory" Target="/app/data" Default="/mnt/user/appdata/viking/data" Mode="rw" Description="Storage for auto-generated secrets and config" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/viking/data</Config>
+  
+  <Config Name="PostgreSQL Host" Target="POSTGRES_HOST" Default="db" Mode="" Description="PostgreSQL hostname (use container link name)" Type="Variable" Display="always" Required="true" Mask="false">db</Config>
+  
+  <Config Name="PostgreSQL Port" Target="POSTGRES_PORT" Default="5432" Mode="" Description="PostgreSQL port" Type="Variable" Display="always" Required="true" Mask="false">5432</Config>
+  
+  <Config Name="PostgreSQL User" Target="POSTGRES_USER" Default="viking" Mode="" Description="Database username" Type="Variable" Display="always" Required="true" Mask="false">viking</Config>
+  
+  <Config Name="PostgreSQL Password" Target="POSTGRES_PASSWORD" Default="" Mode="" Description="Database password (set the same in postgres container)" Type="Variable" Display="always" Required="true" Mask="true"/>
+  
+  <Config Name="PostgreSQL Database" Target="POSTGRES_DB" Default="viking_prod" Mode="" Description="Database name" Type="Variable" Display="always" Required="true" Mask="false">viking_prod</Config>
+  
+  <Config Name="Application Port" Target="PORT" Default="4000" Mode="" Description="Internal application port" Type="Variable" Display="advanced" Required="false" Mask="false">4000</Config>
+  
+  <Config Name="Pool Size" Target="POOL_SIZE" Default="10" Mode="" Description="Database connection pool size" Type="Variable" Display="advanced" Required="false" Mask="false">10</Config>
+  
+  <Config Name="Environment" Target="MIX_ENV" Default="prod" Mode="" Description="Elixir environment" Type="Variable" Display="advanced" Required="false" Mask="false">prod</Config>
 </Container>

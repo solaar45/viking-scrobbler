@@ -42,7 +42,6 @@ FROM alpine:3.20.3
 
 RUN apk add --no-cache \
     openssl \
-    openssl-dev \
     ncurses-libs \
     libstdc++ \
     libgcc
@@ -62,7 +61,7 @@ RUN mkdir -p /app/data
 
 ENV PHX_SERVER=true \
     PORT=4000 \
-    DATABASE_PATH=/app/data/app_api.db
+    DATABASE_PATH=/app/data/viking.db
 
 EXPOSE 4000
 
