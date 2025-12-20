@@ -1,0 +1,24 @@
+services:
+  backend:
+    image: solaar45/viking-backend:latest
+    container_name: viking-backend
+    environment:
+      - MIX_ENV=prod
+      - PHX_SERVER=true
+      - PORT=4000
+      - DATABASE_PATH=/app/data/app_api.db
+      - SECRET_KEY_BASE=${SECRET_KEY_BASE}
+    ports:
+      - "4000:4000"
+    volumes:
+      - /mnt/user/appdata/viking/data:/app/data
+    restart: unless-stopped
+
+  frontend:
+    image: solaar45/viking-frontend:latest
+    container_name: viking-frontend
+    depends_on:
+      - backend
+    ports:
+      - "8080:80"
+    restart: unless-stopped
