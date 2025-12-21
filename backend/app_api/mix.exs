@@ -38,6 +38,7 @@ defmodule AppApi.MixProject do
     {:jason, "~> 1.2"},
     {:dns_cluster, "~> 0.1.1"},
     {:bandit, "~> 1.6"},
+    {:httpoison, "~> 2.2"},
     {:cors_plug, "~> 3.0"}
   ]
 end
