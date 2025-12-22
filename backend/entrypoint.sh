@@ -23,12 +23,8 @@ export SECRET_KEY_BASE
 export DATABASE_PATH="${DATABASE_PATH:-/app/data/viking.db}"
 echo "📦 Database: $DATABASE_PATH"
 
-# Sicherstellen dass Data-Ordner existiert
+# Data-Ordner erstellen
 mkdir -p "$(dirname "$DATABASE_PATH")"
 
-# === MIGRATIONS ===
-echo "🔄 Running migrations..."
-bin/app_api eval "AppApi.Release.migrate()"
-
-echo "🚀 Starting Viking Scrobbler..."
+echo "🚀 Starting Viking Scrobbler with SECRET_KEY_BASE set..."
 exec "$@"

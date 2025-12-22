@@ -1,0 +1,156 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%; 
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 84% 4.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 84% 4.9%;
+    --primary: 221.2 83.2% 53.3%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 210 40% 96%;
+    --secondary-foreground: 222.2 84% 4.9%;
+    --muted: 210 40% 96%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+    --accent: 210 40% 96%;
+    --accent-foreground: 222.2 84% 4.9%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 221.2 83.2% 53.3%;
+    --radius: 0.5rem;
+    /* clearer site-wide semantic colors */
+    --text: 222.2 15% 9%;        /* body text (dark) */
+    --heading: 222.2 18% 6%;     /* headings, bolder */
+    --muted-text: 215 12% 55%;   /* secondary/muted */
+    --code-bg: 210 20% 98%;      /* code background */
+    --code-fg: 222.2 12% 8%;     /* code foreground */
+  }
+ 
+  .dark {
+    --background: 222.2 84% 4.9%;
+    --foreground: 210 40% 98%;
+    --card: 222.2 84% 7.8%;
+    --card-foreground: 210 40% 98%;
+    --popover: 222.2 84% 7.8%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 217.2 91.2% 59.8%;
+    --primary-foreground: 222.2 84% 4.9%;
+    --secondary: 217.2 32.6% 17.5%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%;
+    --accent: 217.2 32.6% 17.5%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+    --ring: 224.3 76.3% 94.1%;
+    /* dark-mode semantic colors */
+    --text: 210 40% 96%;
+    --heading: 210 40% 98%;
+    --muted-text: 215 20% 65%;
+    --code-bg: 222.2 84% 7.8%;
+    --code-fg: 210 40% 98%;
+  }
+
+  html, body {
+    @apply h-full text-sm antialiased bg-gray-50;
+    font-feature-settings: "cv11", "ss01";
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    background-color: hsl(var(--background));
+    color: hsl(var(--text));
+  }
+
+  /* Headings and semantic text colors */
+  h1, h2, h3, h4, h5 {
+    color: hsl(var(--heading));
+  }
+
+  p, span, a, li, label {
+    color: hsl(var(--text));
+  }
+
+  /* Muted text */
+  .muted, .text-muted {
+    color: hsl(var(--muted-text));
+  }
+
+  /* Code / token fields */
+  code, pre, .font-mono {
+    background-color: hsl(var(--code-bg));
+    color: hsl(var(--code-fg));
+  }
+
+  /* Ensure card text contrast */
+  .card-dense, .card {
+    color: hsl(var(--card-foreground));
+    background-color: hsl(var(--card));
+  }
+}
+
+/* --- CUSTOM DENSE UTILITIES (FLAT) --- */
+@layer components {
+  /* Container: Nutzt vollen Platz */
+  .app-container {
+    @apply w-full max-w-none px-4 py-4 lg:px-6 lg:py-6 flex flex-col gap-4 h-full;
+  }
+
+  /* Card: FLAT DESIGN - No Shadow, Just Border */
+  .card-dense {
+    @apply bg-white border border-gray-200 rounded-sm overflow-hidden flex flex-col;
+  }
+
+  /* Header: Feste Höhe, sauber getrennt */
+  .card-header-dense {
+    @apply px-4 py-3 border-b border-gray-100 flex items-center justify-between h-12 bg-white flex-shrink-0;
+  }
+  
+  /* Titel: Klein, Uppercase, Tracking */
+  .card-title-dense {
+    @apply text-sm font-bold uppercase tracking-wide text-gray-900 flex items-center gap-2;
+  }
+
+  /* METRICS */
+  .metric-value {
+    @apply font-mono text-xl font-bold tracking-tight text-gray-900 leading-none;
+  }
+  
+  .metric-label {
+    @apply text-[10px] uppercase tracking-widest font-bold text-gray-500 group-hover:text-gray-700 transition-colors;
+  }
+
+  .metric-sub {
+    @apply text-[10px] text-gray-400 font-medium flex items-center gap-1;
+  }
+
+  /* TABLE: Extrem kompakt */
+  .table-dense {
+    @apply w-full text-xs;
+  }
+  
+  .table-head-dense {
+    @apply h-8 bg-gray-50 text-[10px] font-bold uppercase tracking-wider text-gray-600 px-4 border-b border-gray-200;
+  }
+
+  .table-row-dense {
+    @apply h-8 border-b border-gray-50 hover:bg-gray-50 transition-colors last:border-0;
+  }
+  
+  .table-cell-dense {
+    @apply py-1.5 px-4 truncate align-middle;
+  }
+}

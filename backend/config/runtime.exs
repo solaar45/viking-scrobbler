@@ -25,7 +25,8 @@ if config_env() == :prod do
       ip: {0, 0, 0, 0, 0, 0, 0, 0},
       port: port
     ],
-    secret_key_base: secret_key_base
+    secret_key_base: secret_key_base,
+    server: true  # ← DIESER FIX FEHLTE!
 
   config :swoosh, api_client: Swoosh.ApiClient.Finch, finch_name: AppApi.Finch
 end

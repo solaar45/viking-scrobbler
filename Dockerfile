@@ -1,69 +1,70 @@
-# === Frontend Build ===
-FROM node:22-alpine AS frontend-build
+#############################
+# STAGE 1: Flat-Frontend bauen
+#############################
+FROM node:20-alpine AS flat-builder
+WORKDIR /build
 
-WORKDIR /frontend
-COPY frontend/app_web/package*.json ./
+# Dependencies installieren
+COPY frontends/ui-flat/package*.json ./
 RUN npm install
 
-COPY frontend/app_web/ ./
+# Source-Code kopieren
+COPY frontends/ui-flat/ .
+
+# Vite-Build → erzeugt dist/index.html + assets/*
 RUN npm run build
 
-# === Backend Build ===
-FROM hexpm/elixir:1.17.3-erlang-27.2-alpine-3.20.3 AS backend-build
+# Pfade in dist/index.html von "/assets/" auf "/themes/flat/assets/" umschreiben
+# So zeigen alle gebauten Skripte/Styles direkt auf den Phoenix-Static-Pfad
+RUN sed -i 's|"/assets/|"/themes/flat/assets/|g' dist/index.html
 
-RUN apk add --no-cache build-base git openssl-dev
-
-ENV MIX_ENV=prod \
-    LANG=C.UTF-8
-
+#############################
+# STAGE 2: Phoenix-Backend + Assets
+#############################
+FROM elixir:1.16-alpine AS backend-builder
 WORKDIR /app
 
-RUN mix local.hex --force && \
-    mix local.rebar --force
+RUN apk add --no-cache build-base git
+ENV MIX_ENV=prod
+RUN mix local.hex --force && mix local.rebar --force
 
-COPY backend/app_api/mix.exs backend/app_api/mix.lock ./
-RUN mix deps.get --only prod
+# Backend-Dependencies
+COPY backend/mix.exs backend/mix.lock ./
+RUN mix deps.get --only $MIX_ENV && mix deps.compile
 
-COPY backend/app_api/config config
-RUN mix deps.compile
+# Backend-Code
+COPY backend/config config/
+COPY backend/lib lib/
+COPY backend/priv priv/
 
-COPY backend/app_api/lib lib
-COPY backend/app_api/priv priv
+# Frontend-Assets ins Phoenix-priv kopieren
+COPY --from=flat-builder /build/dist /app/priv/static/themes/flat_raw
 
-# Frontend ins Backend kopieren
-COPY --from=frontend-build /frontend/dist ./priv/static
+# ZUERST: themes/flat_raw nach priv/static/themes/flat kopieren
+RUN mkdir -p priv/static/themes/flat && \
+    cp -a priv/static/themes/flat_raw/* priv/static/themes/flat/
 
-RUN mix compile
-RUN mix phx.digest
+# Dann phx.digest über GANZES priv/static laufen lassen
+RUN mix phx.digest priv/static
+
 RUN mix release
 
-# === Runtime ===
-FROM alpine:3.20.3
-
-RUN apk add --no-cache \
-    openssl \
-    ncurses-libs \
-    libstdc++ \
-    libgcc
-
-ENV LANG=C.UTF-8 \
-    MIX_ENV=prod
-
+#############################
+# STAGE 3: Runtime-Image
+#############################
+FROM alpine:3.19
+RUN apk add --no-cache libstdc++ ncurses-libs openssl
 WORKDIR /app
 
-COPY --from=backend-build /app/_build/prod/rel/app_api ./
+# Release aus vorherigem Stage
+COPY --from=backend-builder /app/_build/prod/rel/app_api .
 
-# Entrypoint-Script kopieren
-COPY backend/app_api/entrypoint.sh /app/entrypoint.sh
-RUN chmod +x /app/entrypoint.sh
+# Entrypoint für SECRET_KEY_BASE + DB-Path
+COPY backend/entrypoint.sh ./entrypoint.sh
+RUN chmod +x ./entrypoint.sh
 
-RUN mkdir -p /app/data
+ENV PHX_SERVER=true
+ENV PORT=4000
 
-ENV PHX_SERVER=true \
-    PORT=4000 \
-    DATABASE_PATH=/app/data/viking.db
-
-EXPOSE 4000
-
-ENTRYPOINT ["/app/entrypoint.sh"]
+ENTRYPOINT ["./entrypoint.sh"]
 CMD ["bin/app_api", "start"]
