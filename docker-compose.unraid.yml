@@ -1,40 +1,15 @@
 services:
-  db:
-    image: postgres:16-alpine
-    container_name: viking-db
-    environment:
-      - POSTGRES_USER=${POSTGRES_USER:-viking}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-changeme}
-      - POSTGRES_DB=${POSTGRES_DB:-viking_prod}
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-viking}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
   app:
-    build: .
+    image: solaar45/viking-scrobbler:latest
     container_name: viking-scrobbler
-    depends_on:
-      db:
-        condition: service_healthy
     environment:
-      - MIX_ENV=prod
-      - PHX_SERVER=true
-      - PORT=4000
-      - DATABASE_ADAPTER=postgres
-      - POSTGRES_HOST=db
-      - POSTGRES_USER=${POSTGRES_USER:-viking}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-changeme}
-      - POSTGRES_DB=${POSTGRES_DB:-viking_prod}
+      MIX_ENV: prod
+      PHX_SERVER: "true"
+      PORT: 4000
+      DATABASE_PATH: /app/data/viking.db
+      SECRET_KEY_BASE: ${SECRET_KEY_BASE:-CHANGE_THIS_IN_PRODUCTION_MIN_64_CHARS_LONG_RANDOM_STRING_12345}
     ports:
       - "4000:4000"
     volumes:
-      - ./data:/app/data
+      - /mnt/user/appdata/viking-scrobbler:/app/data
     restart: unless-stopped
-
-volumes:
-  postgres_data:
