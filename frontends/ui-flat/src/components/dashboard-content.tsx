@@ -34,6 +34,11 @@ export interface DashboardStats {
   recent: RecentListen[]
 }
 
+interface DateTimeFormats {
+  dateFormat: string
+  timeFormat: string
+}
+
 const PERIODS = [
   { id: "week", label: "Last 7 Days", days: 7 },
   { id: "month", label: "Last 30 Days", days: 30 },
@@ -104,11 +109,20 @@ export default function DashboardContent() {
 
     socketRef.current = socket
 
+    // 🎯 Listen for datetime format changes
+    const handleFormatChange = () => {
+      console.log("📅 DateTime format changed, forcing re-render")
+      setData((prev) => prev ? { ...prev } : null)
+    }
+
+    window.addEventListener('datetime-format-changed', handleFormatChange)
+
     return () => {
       if (socketRef.current) {
         console.log("Closing WebSocket")
         socketRef.current.close()
       }
+      window.removeEventListener('datetime-format-changed', handleFormatChange)
     }
   }, [username])
 
@@ -398,8 +412,6 @@ export default function DashboardContent() {
                         </tr>
                       ))}
                     </tbody>
-
-
                   </table>
 
                   {/* LOAD MORE */}
@@ -493,21 +505,58 @@ function MetricSegment({
   )
 }
 
+// --- FORMAT HELPERS WITH CUSTOM FORMATS ---
+function getDateTimeFormats(): DateTimeFormats {
+  const saved = localStorage.getItem("datetime_formats")
+  if (saved) {
+    try {
+      return JSON.parse(saved)
+    } catch {
+      // Fallback
+    }
+  }
+  return {
+    dateFormat: 'DD.MM.YYYY',
+    timeFormat: 'HH:mm'
+  }
+}
+
 function formatDate(iso: string) {
   if (!iso) return "-"
-  return new Date(iso).toLocaleDateString(undefined, {
-    day: "2-digit",
-    month: "2-digit",
-    year: "2-digit",
-  })
+  
+  const formats = getDateTimeFormats()
+  const d = new Date(iso)
+  const day = String(d.getDate()).padStart(2, '0')
+  const month = String(d.getMonth() + 1).padStart(2, '0')
+  const year = d.getFullYear()
+  const year2 = String(year).slice(-2)
+  const monthName = d.toLocaleString('en', { month: 'short' })
+
+  return formats.dateFormat
+    .replace('DD', day)
+    .replace('MM', month)
+    .replace('YYYY', String(year))
+    .replace('YY', year2)
+    .replace('MMM', monthName)
 }
 
 function formatTime(iso: string) {
   if (!iso) return "-"
-  return new Date(iso).toLocaleString(undefined, {
-    hour: "2-digit",
-    minute: "2-digit",
-  })
+  
+  const formats = getDateTimeFormats()
+  const d = new Date(iso)
+  const hours24 = d.getHours()
+  const hours12 = hours24 % 12 || 12
+  const minutes = String(d.getMinutes()).padStart(2, '0')
+  const seconds = String(d.getSeconds()).padStart(2, '0')
+  const ampm = hours24 >= 12 ? 'PM' : 'AM'
+
+  return formats.timeFormat
+    .replace('HH', String(hours24).padStart(2, '0'))
+    .replace('h', String(hours12))
+    .replace('mm', minutes)
+    .replace('ss', seconds)
+    .replace('a', ampm)
 }
 
 function formatDuration(sec: number) {

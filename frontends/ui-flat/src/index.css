@@ -287,4 +287,28 @@
     border: 1px solid rgba(139, 92, 246, 0.3);
     color: #8B5CF6;
   }
+
+    /* Button Styles für Settings */
+  .btn-primary {
+    @apply px-4 py-2 rounded-lg font-semibold text-sm uppercase tracking-wider transition-all;
+    background: linear-gradient(to right, hsl(var(--primary)), hsl(258 90% 60%));
+    color: white;
+  }
+  
+  .btn-primary:hover {
+    box-shadow: 0 4px 14px 0 hsl(var(--primary) / 0.2);
+  }
+  
+  .btn-icon {
+    @apply p-2 rounded-lg border transition-all;
+    background-color: hsl(var(--card));
+    border-color: hsl(var(--border));
+    color: hsl(var(--muted-text));
+  }
+  
+  .btn-icon:hover {
+    background-color: hsl(var(--popover));
+    color: hsl(var(--foreground));
+    border-color: hsl(var(--ring) / 0.3);
+  }
 }
