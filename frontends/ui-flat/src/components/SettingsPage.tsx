@@ -1,4 +1,5 @@
-import { TokenManager } from "./TokenManager";
+import { TokenManager } from "./TokenManager"
+import { DateTimeSettings } from "./DateTimeSettings"
 
 export default function SettingsPage() {
   return (
@@ -10,9 +11,10 @@ export default function SettingsPage() {
         </span>
       </div>
       
-      <div>
+      <div className="space-y-6">
         <TokenManager />
+        <DateTimeSettings />
       </div>
     </div>
-  );
+  )
 }
