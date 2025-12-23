@@ -22,6 +22,11 @@ defmodule AppApiWeb.Router do
 
     resources "/tokens", TokenController,
       only: [:index, :show, :create, :update, :delete]
+    
+    # Navidrome Setup
+    post "/navidrome/connect", NavidromeController, :connect
+    get "/navidrome/status", NavidromeController, :status
+    delete "/navidrome/disconnect", NavidromeController, :disconnect
   end
 
   # --- ListenBrainz API v1 ---

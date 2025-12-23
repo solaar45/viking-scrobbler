@@ -26,8 +26,8 @@ export interface RecentListen {
   album: string
   playedAt: string
   duration: number
-  device?: string      // 🆕 music_service
-  genres?: string      // 🆕 Genre-String
+  releaseYear?: string | number  // Year statt device
+  genres?: string
 }
 
 export interface DashboardStats {
@@ -114,17 +114,17 @@ export default function DashboardContent() {
     // 🎯 Listen for datetime format changes
     const handleFormatChange = () => {
       console.log("📅 DateTime format changed, forcing re-render")
-      setData((prev) => prev ? { ...prev } : null)
+      setData((prev) => (prev ? { ...prev } : null))
     }
 
-    window.addEventListener('datetime-format-changed', handleFormatChange)
+    window.addEventListener("datetime-format-changed", handleFormatChange)
 
     return () => {
       if (socketRef.current) {
         console.log("Closing WebSocket")
         socketRef.current.close()
       }
-      window.removeEventListener('datetime-format-changed', handleFormatChange)
+      window.removeEventListener("datetime-format-changed", handleFormatChange)
     }
   }, [username])
 
@@ -144,10 +144,11 @@ export default function DashboardContent() {
       const lifetimeJson = await lifetimeResponse.json()
       const lifetimeTotals = lifetimeJson.payload || {}
 
-      const recentResponse = await fetch(`/1/user/${username}/recent-listens?count=500`)
+      const recentResponse = await fetch(
+        `/1/user/${username}/recent-listens?count=500`
+      )
       const recentJson = await recentResponse.json()
-      
-      // 🆕 KORRIGIERTES MAPPING
+
       const recentListens = (recentJson.payload?.listens || []).map((listen: any) => ({
         id: listen.listened_at?.toString() || Math.random().toString(),
         track: listen.track_name || "Unknown Track",
@@ -156,14 +157,21 @@ export default function DashboardContent() {
         playedAt: listen.listened_at
           ? new Date(listen.listened_at * 1000).toISOString()
           : new Date().toISOString(),
-        duration: Math.floor((listen.additional_info?.duration_ms || 0) / 1000),
-        
-        // ✅ Device = music_service aus Spalte
-        device: listen.additional_info?.music_service || "-",
-        
-        // ✅ Genre = fertiger String aus Backend
+
+        // ✅ Duration: direkt aus additional_info.duration_ms
+        duration: Math.floor(
+          (listen.additional_info?.duration_ms ??
+            listen.additional_info?.extended?.duration_ms ??
+            0) / 1000
+        ),
+
+        // ✅ Releasejahr: vom Backend geliefert (ID3 → MB-Fallback)
+        releaseYear: listen.additional_info?.release_year ?? undefined,
+
+        // ✅ Genre: String aus additional_info.genres
         genres: listen.additional_info?.genres || "–",
       }))
+
 
       const dashboardData: DashboardStats = {
         filtered: {
@@ -242,7 +250,9 @@ export default function DashboardContent() {
             <div className="card-header-dense">
               <div className="flex items-center gap-3">
                 <span className="card-title-dense">Overview</span>
-                <span className="text-viking-border-emphasis text-xl font-light">|</span>
+                <span className="text-viking-border-emphasis text-xl font-light">
+                  |
+                </span>
                 <span className="text-xs font-semibold text-viking-text-tertiary uppercase tracking-wider">
                   {PERIODS.find((item) => item.id === period)?.label}
                 </span>
@@ -253,7 +263,9 @@ export default function DashboardContent() {
                       <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                       <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
                     </span>
-                    <span className="text-[10px] font-bold tracking-widest">LIVE</span>
+                    <span className="text-[10px] font-bold tracking-widest">
+                      LIVE
+                    </span>
                   </div>
                 )}
               </div>
@@ -354,7 +366,9 @@ export default function DashboardContent() {
                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                     <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
                   </span>
-                  <span className="text-[10px] font-bold tracking-widest">LIVE</span>
+                  <span className="text-[10px] font-bold tracking-widest">
+                    LIVE
+                  </span>
                 </div>
               </div>
 
@@ -366,7 +380,10 @@ export default function DashboardContent() {
             <div className="flex-1 overflow-auto relative">
               {filteredRecent.length === 0 ? (
                 <div className="absolute inset-0 flex flex-col items-center justify-center gap-6">
-                  <Activity className="w-20 h-20 text-viking-border-emphasis" strokeWidth={1.5} />
+                  <Activity
+                    className="w-20 h-20 text-viking-border-emphasis"
+                    strokeWidth={1.5}
+                  />
                   <div className="text-center space-y-2">
                     <h3 className="text-2xl font-bold text-viking-text-primary uppercase tracking-tight">
                       No Signal
@@ -390,14 +407,30 @@ export default function DashboardContent() {
                   <table className="table-dense">
                     <thead className="sticky top-0 z-10 backdrop-blur-sm">
                       <tr>
-                        <th className="table-head-dense pl-6 text-left w-[22%]">Track</th>
-                        <th className="table-head-dense text-left w-[14%]">Artist</th>
-                        <th className="table-head-dense text-left w-[14%]">Album</th>
-                        <th className="table-head-dense text-left w-[10%]">Device</th>
-                        <th className="table-head-dense text-left w-[12%]">Genre</th>
-                        <th className="table-head-dense text-right w-[10%]">Date</th>
-                        <th className="table-head-dense text-right w-[9%]">Time</th>
-                        <th className="table-head-dense text-right pr-6 w-[8%]">Duration</th>
+                        <th className="table-head-dense pl-6 text-left w-[22%]">
+                          Track
+                        </th>
+                        <th className="table-head-dense text-left w-[14%]">
+                          Artist
+                        </th>
+                        <th className="table-head-dense text-left w-[14%]">
+                          Album
+                        </th>
+                        <th className="table-head-dense text-left w-[8%]">
+                          Year
+                        </th>
+                        <th className="table-head-dense text-left w-[12%]">
+                          Genre
+                        </th>
+                        <th className="table-head-dense text-right w-[10%]">
+                          Date
+                        </th>
+                        <th className="table-head-dense text-right w-[9%]">
+                          Time
+                        </th>
+                        <th className="table-head-dense text-right pr-6 w-[8%]">
+                          Duration
+                        </th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-viking-border-subtle">
@@ -412,10 +445,9 @@ export default function DashboardContent() {
                           <td className="table-cell-dense table-cell-secondary truncate max-w-[150px]">
                             {item.album}
                           </td>
-                          <td className="table-cell-dense table-cell-secondary truncate max-w-[120px]">
-                            {formatDevice(item.device)}
+                          <td className="table-cell-dense table-cell-secondary truncate max-w-[80px]">
+                            {item.releaseYear ?? "—"}
                           </td>
-                          {/* 🆕 GENRE SPALTE */}
                           <td className="table-cell-dense table-cell-secondary truncate max-w-[140px] font-medium text-emerald-400">
                             {item.genres}
                           </td>
@@ -433,7 +465,6 @@ export default function DashboardContent() {
                     </tbody>
                   </table>
 
-                  {/* LOAD MORE */}
                   {hasMore && (
                     <div className="sticky bottom-0 bg-gradient-to-t from-viking-bg-secondary via-viking-bg-secondary to-transparent pt-6 pb-4 flex justify-center border-t border-viking-border-subtle">
                       <button
@@ -486,13 +517,11 @@ function MetricSegment({
   const displayContext =
     contextStr ??
     (typeof contextValue === "number" ? contextValue.toLocaleString() : "0")
-  
+
   return (
     <div className="h-36 px-5 py-4 flex flex-col justify-between hover:bg-viking-bg-tertiary/30 transition-colors duration-200 group cursor-default">
       <div className="flex items-center justify-between h-5">
-        <div className="metric-label">
-          {label}
-        </div>
+        <div className="metric-label">{label}</div>
         {trend && (
           <span className="flex items-center gap-1 text-xs font-bold text-viking-pink bg-viking-pink/10 px-2 py-0.5 rounded border border-viking-pink/30">
             <TrendingUp className="w-3 h-3" strokeWidth={2.5} />
@@ -500,7 +529,7 @@ function MetricSegment({
           </span>
         )}
       </div>
-      
+
       <div className="flex items-baseline gap-1 my-auto">
         <span className={`metric-value ${smallValue ? "text-4xl" : ""}`}>
           {loading ? "..." : displayValue}
@@ -511,7 +540,7 @@ function MetricSegment({
           </span>
         )}
       </div>
-      
+
       <div className="metric-sub justify-between border-t border-transparent group-hover:border-viking-border-subtle pt-2 transition-colors">
         <span className="uppercase text-[10px] tracking-wider text-viking-text-tertiary">
           {context}
@@ -535,47 +564,47 @@ function getDateTimeFormats(): DateTimeFormats {
     }
   }
   return {
-    dateFormat: 'DD.MM.YYYY',
-    timeFormat: 'HH:mm'
+    dateFormat: "DD.MM.YYYY",
+    timeFormat: "HH:mm",
   }
 }
 
 function formatDate(iso: string) {
   if (!iso) return "-"
-  
+
   const formats = getDateTimeFormats()
   const d = new Date(iso)
-  const day = String(d.getDate()).padStart(2, '0')
-  const month = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, "0")
+  const month = String(d.getMonth() + 1).padStart(2, "0")
   const year = d.getFullYear()
   const year2 = String(year).slice(-2)
-  const monthName = d.toLocaleString('en', { month: 'short' })
+  const monthName = d.toLocaleString("en", { month: "short" })
 
   return formats.dateFormat
-    .replace('MMM', monthName)
-    .replace('DD', day)
-    .replace('MM', month)
-    .replace('YYYY', String(year))
-    .replace('YY', year2)
+    .replace("MMM", monthName)
+    .replace("DD", day)
+    .replace("MM", month)
+    .replace("YYYY", String(year))
+    .replace("YY", year2)
 }
 
 function formatTime(iso: string) {
   if (!iso) return "-"
-  
+
   const formats = getDateTimeFormats()
   const d = new Date(iso)
   const hours24 = d.getHours()
   const hours12 = hours24 % 12 || 12
-  const minutes = String(d.getMinutes()).padStart(2, '0')
-  const seconds = String(d.getSeconds()).padStart(2, '0')
-  const ampm = hours24 >= 12 ? 'PM' : 'AM'
+  const minutes = String(d.getMinutes()).padStart(2, "0")
+  const seconds = String(d.getSeconds()).padStart(2, "0")
+  const ampm = hours24 >= 12 ? "PM" : "AM"
 
   return formats.timeFormat
-    .replace('HH', String(hours24).padStart(2, '0'))
-    .replace('h', String(hours12))
-    .replace('mm', minutes)
-    .replace('ss', seconds)
-    .replace('a', ampm)
+    .replace("HH", String(hours24).padStart(2, "0"))
+    .replace("h", String(hours12))
+    .replace("mm", minutes)
+    .replace("ss", seconds)
+    .replace("a", ampm)
 }
 
 function formatDuration(sec: number) {
@@ -583,11 +612,4 @@ function formatDuration(sec: number) {
   const m = Math.floor(sec / 60)
   const s = sec % 60
   return `${m}:${s.toString().padStart(2, "0")}`
-}
-
-function formatDevice(device?: string) {
-  if (!device || device === "-") return "-"
-  
-  // music_service direkt anzeigen (navidrome, spotify, etc.)
-  return device.length > 20 ? device.substring(0, 20) + "..." : device
 }

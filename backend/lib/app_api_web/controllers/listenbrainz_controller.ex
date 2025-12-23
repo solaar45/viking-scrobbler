@@ -9,6 +9,9 @@ defmodule AppApiWeb.ListenBrainzController do
 
   # POST /1/submit-listens (ListenBrainz API v1)
   def submit_listens(conn, params) do
+    # ⬇️ NEU: Debug-Log
+    Logger.info("📥 RAW PAYLOAD: #{inspect(params, pretty: true)}")
+
     token = get_token_from_header(conn)
 
     case TokenController.validate(token) do
@@ -17,9 +20,15 @@ defmodule AppApiWeb.ListenBrainzController do
         payload = params["payload"] || []
 
         case listen_type do
-          "single" -> process_listens(conn, payload, user_name)
-          "playing_now" -> json(conn, %{status: "ok", message: "playing_now received"})
-          "import" -> process_listens(conn, payload, user_name)
+          "single" ->
+            process_listens(conn, payload, user_name)
+
+          "playing_now" ->
+            json(conn, %{status: "ok", message: "playing_now received"})
+
+          "import" ->
+            process_listens(conn, payload, user_name)
+
           _ ->
             conn
             |> put_status(:bad_request)
@@ -40,10 +49,11 @@ defmodule AppApiWeb.ListenBrainzController do
     min_ts = parse_timestamp(params["min_ts"])
 
     query =
-      from l in Listen,
+      from(l in Listen,
         where: l.user_name == ^user_name,
         order_by: [desc: l.listened_at],
         limit: ^count
+      )
 
     query = if max_ts, do: where(query, [l], l.listened_at < ^max_ts), else: query
     query = if min_ts, do: where(query, [l], l.listened_at > ^min_ts), else: query
@@ -127,70 +137,81 @@ defmodule AppApiWeb.ListenBrainzController do
     query = build_time_range_query(Listen, user_name, range)
 
     # Smart Grouping basierend auf range - direkt die Queries bauen
-    activity = case range do
-      "week" ->
-        # Gruppiere nach Tag (7 Einträge)
-        query
-        |> select([l], %{
-          time_range: fragment("DATE(datetime(?, 'unixepoch'))", l.listened_at),
-          listen_count: count(l.id)
-        })
-        |> group_by([l], fragment("DATE(datetime(?, 'unixepoch'))", l.listened_at))
-        |> order_by([l], asc: fragment("DATE(datetime(?, 'unixepoch'))", l.listened_at))
-        |> Repo.all()
+    activity =
+      case range do
+        "week" ->
+          # Gruppiere nach Tag (7 Einträge)
+          query
+          |> select([l], %{
+            time_range: fragment("DATE(datetime(?, 'unixepoch'))", l.listened_at),
+            listen_count: count(l.id)
+          })
+          |> group_by([l], fragment("DATE(datetime(?, 'unixepoch'))", l.listened_at))
+          |> order_by([l], asc: fragment("DATE(datetime(?, 'unixepoch'))", l.listened_at))
+          |> Repo.all()
 
-      "month" ->
-        # Gruppiere nach Woche (4-5 Einträge)
-        query
-        |> select([l], %{
-          time_range: fragment("strftime('%Y-W%W', datetime(?, 'unixepoch'))", l.listened_at),
-          listen_count: count(l.id)
-        })
-        |> group_by([l], fragment("strftime('%Y-W%W', datetime(?, 'unixepoch'))", l.listened_at))
-        |> order_by([l], asc: fragment("strftime('%Y-W%W', datetime(?, 'unixepoch'))", l.listened_at))
-        |> Repo.all()
+        "month" ->
+          # Gruppiere nach Woche (4-5 Einträge)
+          query
+          |> select([l], %{
+            time_range: fragment("strftime('%Y-W%W', datetime(?, 'unixepoch'))", l.listened_at),
+            listen_count: count(l.id)
+          })
+          |> group_by(
+            [l],
+            fragment("strftime('%Y-W%W', datetime(?, 'unixepoch'))", l.listened_at)
+          )
+          |> order_by([l],
+            asc: fragment("strftime('%Y-W%W', datetime(?, 'unixepoch'))", l.listened_at)
+          )
+          |> Repo.all()
 
-      "year" ->
-        # Gruppiere nach Monat (12 Einträge)
-        query
-        |> select([l], %{
-          time_range: fragment("strftime('%Y-%m', datetime(?, 'unixepoch'))", l.listened_at),
-          listen_count: count(l.id)
-        })
-        |> group_by([l], fragment("strftime('%Y-%m', datetime(?, 'unixepoch'))", l.listened_at))
-        |> order_by([l], asc: fragment("strftime('%Y-%m', datetime(?, 'unixepoch'))", l.listened_at))
-        |> Repo.all()
+        "year" ->
+          # Gruppiere nach Monat (12 Einträge)
+          query
+          |> select([l], %{
+            time_range: fragment("strftime('%Y-%m', datetime(?, 'unixepoch'))", l.listened_at),
+            listen_count: count(l.id)
+          })
+          |> group_by([l], fragment("strftime('%Y-%m', datetime(?, 'unixepoch'))", l.listened_at))
+          |> order_by([l],
+            asc: fragment("strftime('%Y-%m', datetime(?, 'unixepoch'))", l.listened_at)
+          )
+          |> Repo.all()
 
-      "all_time" ->
-        # Gruppiere nach Jahr
-        query
-        |> select([l], %{
-          time_range: fragment("strftime('%Y', datetime(?, 'unixepoch'))", l.listened_at),
-          listen_count: count(l.id)
-        })
-        |> group_by([l], fragment("strftime('%Y', datetime(?, 'unixepoch'))", l.listened_at))
-        |> order_by([l], asc: fragment("strftime('%Y', datetime(?, 'unixepoch'))", l.listened_at))
-        |> Repo.all()
+        "all_time" ->
+          # Gruppiere nach Jahr
+          query
+          |> select([l], %{
+            time_range: fragment("strftime('%Y', datetime(?, 'unixepoch'))", l.listened_at),
+            listen_count: count(l.id)
+          })
+          |> group_by([l], fragment("strftime('%Y', datetime(?, 'unixepoch'))", l.listened_at))
+          |> order_by([l],
+            asc: fragment("strftime('%Y', datetime(?, 'unixepoch'))", l.listened_at)
+          )
+          |> Repo.all()
 
-      _ ->
-        # Default: daily
-        query
-        |> select([l], %{
-          time_range: fragment("DATE(datetime(?, 'unixepoch'))", l.listened_at),
-          listen_count: count(l.id)
-        })
-        |> group_by([l], fragment("DATE(datetime(?, 'unixepoch'))", l.listened_at))
-        |> order_by([l], asc: fragment("DATE(datetime(?, 'unixepoch'))", l.listened_at))
-        |> Repo.all()
-    end
+        _ ->
+          # Default: daily
+          query
+          |> select([l], %{
+            time_range: fragment("DATE(datetime(?, 'unixepoch'))", l.listened_at),
+            listen_count: count(l.id)
+          })
+          |> group_by([l], fragment("DATE(datetime(?, 'unixepoch'))", l.listened_at))
+          |> order_by([l], asc: fragment("DATE(datetime(?, 'unixepoch'))", l.listened_at))
+          |> Repo.all()
+      end
 
-    grouping = case range do
-      "week" -> "daily"
-      "month" -> "weekly"
-      "year" -> "monthly"
-      "all_time" -> "yearly"
-      _ -> "daily"
-    end
+    grouping =
+      case range do
+        "week" -> "daily"
+        "month" -> "weekly"
+        "year" -> "monthly"
+        "all_time" -> "yearly"
+        _ -> "daily"
+      end
 
     json(conn, %{
       payload: %{
@@ -205,21 +226,21 @@ defmodule AppApiWeb.ListenBrainzController do
   # GET /1/stats/user/:user_name/totals (ERWEITERT)
   def get_user_totals(conn, %{"user_name" => user_name} = params) do
     range = params["range"] || "all_time"
-    
+
     query = build_time_range_query(Listen, user_name, range)
 
     # Total Scrobbles
     total_listens = Repo.aggregate(query, :count, :id)
 
     # Unique Artists
-    unique_artists = 
+    unique_artists =
       query
       |> select([l], l.artist_name)
       |> distinct(true)
       |> Repo.aggregate(:count, :artist_name)
 
     # Unique Tracks
-    unique_tracks = 
+    unique_tracks =
       query
       |> select([l], fragment("? || ' - ' || ?", l.artist_name, l.track_name))
       |> distinct(true)
@@ -227,7 +248,7 @@ defmodule AppApiWeb.ListenBrainzController do
       |> length()
 
     # Unique Albums
-    unique_albums = 
+    unique_albums =
       query
       |> where([l], not is_nil(l.release_name))
       |> select([l], l.release_name)
@@ -235,14 +256,14 @@ defmodule AppApiWeb.ListenBrainzController do
       |> Repo.aggregate(:count, :release_name)
 
     # First & Last Listen
-    first_listen = 
+    first_listen =
       query
       |> order_by([l], asc: l.listened_at)
       |> limit(1)
       |> select([l], l.listened_at)
       |> Repo.one()
 
-    last_listen = 
+    last_listen =
       query
       |> order_by([l], desc: l.listened_at)
       |> limit(1)
@@ -250,17 +271,17 @@ defmodule AppApiWeb.ListenBrainzController do
       |> Repo.one()
 
     # --- NEUE ADVANCED STATS ---
-    
+
     # Most Active Day (Wochentag mit meisten Scrobbles)
     from_timestamp = get_range_timestamp(range)
     {most_active_day, tracks_on_most_active} = Stats.most_active_day(user_name, from_timestamp)
-    
+
     # Average Scrobbles per Day
     avg_per_day = Stats.avg_per_day(user_name, from_timestamp)
-    
+
     # Peak Day (einzelner Tag mit meisten Scrobbles)
     {peak_day, peak_value} = Stats.peak_day(user_name, from_timestamp)
-    
+
     # Current Streak (nur für all_time sinnvoll)
     current_streak = if range == "all_time", do: Stats.current_streak(user_name), else: 0
 
@@ -290,7 +311,7 @@ defmodule AppApiWeb.ListenBrainzController do
   def get_recent_listens(conn, %{"user_name" => user_name} = params) do
     count = String.to_integer(params["count"] || "20")
 
-    listens = 
+    listens =
       Listen
       |> where([l], l.user_name == ^user_name)
       |> order_by([l], desc: l.listened_at)
@@ -340,99 +361,187 @@ defmodule AppApiWeb.ListenBrainzController do
     case Repo.insert_all(Listen, listens) do
       {count, _} when count > 0 ->
         Logger.info("Inserted #{count} listens for user #{user_name}")
-        
+
+        # 🆕 GENRE ENRICHMENT PIPELINE (Background Task)
+        Task.start(fn ->
+          Listen
+          |> where([l], l.user_name == ^user_name)
+          |> order_by([l], desc: l.listened_at)
+          |> limit(^count)
+          |> Repo.all()
+          |> Enum.each(fn listen ->
+            # Step 1: Try Navidrome ID3 Tags
+            case AppApi.NavidromeIntegration.enrich_listen_from_navidrome(listen) do
+              {:ok, _} ->
+                Logger.info("✅ Genre from Navidrome ID3 for: #{listen.track_name}")
+                :ok
+
+              {:error, _reason} ->
+                # Step 2: Fallback to MusicBrainz
+                Logger.info("⚠️ Navidrome failed, trying MusicBrainz for: #{listen.track_name}")
+                AppApi.GenreEnrichment.enrich_listen(listen)
+            end
+
+            # Rate limiting
+            :timer.sleep(200)
+          end)
+        end)
+
         # 🚀 BROADCAST NEW SCROBBLE
         AppApiWeb.Endpoint.broadcast!(
           "scrobbles:#{user_name}",
           "new_scrobble",
           %{count: count, user: user_name, timestamp: DateTime.utc_now() |> DateTime.to_unix()}
         )
-        
+
         Logger.info("📡 Broadcast new_scrobble to channel scrobbles:#{user_name}, count: #{count}")
-        
+
         json(conn, %{status: "ok", message: "#{count} listen(s) inserted"})
 
       _ ->
         Logger.error("Failed to insert listens")
+
         conn
         |> put_status(:internal_server_error)
         |> json(%{status: "error", message: "Failed to insert listens"})
     end
-
   end
 
   defp format_listen(listen) do
+    # Parse metadata JSON
+    metadata =
+      case listen.metadata do
+        nil ->
+          %{}
+
+        str when is_binary(str) ->
+          case Jason.decode(str) do
+            {:ok, map} -> map
+            _ -> %{}
+          end
+
+        map when is_map(map) ->
+          map
+
+        _ ->
+          %{}
+      end
+
+    # Genres als String
+    genres_string =
+      case metadata["genres"] do
+        list when is_list(list) and list != [] -> Enum.join(list, ", ")
+        _ -> nil
+      end
+
+    # additional_info aus DB + genres mergen
+    additional_info =
+      (listen.additional_info || %{})
+      |> Map.put("genres", genres_string)
+      |> Map.put("duration_ms", listen.duration_ms)
+      |> Map.put("tracknumber", listen.tracknumber)
+      |> Map.put("discnumber", listen.discnumber)
+
     %{
       listened_at: listen.listened_at,
       track_metadata: %{
         track_name: listen.track_name,
         artist_name: listen.artist_name,
         release_name: listen.release_name,
-        additional_info: listen.additional_info || %{}
+        additional_info: additional_info
       }
     }
   end
 
   # 🆕 NEU: Hybrid Metadata Response Format
   defp format_listen_detailed_hybrid(listen) do
-  # metadata als Map sicherstellen (kommt aus Listen.metadata :: string)
-  metadata =
-    case listen.metadata do
-      str when is_binary(str) ->
-        case Jason.decode(str) do
-          {:ok, map} -> map
-          _ -> %{}
-        end
+    # metadata als Map sicherstellen (kommt aus Listen.metadata :: string)
+    metadata =
+      case listen.metadata do
+        nil ->
+          %{}
 
-      map when is_map(map) ->
-        map
+        str when is_binary(str) ->
+          case Jason.decode(str) do
+            {:ok, map} -> map
+            _ -> %{}
+          end
 
-      _ ->
-        %{}
-    end
+        map when is_map(map) ->
+          map
 
-  # GENRE-STRING aus metadata["genres"]
-  genres =
-    case metadata["genres"] do
-      list when is_list(list) and list != [] ->
-        list |> Enum.take(3) |> Enum.join(", ")
-      _ ->
-        "–"
-    end
+        _ ->
+          %{}
+      end
 
-  %{
-    listened_at: listen.listened_at,
-    track_name: listen.track_name,
-    artist_name: listen.artist_name,
-    release_name: listen.release_name,
-    recording_mbid: listen.recording_mbid,
-    artist_mbid: listen.artist_mbid,
-    release_mbid: listen.release_mbid,
-    additional_info: %{
-      # Tier 1: direkt aus Spalten (schnell filterbar)
-      duration_ms: listen.duration_ms,
-      origin_url: listen.origin_url,
-      music_service: listen.music_service,
-      tracknumber: listen.tracknumber,
-      discnumber: listen.discnumber,
-      loved: listen.loved,
-      rating: listen.rating,
+    # Genres:
+    # 1) Wenn in metadata["genres"] (Liste) → String bauen
+    # 2) Sonst vorhandenes additional_info["genres"] weiterverwenden
+    base_info = listen.additional_info || %{}
 
-      # Tier 2: aus metadata JSON
-      submission_client: get_in(metadata, ["submission_client"]),
-      submission_client_version: get_in(metadata, ["submission_client_version"]),
-      artist_mbids: get_in(metadata, ["artist_mbids"]) || [],
-      artist_names: get_in(metadata, ["artist_names"]) || [],
-      total_tracks: get_in(metadata, ["total_tracks"]),
+    genres_from_metadata =
+      case metadata["genres"] do
+        list when is_list(list) and list != [] ->
+          list |> Enum.take(3) |> Enum.join(", ")
 
-      # Genre-String für Frontend
-      genres: genres,
+        _ ->
+          nil
+      end
 
-      # Tier 3: rohes additional_info als extended
-      extended: listen.additional_info || %{}
+    genres = genres_from_metadata || base_info["genres"] || "–"
+
+    # Releasejahr – Priorität:
+    # 1) ID3/Navidrome: metadata["year"]
+    # 2) MusicBrainz: metadata["mb_release_year"]
+    # 3) Fallback: nil
+    release_year =
+      cond do
+        is_integer(metadata["year"]) ->
+          metadata["year"]
+
+        is_binary(metadata["year"]) and String.length(metadata["year"]) >= 4 ->
+          String.slice(metadata["year"], 0, 4)
+
+        is_integer(metadata["mb_release_year"]) ->
+          metadata["mb_release_year"]
+
+        is_binary(metadata["mb_release_year"]) and String.length(metadata["mb_release_year"]) >= 4 ->
+          String.slice(metadata["mb_release_year"], 0, 4)
+
+        true ->
+          base_info["release_year"] || nil
+      end
+
+    # duration_ms NICHT hart überschreiben:
+    # 1) additional_info.duration_ms
+    # 2) sonst listen.duration_ms (aus DB-Spalte)
+    duration_ms =
+      base_info["duration_ms"] ||
+        listen.duration_ms
+
+    tracknumber = base_info["tracknumber"] || listen.tracknumber
+    discnumber = base_info["discnumber"] || listen.discnumber
+
+    # neues additional_info auf Basis der bestehenden Map
+    merged_info =
+      base_info
+      |> Map.put_new("duration_ms", duration_ms)
+      |> Map.put_new("tracknumber", tracknumber)
+      |> Map.put_new("discnumber", discnumber)
+      |> Map.put("genres", genres)
+      |> Map.put("release_year", release_year)
+
+    %{
+      listened_at: listen.listened_at,
+      track_name: listen.track_name,
+      artist_name: listen.artist_name,
+      release_name: listen.release_name,
+      recording_mbid: listen.recording_mbid,
+      artist_mbid: listen.artist_mbid,
+      release_mbid: listen.release_mbid,
+      additional_info: merged_info
     }
-  }
-end
+  end
 
   defp get_token_from_header(conn) do
     case get_req_header(conn, "authorization") do
@@ -443,12 +552,14 @@ end
   end
 
   defp parse_timestamp(nil), do: DateTime.utc_now() |> DateTime.to_unix()
+
   defp parse_timestamp(ts) when is_binary(ts) do
     case Integer.parse(ts) do
       {timestamp, _} -> timestamp
       :error -> DateTime.utc_now() |> DateTime.to_unix()
     end
   end
+
   defp parse_timestamp(ts) when is_integer(ts), do: ts
   defp parse_timestamp(_), do: DateTime.utc_now() |> DateTime.to_unix()
 
@@ -457,15 +568,16 @@ end
 
     time_filter =
       case range do
-        "week" -> now - (7 * 86400)
-        "month" -> now - (30 * 86400)
-        "year" -> now - (365 * 86400)
+        "week" -> now - 7 * 86400
+        "month" -> now - 30 * 86400
+        "year" -> now - 365 * 86400
         "all_time" -> 0
         _ -> 0
       end
 
-    from l in query,
+    from(l in query,
       where: l.user_name == ^user_name and l.listened_at >= ^time_filter
+    )
   end
 
   # Helper für Stats-Module: Konvertiere range zu Timestamp
@@ -473,9 +585,9 @@ end
     now = DateTime.utc_now() |> DateTime.to_unix()
 
     case range do
-      "week" -> now - (7 * 86400)
-      "month" -> now - (30 * 86400)
-      "year" -> now - (365 * 86400)
+      "week" -> now - 7 * 86400
+      "month" -> now - 30 * 86400
+      "year" -> now - 365 * 86400
       "all_time" -> nil
       _ -> nil
     end

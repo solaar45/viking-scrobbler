@@ -31,4 +31,11 @@ if config_env() == :prod do
     check_origin: false  # Erlaubt alle Origins (Home Lab sicher)
 
   config :swoosh, api_client: Swoosh.ApiClient.Finch, finch_name: AppApi.Finch
+
+  # Navidrome Integration (für Genre-Lookup)
+  config :app_api,
+    navidrome_url: System.get_env("NAVIDROME_URL"),
+    navidrome_username: System.get_env("NAVIDROME_USERNAME"),
+    navidrome_password: System.get_env("NAVIDROME_PASSWORD")
+
 end

@@ -1,0 +1,1528 @@
+[1mdiff --git a/.env.example b/.env.example[m
+[1mindex 5508114..9596b2a 100644[m
+[1m--- a/.env.example[m
+[1m+++ b/.env.example[m
+[36m@@ -1,7 +1,12 @@[m
+[31m-# PostgreSQL Configuration[m
+[31m-POSTGRES_USER=viking[m
+[31m-POSTGRES_PASSWORD=changeme_to_secure_password[m
+[31m-POSTGRES_DB=viking_prod[m
+[32m+[m[32m# Database[m
+[32m+[m[32mDATABASE_URL=ecto://postgres:postgres@db/app_api_dev[m
+ [m
+[31m-# Application[m
+[32m+[m[32m# Phoenix[m
+[32m+[m[32mSECRET_KEY_BASE=your_secret_key_here[m
+[32m+[m[32mPHX_HOST=localhost[m
+ PORT=4000[m
+[32m+[m
+[32m+[m[32m# Navidrome Integration (für Genre-Lookup via ID3-Tags)[m
+[32m+[m[32mNAVIDROME_URL=http://192.168.0.161:4533[m
+[32m+[m[32mNAVIDROME_USERNAME=your_navidrome_username[m
+[32m+[m[32mNAVIDROME_PASSWORD=your_navidrome_password[m
+[1mdiff --git a/backend/config/runtime.exs b/backend/config/runtime.exs[m
+[1mindex 8fa859e..7e0b8be 100644[m
+[1m--- a/backend/config/runtime.exs[m
+[1m+++ b/backend/config/runtime.exs[m
+[36m@@ -31,4 +31,11 @@[m [mif config_env() == :prod do[m
+     check_origin: false  # Erlaubt alle Origins (Home Lab sicher)[m
+ [m
+   config :swoosh, api_client: Swoosh.ApiClient.Finch, finch_name: AppApi.Finch[m
+[32m+[m
+[32m+[m[32m  # Navidrome Integration (für Genre-Lookup)[m
+[32m+[m[32m  config :app_api,[m
+[32m+[m[32m    navidrome_url: System.get_env("NAVIDROME_URL"),[m
+[32m+[m[32m    navidrome_username: System.get_env("NAVIDROME_USERNAME"),[m
+[32m+[m[32m    navidrome_password: System.get_env("NAVIDROME_PASSWORD")[m
+[32m+[m
+ end[m
+[1mdiff --git a/backend/lib/app_api/navidrome_integration.ex b/backend/lib/app_api/navidrome_integration.ex[m
+[1mindex adad037..9c9aca3 100644[m
+[1m--- a/backend/lib/app_api/navidrome_integration.ex[m
+[1m+++ b/backend/lib/app_api/navidrome_integration.ex[m
+[36m@@ -1,84 +1,457 @@[m
+ defmodule AppApi.NavidromeIntegration do[m
+   @moduledoc """[m
+[31m-  Handles automatic Navidrome configuration via API[m
+[32m+[m[32m  Hybrid Zero-Config Navidrome Integration[m
+[32m+[m[32m  Priority: DB Credentials > Auto-Discovery > ENV > MusicBrainz[m
+   """[m
+ [m
+   require Logger[m
+[32m+[m[32m  alias AppApi.{Repo, Listen, NavidromeCredential}[m
+[32m+[m[32m  import Ecto.Query[m
+[32m+[m
+[32m+[m[32m  # === PUBLIC API ===[m
+ [m
+   @doc """[m
+[31m-  Configure Navidrome to scrobble to this Viking instance[m
+[32m+[m[32m  Auto-enriches listen using hybrid credential resolution[m
+   """[m
+[31m-  def configure_navidrome(navidrome_url, navidrome_token, viking_url) do[m
+[31m-    # Get current user info[m
+[31m-    with {:ok, user_id} <- get_user_id(navidrome_url, navidrome_token),[m
+[31m-         {:ok, _response} <- update_listenbrainz_settings(navidrome_url, navidrome_token, user_id, viking_url) do[m
+[31m-      {:ok, "Navidrome configured successfully"}[m
+[32m+[m[32m  def enrich_listen_from_navidrome(%Listen{} = listen) do[m
+[32m+[m[32m    with {:ok, navidrome_config} <- resolve_navidrome_config(listen),[m
+[32m+[m[32m         {:ok, song_data} <- search_song([m
+[32m+[m[32m           navidrome_config.url,[m
+[32m+[m[32m           navidrome_config.username,[m
+[32m+[m[32m           navidrome_config.password,[m
+[32m+[m[32m           listen.artist_name,[m
+[32m+[m[32m           listen.track_name[m
+[32m+[m[32m         ) do[m
+[32m+[m[32m      update_listen_with_navidrome_data(listen, song_data)[m
+     else[m
+[31m-      {:error, reason} -> {:error, reason}[m
+[32m+[m[32m      {:error, reason} ->[m
+[32m+[m[32m        Logger.debug("Navidrome enrichment failed: #{inspect(reason)}")[m
+[32m+[m[32m        {:error, reason}[m
+     end[m
+   end[m
+ [m
+   @doc """[m
+[31m-  Test connection to Navidrome[m
+[32m+[m[32m  Batch enrich recent listens without genres for a specific user.[m
+[32m+[m[32m  Returns count of successfully enriched listens.[m
+[32m+[m[41m  [m
+[32m+[m[32m  ## Examples[m
+[32m+[m[41m  [m
+[32m+[m[32m      iex> AppApi.NavidromeIntegration.enrich_recent_listens("viking_user", 50)[m
+[32m+[m[32m      42[m
+   """[m
+[31m-  def test_connection(navidrome_url, navidrome_token) do[m
+[31m-    headers = [[m
+[31m-      {"Content-Type", "application/json"},[m
+[31m-      {"x-nd-authorization", "Bearer #{navidrome_token}"}[m
+[31m-    ][m
+[32m+[m[32m  def enrich_recent_listens(user_name, count \\ 50) when is_binary(user_name) and is_integer(count) do[m
+[32m+[m[32m    Logger.info("🔄 Starting batch enrichment for #{user_name}, limit: #{count}")[m
+[32m+[m[41m    [m
+[32m+[m[32m    # Query für Listens ohne Genres[m
+[32m+[m[32m    query =[m[41m [m
+[32m+[m[32m      from l in Listen,[m
+[32m+[m[32m      where: l.user_name == ^user_name,[m
+[32m+[m[32m      where: fragment("? NOT LIKE '%genres%'", l.metadata) or l.metadata == "{}",[m
+[32m+[m[32m      order_by: [desc: l.listened_at],[m
+[32m+[m[32m      limit: ^count[m
+[32m+[m[41m    [m
+[32m+[m[32m    listens = Repo.all(query)[m
+[32m+[m[32m    total = length(listens)[m
+[32m+[m[41m    [m
+[32m+[m[32m    if total == 0 do[m
+[32m+[m[32m      Logger.info("✅ No listens found without genres")[m
+[32m+[m[32m      0[m
+[32m+[m[32m    else[m
+[32m+[m[32m      Logger.info("📊 Found #{total} listens without genres, enriching...")[m
+[32m+[m[41m      [m
+[32m+[m[32m      # Enrich jeden Listen mit Rate Limiting[m
+[32m+[m[32m      enriched_count =[m[41m [m
+[32m+[m[32m        listens[m
+[32m+[m[32m        |> Enum.with_index(1)[m
+[32m+[m[32m        |> Enum.map(fn {listen, index} ->[m
+[32m+[m[32m          Logger.info("Processing #{index}/#{total}: #{listen.artist_name} - #{listen.track_name}")[m
+[32m+[m[41m          [m
+[32m+[m[32m          case enrich_listen_from_navidrome(listen) do[m
+[32m+[m[32m            {:ok, _} ->[m
+[32m+[m[32m              :timer.sleep(200)  # Rate limiting (5 requests/sec)[m
+[32m+[m[32m              1[m
+[32m+[m[41m              [m
+[32m+[m[32m            {:error, reason} ->[m
+[32m+[m[32m              Logger.debug("Skipped listen #{listen.id}: #{inspect(reason)}")[m
+[32m+[m[32m              :timer.sleep(100)[m
+[32m+[m[32m              0[m
+[32m+[m[32m          end[m
+[32m+[m[32m        end)[m
+[32m+[m[32m        |> Enum.sum()[m
+[32m+[m[41m      [m
+[32m+[m[32m      Logger.info("✅ Batch enrichment completed: #{enriched_count}/#{total} listens enriched")[m
+[32m+[m[41m      [m
+[32m+[m[32m      enriched_count[m
+[32m+[m[32m    end[m
+[32m+[m[32m  end[m
+ [m
+[31m-    case HTTPoison.get("#{navidrome_url}/api/ping", headers) do[m
+[31m-      {:ok, %{status_code: 200}} -> {:ok, "Connection successful"}[m
+[31m-      {:ok, %{status_code: 401}} -> {:error, "Invalid token"}[m
+[31m-      {:ok, %{status_code: code}} -> {:error, "HTTP #{code}"}[m
+[31m-      {:error, %HTTPoison.Error{reason: reason}} -> {:error, "Connection failed: #{reason}"}[m
+[32m+[m[32m  @doc """[m
+[32m+[m[32m  Test connection and optionally save credentials[m
+[32m+[m[32m  """[m
+[32m+[m[32m  def test_and_save_connection(url, username, password, user_name, save \\ true) do[m
+[32m+[m[32m    case test_connection(url, username, password) do[m
+[32m+[m[32m      {:ok, _} when save ->[m
+[32m+[m[32m        save_credentials(user_name, url, username, password, false)[m
+[32m+[m[32m        {:ok, "Connected and saved"}[m
+[32m+[m[41m        [m
+[32m+[m[32m      {:ok, msg} ->[m
+[32m+[m[32m        {:ok, msg}[m
+[32m+[m[41m        [m
+[32m+[m[32m      error ->[m
+[32m+[m[32m        error[m
+     end[m
+   end[m
+ [m
+[31m-  # Private functions[m
+[32m+[m[32m  @doc """[m
+[32m+[m[32m  Get connection status for user[m
+[32m+[m[32m  """[m
+[32m+[m[32m  def get_connection_status(user_name) do[m
+[32m+[m[32m    case Repo.get_by(NavidromeCredential, user_name: user_name) do[m
+[32m+[m[32m      nil ->[m
+[32m+[m[32m        %{connected: false, source: "none"}[m
+[32m+[m[41m        [m
+[32m+[m[32m      cred ->[m
+[32m+[m[32m        %{[m
+[32m+[m[32m          connected: true,[m
+[32m+[m[32m          url: cred.url,[m
+[32m+[m[32m          username: cred.username,[m
+[32m+[m[32m          last_verified: cred.last_verified,[m
+[32m+[m[32m          auto_discovered: cred.auto_discovered,[m
+[32m+[m[32m          source: if(cred.auto_discovered, do: "auto", else: "manual")[m
+[32m+[m[32m        }[m
+[32m+[m[32m    end[m
+[32m+[m[32m  end[m
+ [m
+[31m-  defp get_user_id(navidrome_url, token) do[m
+[31m-    headers = [[m
+[31m-      {"Content-Type", "application/json"},[m
+[31m-      {"x-nd-authorization", "Bearer #{token}"}[m
+[31m-    ][m
+[32m+[m[32m  # === HYBRID CONFIG RESOLUTION ===[m
+ [m
+[31m-    case HTTPoison.get("#{navidrome_url}/api/user", headers) do[m
+[31m-      {:ok, %{status_code: 200, body: body}} ->[m
+[31m-        case Jason.decode(body) do[m
+[31m-          {:ok, %{"id" => user_id}} -> {:ok, user_id}[m
+[31m-          _ -> {:error, "Invalid response"}[m
+[32m+[m[32m  defp resolve_navidrome_config(listen) do[m
+[32m+[m[32m    user_name = listen.user_name[m
+[32m+[m[41m    [m
+[32m+[m[32m    # Priority 1: DB Credentials[m
+[32m+[m[32m    case get_db_credentials(user_name) do[m
+[32m+[m[32m      {:ok, config} ->[m
+[32m+[m[32m        Logger.debug("Using stored credentials for #{user_name}")[m
+[32m+[m[32m        {:ok, config}[m
+[32m+[m[41m        [m
+[32m+[m[32m      {:error, _} ->[m
+[32m+[m[32m        # Priority 2: Auto-Discovery from origin_url[m
+[32m+[m[32m        case auto_discover_from_listen(listen) do[m
+[32m+[m[32m          {:ok, config} ->[m
+[32m+[m[32m            Logger.info("✅ Auto-discovered Navidrome from origin_url")[m
+[32m+[m[32m            # Speichere für zukünftige Verwendung[m
+[32m+[m[32m            save_credentials(user_name, config.url, config.username, config.password, true)[m
+[32m+[m[32m            {:ok, config}[m
+[32m+[m[41m            [m
+[32m+[m[32m          {:error, _} ->[m
+[32m+[m[32m            # Priority 3: Network Scan[m
+[32m+[m[32m            case scan_network_for_navidrome(user_name) do[m
+[32m+[m[32m              {:ok, config} ->[m
+[32m+[m[32m                Logger.info("✅ Auto-discovered Navidrome via network scan")[m
+[32m+[m[32m                {:ok, config}[m
+[32m+[m[41m                [m
+[32m+[m[32m              {:error, _} ->[m
+[32m+[m[32m                # Priority 4: ENV Variables[m
+[32m+[m[32m                case get_env_credentials() do[m
+[32m+[m[32m                  {:ok, config} ->[m
+[32m+[m[32m                    Logger.debug("Using ENV credentials")[m
+[32m+[m[32m                    {:ok, config}[m
+[32m+[m[41m                    [m
+[32m+[m[32m                  {:error, _} ->[m
+[32m+[m[32m                    {:error, :no_navidrome_config}[m
+[32m+[m[32m                end[m
+[32m+[m[32m            end[m
+         end[m
+[32m+[m[32m    end[m
+[32m+[m[32m  end[m
+[32m+[m
+[32m+[m[32m  # === PRIORITY 1: DATABASE CREDENTIALS ===[m
+[32m+[m
+[32m+[m[32m  defp get_db_credentials(user_name) do[m
+[32m+[m[32m    case Repo.get_by(NavidromeCredential, user_name: user_name) do[m
+[32m+[m[32m      nil ->[m
+[32m+[m[32m        {:error, :not_found}[m
+[32m+[m[41m        [m
+[32m+[m[32m      cred ->[m
+[32m+[m[32m        token = NavidromeCredential.decrypt_token(cred)[m
+[32m+[m[41m        [m
+[32m+[m[32m        if token do[m
+[32m+[m[32m          {:ok, %{[m
+[32m+[m[32m            url: cred.url,[m
+[32m+[m[32m            username: cred.username,[m
+[32m+[m[32m            password: token[m
+[32m+[m[32m          }}[m
+[32m+[m[32m        else[m
+[32m+[m[32m          {:error, :decryption_failed}[m
+[32m+[m[32m        end[m
+[32m+[m[32m    end[m
+[32m+[m[32m  end[m
+[32m+[m
+[32m+[m[32m  defp save_credentials(user_name, url, username, password, auto_discovered) do[m
+[32m+[m[32m    %NavidromeCredential{}[m
+[32m+[m[32m    |> NavidromeCredential.changeset(%{[m
+[32m+[m[32m      user_name: user_name,[m
+[32m+[m[32m      url: url,[m
+[32m+[m[32m      username: username,[m
+[32m+[m[32m      token: password,[m
+[32m+[m[32m      last_verified: DateTime.utc_now(),[m
+[32m+[m[32m      auto_discovered: auto_discovered[m
+[32m+[m[32m    })[m
+[32m+[m[32m    |> Repo.insert([m
+[32m+[m[32m      on_conflict: {:replace_all_except, [:inserted_at]},[m
+[32m+[m[32m      conflict_target: [:user_name, :url][m
+[32m+[m[32m    )[m
+[32m+[m[32m  end[m
+[32m+[m
+[32m+[m[32m  # === PRIORITY 2: AUTO-DISCOVERY FROM ORIGIN_URL ===[m
+[32m+[m
+[32m+[m[32m  defp auto_discover_from_listen(listen) do[m
+[32m+[m[32m    additional_info = listen.additional_info || %{}[m
+[32m+[m[41m    [m
+[32m+[m[32m    case additional_info["origin_url"] do[m
+[32m+[m[32m      nil ->[m
+[32m+[m[32m        {:error, :no_origin_url}[m
+[32m+[m[41m        [m
+[32m+[m[32m      origin_url ->[m
+[32m+[m[32m        extract_navidrome_from_origin(origin_url, listen.user_name)[m
+[32m+[m[32m    end[m
+[32m+[m[32m  end[m
+[32m+[m
+[32m+[m[32m  defp extract_navidrome_from_origin(origin_url, username) do[m
+[32m+[m[32m    case URI.parse(origin_url) do[m
+[32m+[m[32m      %URI{scheme: scheme, host: host, port: port} when not is_nil(host) ->[m
+[32m+[m[32m        base_url = build_url(scheme, host, port)[m
+[32m+[m[41m        [m
+[32m+[m[32m        # Versuche mit gängigen Default-Credentials[m
+[32m+[m[32m        test_credentials = [[m
+[32m+[m[32m          {username, username},[m
+[32m+[m[32m          {username, "navidrome"},[m
+[32m+[m[32m          {"admin", "admin"},[m
+[32m+[m[32m        ][m
+[32m+[m[41m        [m
+[32m+[m[32m        Enum.find_value(test_credentials, {:error, :auth_failed}, fn {user, pass} ->[m
+[32m+[m[32m          case test_connection(base_url, user, pass) do[m
+[32m+[m[32m            {:ok, _} ->[m
+[32m+[m[32m              {:ok, %{url: base_url, username: user, password: pass}}[m
+[32m+[m[41m              [m
+[32m+[m[32m            _ ->[m
+[32m+[m[32m              nil[m
+[32m+[m[32m          end[m
+[32m+[m[32m        end)[m
+ [m
+       _ ->[m
+[31m-        {:error, "Failed to get user info"}[m
+[32m+[m[32m        {:error, :invalid_origin_url}[m
+     end[m
+   end[m
+ [m
+[31m-  defp update_listenbrainz_settings(navidrome_url, token, user_id, viking_url) do[m
+[31m-    headers = [[m
+[31m-      {"Content-Type", "application/json"},[m
+[31m-      {"x-nd-authorization", "Bearer #{token}"}[m
+[32m+[m[32m  defp build_url(scheme, host, nil), do: "#{scheme}://#{host}"[m
+[32m+[m[32m  defp build_url(scheme, host, port), do: "#{scheme}://#{host}:#{port}"[m
+[32m+[m
+[32m+[m[32m  # === PRIORITY 3: NETWORK SCAN ===[m
+[32m+[m
+[32m+[m[32m  defp scan_network_for_navidrome(username) do[m
+[32m+[m[32m    candidates = [[m
+[32m+[m[32m      "http://navidrome:4533",[m
+[32m+[m[32m      "http://navidrome:4000",[m
+[32m+[m[32m      "http://localhost:4533",[m
+[32m+[m[32m      "http://127.0.0.1:4533",[m
+[32m+[m[32m      "http://host.docker.internal:4533",[m
+[32m+[m[32m      "http://#{get_docker_gateway()}:4533",[m
+[32m+[m[32m      "http://192.168.0.1:4533",[m
+[32m+[m[32m      "http://192.168.1.1:4533",[m
+[32m+[m[32m      "http://192.168.178.1:4533"[m
+     ][m
+[32m+[m[41m    [m
+[32m+[m[32m    Enum.find_value(candidates, {:error, :not_found}, fn url ->[m
+[32m+[m[32m      case test_connection(url, username, username) do[m
+[32m+[m[32m        {:ok, _} ->[m
+[32m+[m[32m          Logger.info("✅ Found Navidrome at #{url}")[m
+[32m+[m[32m          {:ok, %{url: url, username: username, password: username}}[m
+[32m+[m[41m          [m
+[32m+[m[32m        _ ->[m
+[32m+[m[32m          nil[m
+[32m+[m[32m      end[m
+[32m+[m[32m    end)[m
+[32m+[m[32m  end[m
+[32m+[m
+[32m+[m[32m  defp get_docker_gateway do[m
+[32m+[m[32m    case System.cmd("ip", ["route", "show", "default"]) do[m
+[32m+[m[32m      {output, 0} ->[m
+[32m+[m[32m        output[m
+[32m+[m[32m        |> String.split()[m
+[32m+[m[32m        |> Enum.at(2)[m
+[32m+[m[32m        |> to_string()[m
+[32m+[m[41m        [m
+[32m+[m[32m      _ ->[m
+[32m+[m[32m        "172.17.0.1"[m
+[32m+[m[32m    end[m
+[32m+[m[32m  rescue[m
+[32m+[m[32m    _ -> "172.17.0.1"[m
+[32m+[m[32m  end[m
+[32m+[m
+[32m+[m[32m  # === PRIORITY 4: ENV VARIABLES ===[m
+ [m
+[31m-    payload = %{[m
+[31m-      "listenBrainzEnabled" => true,[m
+[31m-      "listenBrainzURL" => viking_url[m
+[32m+[m[32m  defp get_env_credentials do[m
+[32m+[m[32m    config = %{[m
+[32m+[m[32m      url: System.get_env("NAVIDROME_URL"),[m
+[32m+[m[32m      username: System.get_env("NAVIDROME_USERNAME"),[m
+[32m+[m[32m      password: System.get_env("NAVIDROME_PASSWORD")[m
+     }[m
+ [m
+[31m-    case HTTPoison.put([m
+[31m-           "#{navidrome_url}/api/user/#{user_id}",[m
+[31m-           Jason.encode!(payload),[m
+[31m-           headers[m
+[31m-         ) do[m
+[31m-      {:ok, %{status_code: 200}} ->[m
+[31m-        {:ok, "Settings updated"}[m
+[32m+[m[32m    if config.url && config.username && config.password do[m
+[32m+[m[32m      {:ok, config}[m
+[32m+[m[32m    else[m
+[32m+[m[32m      {:error, :env_not_configured}[m
+[32m+[m[32m    end[m
+[32m+[m[32m  end[m
+[32m+[m
+[32m+[m[32m  # === SUBSONIC API ===[m
+[32m+[m
+[32m+[m[32m  def test_connection(url, username, password) do[m
+[32m+[m[32m    params = %{[m
+[32m+[m[32m      "u" => username,[m
+[32m+[m[32m      "p" => password,[m
+[32m+[m[32m      "v" => "1.16.1",[m
+[32m+[m[32m      "c" => "VikingScrobbler",[m
+[32m+[m[32m      "f" => "json"[m
+[32m+[m[32m    }[m
+[32m+[m
+[32m+[m[32m    query_string = URI.encode_query(params)[m
+[32m+[m[32m    test_url = "#{url}/rest/ping?#{query_string}"[m
+ [m
+[32m+[m[32m    case HTTPoison.get(test_url, [], recv_timeout: 2000) do[m
+[32m+[m[32m      {:ok, %{status_code: 200, body: body}} ->[m
+[32m+[m[32m        case Jason.decode(body) do[m
+[32m+[m[32m          {:ok, %{"subsonic-response" => %{"status" => "ok"}}} ->[m
+[32m+[m[32m            {:ok, "Connection successful"}[m
+[32m+[m[41m            [m
+[32m+[m[32m          _ ->[m
+[32m+[m[32m            {:error, "Invalid response"}[m
+[32m+[m[32m        end[m
+[32m+[m
+[32m+[m[32m      {:ok, %{status_code: 401}} ->[m
+[32m+[m[32m        {:error, "Invalid credentials"}[m
+[32m+[m[41m        [m
+       {:ok, %{status_code: code}} ->[m
+         {:error, "HTTP #{code}"}[m
+[32m+[m[41m        [m
+[32m+[m[32m      {:error, %HTTPoison.Error{reason: reason}} ->[m
+[32m+[m[32m        {:error, "Connection failed: #{reason}"}[m
+[32m+[m[32m    end[m
+[32m+[m[32m  end[m
+[32m+[m
+[32m+[m[32m  defp search_song(navidrome_url, username, password, artist, track) do[m
+[32m+[m[32m    params = %{[m
+[32m+[m[32m      "u" => username,[m
+[32m+[m[32m      "p" => password,[m
+[32m+[m[32m      "v" => "1.16.1",[m
+[32m+[m[32m      "c" => "VikingScrobbler",[m
+[32m+[m[32m      "f" => "json",[m
+[32m+[m[32m      "query" => "#{artist} #{track}",[m
+[32m+[m[32m      "songCount" => 5[m
+[32m+[m[32m    }[m
+[32m+[m
+[32m+[m[32m    query_string = URI.encode_query(params)[m
+[32m+[m[32m    url = "#{navidrome_url}/rest/search3?#{query_string}"[m
+[32m+[m
+[32m+[m[32m    case HTTPoison.get(url, [], recv_timeout: 5000) do[m
+[32m+[m[32m      {:ok, %{status_code: 200, body: body}} ->[m
+[32m+[m[32m        parse_search_response(body, artist, track)[m
+[32m+[m
+[32m+[m[32m      {:ok, %{status_code: code}} ->[m
+[32m+[m[32m        {:error, "Navidrome HTTP #{code}"}[m
+ [m
+       {:error, reason} ->[m
+         {:error, "Request failed: #{inspect(reason)}"}[m
+     end[m
+   end[m
+[32m+[m
+[32m+[m[32m  defp parse_search_response(body, artist, track) do[m
+[32m+[m[32m    case Jason.decode(body) do[m
+[32m+[m[32m      {:ok, %{"subsonic-response" => %{"searchResult3" => %{"song" => songs}}}}[m[41m [m
+[32m+[m[32m        when is_list(songs) and length(songs) > 0 ->[m
+[32m+[m[41m        [m
+[32m+[m[32m        matched_song =[m[41m [m
+[32m+[m[32m          Enum.find(songs, fn song ->[m
+[32m+[m[32m            String.downcase(song["artist"] || "") == String.downcase(artist) and[m
+[32m+[m[32m            String.downcase(song["title"] || "") == String.downcase(track)[m
+[32m+[m[32m          end) || List.first(songs)[m
+[32m+[m
+[32m+[m[32m        extract_metadata(matched_song)[m
+[32m+[m
+[32m+[m[32m      {:ok, %{"subsonic-response" => %{"searchResult3" => %{}}}} ->[m
+[32m+[m[32m        {:error, :no_results}[m
+[32m+[m
+[32m+[m[32m      {:ok, _other} ->[m
+[32m+[m[32m        {:error, :invalid_response}[m
+[32m+[m
+[32m+[m[32m      {:error, reason} ->[m
+[32m+[m[32m        {:error, {:json_decode, reason}}[m
+[32m+[m[32m    end[m
+[32m+[m[32m  end[m
+[32m+[m
+[32m+[m[32m  defp extract_metadata(song) do[m
+[32m+[m[32m    metadata = %{[m
+[32m+[m[32m      "genre" => song["genre"],[m
+[32m+[m[32m      "genres" => parse_genres(song["genre"]),[m
+[32m+[m[32m      "album" => song["album"],[m
+[32m+[m[32m      "year" => song["year"],[m
+[32m+[m[32m      "duration_ms" => (song["duration"] || 0) * 1000,[m
+[32m+[m[32m      "tracknumber" => song["track"],[m
+[32m+[m[32m      "discnumber" => song["discNumber"],[m
+[32m+[m[32m      "bitrate" => song["bitRate"],[m
+[32m+[m[32m      "path" => song["path"][m
+[32m+[m[32m    }[m
+[32m+[m[41m    [m
+[32m+[m[32m    {:ok, metadata}[m
+[32m+[m[32m  end[m
+[32m+[m
+[32m+[m[32m  defp parse_genres(nil), do: [][m
+[32m+[m[32m  defp parse_genres(genre_string) when is_binary(genre_string) do[m
+[32m+[m[32m    genre_string[m
+[32m+[m[32m    |> String.split(~r/[;,\/]/)[m
+[32m+[m[32m    |> Enum.map(&String.trim/1)[m
+[32m+[m[32m    |> Enum.reject(&(&1 == ""))[m
+[32m+[m[32m    |> Enum.take(5)[m
+[32m+[m[32m  end[m
+[32m+[m
+[32m+[m[32m  defp update_listen_with_navidrome_data(listen, navidrome_data) do[m
+[32m+[m[32m    genres = navidrome_data["genres"][m
+[32m+[m[41m    [m
+[32m+[m[32m    if genres && length(genres) > 0 do[m
+[32m+[m[32m      current_metadata = parse_metadata(listen.metadata)[m
+[32m+[m[32m      new_metadata = Map.merge(current_metadata, %{[m
+[32m+[m[32m        "genres" => genres,[m
+[32m+[m[32m        "source" => "navidrome_id3"[m
+[32m+[m[32m      })[m
+[32m+[m
+[32m+[m[32m      changeset =[m[41m [m
+[32m+[m[32m        listen[m
+[32m+[m[32m        |> Ecto.Changeset.change(%{[m
+[32m+[m[32m          metadata: Jason.encode!(new_metadata),[m
+[32m+[m[32m          duration_ms: listen.duration_ms || navidrome_data["duration_ms"],[m
+[32m+[m[32m          tracknumber: listen.tracknumber || navidrome_data["tracknumber"],[m
+[32m+[m[32m          discnumber: listen.discnumber || navidrome_data["discnumber"][m
+[32m+[m[32m        })[m
+[32m+[m
+[32m+[m[32m      case Repo.update(changeset) do[m
+[32m+[m[32m        {:ok, updated_listen} ->[m
+[32m+[m[32m          Logger.info("✅ Enriched listen #{listen.id} from Navidrome ID3: #{inspect(genres)}")[m
+[32m+[m[32m          {:ok, updated_listen}[m
+[32m+[m
+[32m+[m[32m        {:error, changeset} ->[m
+[32m+[m[32m          Logger.error("Failed to update listen: #{inspect(changeset.errors)}")[m
+[32m+[m[32m          {:error, :update_failed}[m
+[32m+[m[32m      end[m
+[32m+[m[32m    else[m
+[32m+[m[32m      {:error, :no_genres}[m
+[32m+[m[32m    end[m
+[32m+[m[32m  end[m
+[32m+[m
+[32m+[m[32m  defp parse_metadata(nil), do: %{}[m
+[32m+[m[32m  defp parse_metadata(str) when is_binary(str) do[m
+[32m+[m[32m    case Jason.decode(str) do[m
+[32m+[m[32m      {:ok, map} -> map[m
+[32m+[m[32m      _ -> %{}[m
+[32m+[m[32m    end[m
+[32m+[m[32m  end[m
+ end[m
+[1mdiff --git a/backend/lib/app_api_web/controllers/integration_controller.ex b/backend/lib/app_api_web/controllers/integration_controller.ex[m
+[1mindex 77b9499..911a173 100644[m
+[1m--- a/backend/lib/app_api_web/controllers/integration_controller.ex[m
+[1m+++ b/backend/lib/app_api_web/controllers/integration_controller.ex[m
+[36m@@ -1,66 +1,42 @@[m
+ defmodule AppApiWeb.IntegrationController do[m
+   use AppApiWeb, :controller[m
+   alias AppApi.NavidromeIntegration[m
+[31m-  alias AppApi.Repo[m
+[31m-  alias AppApi.Integration[m
+ [m
+[31m-  # Test Navidrome connection[m
+[31m-  def test_navidrome(conn, %{"navidrome_url" => url, "navidrome_token" => token}) do[m
+[31m-    case NavidromeIntegration.test_connection(url, token) do[m
+[32m+[m[32m  # Test Navidrome Connection[m
+[32m+[m[32m  def test_navidrome(conn, %{"url" => url, "username" => username, "password" => password}) do[m
+[32m+[m[32m    case NavidromeIntegration.test_connection(url, username, password) do[m
+       {:ok, message} ->[m
+         json(conn, %{status: "ok", message: message})[m
+ [m
+       {:error, reason} ->[m
+         conn[m
+         |> put_status(:bad_request)[m
+[31m-        |> json(%{status: "error", message: reason})[m
+[32m+[m[32m        |> json(%{error: reason})[m
+     end[m
+   end[m
+ [m
+[31m-  # Configure Navidrome[m
+[32m+[m[32m  # Configure Navidrome (deprecated - use NavidromeController instead)[m
+   def configure_navidrome(conn, params) do[m
+     navidrome_url = params["navidrome_url"][m
+[31m-    navidrome_token = params["navidrome_token"][m
+[31m-    viking_url = params["viking_url"] || get_viking_url(conn)[m
+[31m-[m
+[31m-    case NavidromeIntegration.configure_navidrome(navidrome_url, navidrome_token, viking_url) do[m
+[32m+[m[32m    _viking_url = params["viking_url"]  # ✅ Prefix mit _ (wird aktuell nicht benötigt)[m
+[32m+[m[32m    username = params["username"][m
+[32m+[m[32m    password = params["password"][m
+[32m+[m[32m    user_name = params["user_name"] || "viking_user"[m
+[32m+[m
+[32m+[m[32m    # Neue API nutzen[m
+[32m+[m[32m    case NavidromeIntegration.test_and_save_connection([m
+[32m+[m[32m      navidrome_url,[m
+[32m+[m[32m      username,[m
+[32m+[m[32m      password,[m
+[32m+[m[32m      user_name[m
+[32m+[m[32m    ) do[m
+       {:ok, message} ->[m
+[31m-        # Save integration settings[m
+[31m-        save_integration(navidrome_url, navidrome_token)[m
+         json(conn, %{status: "ok", message: message})[m
+ [m
+       {:error, reason} ->[m
+         conn[m
+         |> put_status(:bad_request)[m
+[31m-        |> json(%{status: "error", message: reason})[m
+[31m-    end[m
+[31m-  end[m
+[31m-[m
+[31m-  # Get saved integrations[m
+[31m-  def get_integrations(conn, _params) do[m
+[31m-    integrations = Repo.all(Integration)[m
+[31m-    json(conn, %{integrations: integrations})[m
+[31m-  end[m
+[31m-[m
+[31m-  # Private helpers[m
+[31m-[m
+[31m-  defp get_viking_url(conn) do[m
+[31m-    scheme = if get_req_header(conn, "x-forwarded-proto") == ["https"], do: "https", else: "http"[m
+[31m-    host = get_req_header(conn, "host") |> List.first() || "localhost:4000"[m
+[31m-    "#{scheme}://#{host}"[m
+[31m-  end[m
+[31m-[m
+[31m-  defp save_integration(navidrome_url, token) do[m
+[31m-    attrs = %{[m
+[31m-      service: "navidrome",[m
+[31m-      url: navidrome_url,[m
+[31m-      token: token,[m
+[31m-      enabled: true[m
+[31m-    }[m
+[31m-[m
+[31m-    case Repo.get_by(Integration, service: "navidrome") do[m
+[31m-      nil -> %Integration{} |> Integration.changeset(attrs) |> Repo.insert()[m
+[31m-      existing -> existing |> Integration.changeset(attrs) |> Repo.update()[m
+[32m+[m[32m        |> json(%{error: inspect(reason)})[m
+     end[m
+   end[m
+ end[m
+[1mdiff --git a/backend/lib/app_api_web/controllers/listenbrainz_controller.ex b/backend/lib/app_api_web/controllers/listenbrainz_controller.ex[m
+[1mindex 27e64da..6ed18b7 100644[m
+[1m--- a/backend/lib/app_api_web/controllers/listenbrainz_controller.ex[m
+[1m+++ b/backend/lib/app_api_web/controllers/listenbrainz_controller.ex[m
+[36m@@ -9,6 +9,9 @@[m [mdefmodule AppApiWeb.ListenBrainzController do[m
+ [m
+   # POST /1/submit-listens (ListenBrainz API v1)[m
+   def submit_listens(conn, params) do[m
+[32m+[m[32m    # ⬇️ NEU: Debug-Log[m
+[32m+[m[32m    Logger.info("📥 RAW PAYLOAD: #{inspect(params, pretty: true)}")[m
+[32m+[m
+     token = get_token_from_header(conn)[m
+ [m
+     case TokenController.validate(token) do[m
+[36m@@ -17,9 +20,15 @@[m [mdefmodule AppApiWeb.ListenBrainzController do[m
+         payload = params["payload"] || [][m
+ [m
+         case listen_type do[m
+[31m-          "single" -> process_listens(conn, payload, user_name)[m
+[31m-          "playing_now" -> json(conn, %{status: "ok", message: "playing_now received"})[m
+[31m-          "import" -> process_listens(conn, payload, user_name)[m
+[32m+[m[32m          "single" ->[m
+[32m+[m[32m            process_listens(conn, payload, user_name)[m
+[32m+[m
+[32m+[m[32m          "playing_now" ->[m
+[32m+[m[32m            json(conn, %{status: "ok", message: "playing_now received"})[m
+[32m+[m
+[32m+[m[32m          "import" ->[m
+[32m+[m[32m            process_listens(conn, payload, user_name)[m
+[32m+[m
+           _ ->[m
+             conn[m
+             |> put_status(:bad_request)[m
+[36m@@ -40,10 +49,11 @@[m [mdefmodule AppApiWeb.ListenBrainzController do[m
+     min_ts = parse_timestamp(params["min_ts"])[m
+ [m
+     query =[m
+[31m-      from l in Listen,[m
+[32m+[m[32m      from(l in Listen,[m
+         where: l.user_name == ^user_name,[m
+         order_by: [desc: l.listened_at],[m
+         limit: ^count[m
+[32m+[m[32m      )[m
+ [m
+     query = if max_ts, do: where(query, [l], l.listened_at < ^max_ts), else: query[m
+     query = if min_ts, do: where(query, [l], l.listened_at > ^min_ts), else: query[m
+[36m@@ -127,70 +137,81 @@[m [mdefmodule AppApiWeb.ListenBrainzController do[m
+     query = build_time_range_query(Listen, user_name, range)[m
+ [m
+     # Smart Grouping basierend auf range - direkt die Queries bauen[m
+[31m-    activity = case range do[m
+[31m-      "week" ->[m
+[31m-        # Gruppiere nach Tag (7 Einträge)[m
+[31m-        query[m
+[31m-        |> select([l], %{[m
+[31m-          time_range: fragment("DATE(datetime(?, 'unixepoch'))", l.listened_at),[m
+[31m-          listen_count: count(l.id)[m
+[31m-        })[m
+[31m-        |> group_by([l], fragment("DATE(datetime(?, 'unixepoch'))", l.listened_at))[m
+[31m-        |> order_by([l], asc: fragment("DATE(datetime(?, 'unixepoch'))", l.listened_at))[m
+[31m-        |> Repo.all()[m
+[31m-[m
+[31m-      "month" ->[m
+[31m-        # Gruppiere nach Woche (4-5 Einträge)[m
+[31m-        query[m
+[31m-        |> select([l], %{[m
+[31m-          time_range: fragment("strftime('%Y-W%W', datetime(?, 'unixepoch'))", l.listened_at),[m
+[31m-          listen_count: count(l.id)[m
+[31m-        })[m
+[31m-        |> group_by([l], fragment("strftime('%Y-W%W', datetime(?, 'unixepoch'))", l.listened_at))[m
+[31m-        |> order_by([l], asc: fragment("strftime('%Y-W%W', datetime(?, 'unixepoch'))", l.listened_at))[m
+[31m-        |> Repo.all()[m
+[31m-[m
+[31m-      "year" ->[m
+[31m-        # Gruppiere nach Monat (12 Einträge)[m
+[31m-        query[m
+[31m-        |> select([l], %{[m
+[31m-          time_range: fragment("strftime('%Y-%m', datetime(?, 'unixepoch'))", l.listened_at),[m
+[31m-          listen_count: count(l.id)[m
+[31m-        })[m
+[31m-        |> group_by([l], fragment("strftime('%Y-%m', datetime(?, 'unixepoch'))", l.listened_at))[m
+[31m-        |> order_by([l], asc: fragment("strftime('%Y-%m', datetime(?, 'unixepoch'))", l.listened_at))[m
+[31m-        |> Repo.all()[m
+[31m-[m
+[31m-      "all_time" ->[m
+[31m-        # Gruppiere nach Jahr[m
+[31m-        query[m
+[31m-        |> select([l], %{[m
+[31m-          time_range: fragment("strftime('%Y', datetime(?, 'unixepoch'))", l.listened_at),[m
+[31m-          listen_count: count(l.id)[m
+[31m-        })[m
+[31m-        |> group_by([l], fragment("strftime('%Y', datetime(?, 'unixepoch'))", l.listened_at))[m
+[31m-        |> order_by([l], asc: fragment("strftime('%Y', datetime(?, 'unixepoch'))", l.listened_at))[m
+[31m-        |> Repo.all()[m
+[31m-[m
+[31m-      _ ->[m
+[31m-        # Default: daily[m
+[31m-        query[m
+[31m-        |> select([l], %{[m
+[31m-          time_range: fragment("DATE(datetime(?, 'unixepoch'))", l.listened_at),[m
+[31m-          listen_count: count(l.id)[m
+[31m-        })[m
+[31m-        |> group_by([l], fragment("DATE(datetime(?, 'unixepoch'))", l.listened_at))[m
+[31m-        |> order_by([l], asc: fragment("DATE(datetime(?, 'unixepoch'))", l.listened_at))[m
+[31m-        |> Repo.all()[m
+[31m-    end[m
+[32m+[m[32m    activity =[m
+[32m+[m[32m      case range do[m
+[32m+[m[32m        "week" ->[m
+[32m+[m[32m          # Gruppiere nach Tag (7 Einträge)[m
+[32m+[m[32m          query[m
+[32m+[m[32m          |> select([l], %{[m
+[32m+[m[32m            time_range: fragment("DATE(datetime(?, 'unixepoch'))", l.listened_at),[m
+[32m+[m[32m            listen_count: count(l.id)[m
+[32m+[m[32m          })[m
+[32m+[m[32m          |> group_by([l], fragment("DATE(datetime(?, 'unixepoch'))", l.listened_at))[m
+[32m+[m[32m          |> order_by([l], asc: fragment("DATE(datetime(?, 'unixepoch'))", l.listened_at))[m
+[32m+[m[32m          |> Repo.all()[m
+[32m+[m
+[32m+[m[32m        "month" ->[m
+[32m+[m[32m          # Gruppiere nach Woche (4-5 Einträge)[m
+[32m+[m[32m          query[m
+[32m+[m[32m          |> select([l], %{[m
+[32m+[m[32m            time_range: fragment("strftime('%Y-W%W', datetime(?, 'unixepoch'))", l.listened_at),[m
+[32m+[m[32m            listen_count: count(l.id)[m
+[32m+[m[32m          })[m
+[32m+[m[32m          |> group_by([m
+[32m+[m[32m            [l],[m
+[32m+[m[32m            fragment("strftime('%Y-W%W', datetime(?, 'unixepoch'))", l.listened_at)[m
+[32m+[m[32m          )[m
+[32m+[m[32m          |> order_by([l],[m
+[32m+[m[32m            asc: fragment("strftime('%Y-W%W', datetime(?, 'unixepoch'))", l.listened_at)[m
+[32m+[m[32m          )[m
+[32m+[m[32m          |> Repo.all()[m
+[32m+[m
+[32m+[m[32m        "year" ->[m
+[32m+[m[32m          # Gruppiere nach Monat (12 Einträge)[m
+[32m+[m[32m          query[m
+[32m+[m[32m          |> select([l], %{[m
+[32m+[m[32m            time_range: fragment("strftime('%Y-%m', datetime(?, 'unixepoch'))", l.listened_at),[m
+[32m+[m[32m            listen_count: count(l.id)[m
+[32m+[m[32m          })[m
+[32m+[m[32m          |> group_by([l], fragment("strftime('%Y-%m', datetime(?, 'unixepoch'))", l.listened_at))[m
+[32m+[m[32m          |> order_by([l],[m
+[32m+[m[32m            asc: fragment("strftime('%Y-%m', datetime(?, 'unixepoch'))", l.listened_at)[m
+[32m+[m[32m          )[m
+[32m+[m[32m          |> Repo.all()[m
+[32m+[m
+[32m+[m[32m        "all_time" ->[m
+[32m+[m[32m          # Gruppiere nach Jahr[m
+[32m+[m[32m          query[m
+[32m+[m[32m          |> select([l], %{[m
+[32m+[m[32m            time_range: fragment("strftime('%Y', datetime(?, 'unixepoch'))", l.listened_at),[m
+[32m+[m[32m            listen_count: count(l.id)[m
+[32m+[m[32m          })[m
+[32m+[m[32m          |> group_by([l], fragment("strftime('%Y', datetime(?, 'unixepoch'))", l.listened_at))[m
+[32m+[m[32m          |> order_by([l],[m
+[32m+[m[32m            asc: fragment("strftime('%Y', datetime(?, 'unixepoch'))", l.listened_at)[m
+[32m+[m[32m          )[m
+[32m+[m[32m          |> Repo.all()[m
+[32m+[m
+[32m+[m[32m        _ ->[m
+[32m+[m[32m          # Default: daily[m
+[32m+[m[32m          query[m
+[32m+[m[32m          |> select([l], %{[m
+[32m+[m[32m            time_range: fragment("DATE(datetime(?, 'unixepoch'))", l.listened_at),[m
+[32m+[m[32m            listen_count: count(l.id)[m
+[32m+[m[32m          })[m
+[32m+[m[32m          |> group_by([l], fragment("DATE(datetime(?, 'unixepoch'))", l.listened_at))[m
+[32m+[m[32m          |> order_by([l], asc: fragment("DATE(datetime(?, 'unixepoch'))", l.listened_at))[m
+[32m+[m[32m          |> Repo.all()[m
+[32m+[m[32m      end[m
+ [m
+[31m-    grouping = case range do[m
+[31m-      "week" -> "daily"[m
+[31m-      "month" -> "weekly"[m
+[31m-      "year" -> "monthly"[m
+[31m-      "all_time" -> "yearly"[m
+[31m-      _ -> "daily"[m
+[31m-    end[m
+[32m+[m[32m    grouping =[m
+[32m+[m[32m      case range do[m
+[32m+[m[32m        "week" -> "daily"[m
+[32m+[m[32m        "month" -> "weekly"[m
+[32m+[m[32m        "year" -> "monthly"[m
+[32m+[m[32m        "all_time" -> "yearly"[m
+[32m+[m[32m        _ -> "daily"[m
+[32m+[m[32m      end[m
+ [m
+     json(conn, %{[m
+       payload: %{[m
+[36m@@ -205,21 +226,21 @@[m [mdefmodule AppApiWeb.ListenBrainzController do[m
+   # GET /1/stats/user/:user_name/totals (ERWEITERT)[m
+   def get_user_totals(conn, %{"user_name" => user_name} = params) do[m
+     range = params["range"] || "all_time"[m
+[31m-    [m
+[32m+[m
+     query = build_time_range_query(Listen, user_name, range)[m
+ [m
+     # Total Scrobbles[m
+     total_listens = Repo.aggregate(query, :count, :id)[m
+ [m
+     # Unique Artists[m
+[31m-    unique_artists = [m
+[32m+[m[32m    unique_artists =[m
+       query[m
+       |> select([l], l.artist_name)[m
+       |> distinct(true)[m
+       |> Repo.aggregate(:count, :artist_name)[m
+ [m
+     # Unique Tracks[m
+[31m-    unique_tracks = [m
+[32m+[m[32m    unique_tracks =[m
+       query[m
+       |> select([l], fragment("? || ' - ' || ?", l.artist_name, l.track_name))[m
+       |> distinct(true)[m
+[36m@@ -227,7 +248,7 @@[m [mdefmodule AppApiWeb.ListenBrainzController do[m
+       |> length()[m
+ [m
+     # Unique Albums[m
+[31m-    unique_albums = [m
+[32m+[m[32m    unique_albums =[m
+       query[m
+       |> where([l], not is_nil(l.release_name))[m
+       |> select([l], l.release_name)[m
+[36m@@ -235,14 +256,14 @@[m [mdefmodule AppApiWeb.ListenBrainzController do[m
+       |> Repo.aggregate(:count, :release_name)[m
+ [m
+     # First & Last Listen[m
+[31m-    first_listen = [m
+[32m+[m[32m    first_listen =[m
+       query[m
+       |> order_by([l], asc: l.listened_at)[m
+       |> limit(1)[m
+       |> select([l], l.listened_at)[m
+       |> Repo.one()[m
+ [m
+[31m-    last_listen = [m
+[32m+[m[32m    last_listen =[m
+       query[m
+       |> order_by([l], desc: l.listened_at)[m
+       |> limit(1)[m
+[36m@@ -250,17 +271,17 @@[m [mdefmodule AppApiWeb.ListenBrainzController do[m
+       |> Repo.one()[m
+ [m
+     # --- NEUE ADVANCED STATS ---[m
+[31m-    [m
+[32m+[m
+     # Most Active Day (Wochentag mit meisten Scrobbles)[m
+     from_timestamp = get_range_timestamp(range)[m
+     {most_active_day, tracks_on_most_active} = Stats.most_active_day(user_name, from_timestamp)[m
+[31m-    [m
+[32m+[m
+     # Average Scrobbles per Day[m
+     avg_per_day = Stats.avg_per_day(user_name, from_timestamp)[m
+[31m-    [m
+[32m+[m
+     # Peak Day (einzelner Tag mit meisten Scrobbles)[m
+     {peak_day, peak_value} = Stats.peak_day(user_name, from_timestamp)[m
+[31m-    [m
+[32m+[m
+     # Current Streak (nur für all_time sinnvoll)[m
+     current_streak = if range == "all_time", do: Stats.current_streak(user_name), else: 0[m
+ [m
+[36m@@ -290,7 +311,7 @@[m [mdefmodule AppApiWeb.ListenBrainzController do[m
+   def get_recent_listens(conn, %{"user_name" => user_name} = params) do[m
+     count = String.to_integer(params["count"] || "20")[m
+ [m
+[31m-    listens = [m
+[32m+[m[32m    listens =[m
+       Listen[m
+       |> where([l], l.user_name == ^user_name)[m
+       |> order_by([l], desc: l.listened_at)[m
+[36m@@ -340,99 +361,187 @@[m [mdefmodule AppApiWeb.ListenBrainzController do[m
+     case Repo.insert_all(Listen, listens) do[m
+       {count, _} when count > 0 ->[m
+         Logger.info("Inserted #{count} listens for user #{user_name}")[m
+[31m-        [m
+[32m+[m
+[32m+[m[32m        # 🆕 GENRE ENRICHMENT PIPELINE (Background Task)[m
+[32m+[m[32m        Task.start(fn ->[m
+[32m+[m[32m          Listen[m
+[32m+[m[32m          |> where([l], l.user_name == ^user_name)[m
+[32m+[m[32m          |> order_by([l], desc: l.listened_at)[m
+[32m+[m[32m          |> limit(^count)[m
+[32m+[m[32m          |> Repo.all()[m
+[32m+[m[32m          |> Enum.each(fn listen ->[m
+[32m+[m[32m            # Step 1: Try Navidrome ID3 Tags[m
+[32m+[m[32m            case AppApi.NavidromeIntegration.enrich_listen_from_navidrome(listen) do[m
+[32m+[m[32m              {:ok, _} ->[m
+[32m+[m[32m                Logger.info("✅ Genre from Navidrome ID3 for: #{listen.track_name}")[m
+[32m+[m[32m                :ok[m
+[32m+[m
+[32m+[m[32m              {:error, _reason} ->[m
+[32m+[m[32m                # Step 2: Fallback to MusicBrainz[m
+[32m+[m[32m                Logger.info("⚠️ Navidrome failed, trying MusicBrainz for: #{listen.track_name}")[m
+[32m+[m[32m                AppApi.GenreEnrichment.enrich_listen(listen)[m
+[32m+[m[32m            end[m
+[32m+[m
+[32m+[m[32m            # Rate limiting[m
+[32m+[m[32m            :timer.sleep(200)[m
+[32m+[m[32m          end)[m
+[32m+[m[32m        end)[m
+[32m+[m
+         # 🚀 BROADCAST NEW SCROBBLE[m
+         AppApiWeb.Endpoint.broadcast!([m
+           "scrobbles:#{user_name}",[m
+           "new_scrobble",[m
+           %{count: count, user: user_name, timestamp: DateTime.utc_now() |> DateTime.to_unix()}[m
+         )[m
+[31m-        [m
+[32m+[m
+         Logger.info("📡 Broadcast new_scrobble to channel scrobbles:#{user_name}, count: #{count}")[m
+[31m-        [m
+[32m+[m
+         json(conn, %{status: "ok", message: "#{count} listen(s) inserted"})[m
+ [m
+       _ ->[m
+         Logger.error("Failed to insert listens")[m
+[32m+[m
+         conn[m
+         |> put_status(:internal_server_error)[m
+         |> json(%{status: "error", message: "Failed to insert listens"})[m
+     end[m
+[31m-[m
+   end[m
+ [m
+   defp format_listen(listen) do[m
+[32m+[m[32m    # Parse metadata JSON[m
+[32m+[m[32m    metadata =[m
+[32m+[m[32m      case listen.metadata do[m
+[32m+[m[32m        nil ->[m
+[32m+[m[32m          %{}[m
+[32m+[m
+[32m+[m[32m        str when is_binary(str) ->[m
+[32m+[m[32m          case Jason.decode(str) do[m
+[32m+[m[32m            {:ok, map} -> map[m
+[32m+[m[32m            _ -> %{}[m
+[32m+[m[32m          end[m
+[32m+[m
+[32m+[m[32m        map when is_map(map) ->[m
+[32m+[m[32m          map[m
+[32m+[m
+[32m+[m[32m        _ ->[m
+[32m+[m[32m          %{}[m
+[32m+[m[32m      end[m
+[32m+[m
+[32m+[m[32m    # Genres als String[m
+[32m+[m[32m    genres_string =[m
+[32m+[m[32m      case metadata["genres"] do[m
+[32m+[m[32m        list when is_list(list) and list != [] -> Enum.join(list, ", ")[m
+[32m+[m[32m        _ -> nil[m
+[32m+[m[32m      end[m
+[32m+[m
+[32m+[m[32m    # additional_info aus DB + genres mergen[m
+[32m+[m[32m    additional_info =[m
+[32m+[m[32m      (listen.additional_info || %{})[m
+[32m+[m[32m      |> Map.put("genres", genres_string)[m
+[32m+[m[32m      |> Map.put("duration_ms", listen.duration_ms)[m
+[32m+[m[32m      |> Map.put("tracknumber", listen.tracknumber)[m
+[32m+[m[32m      |> Map.put("discnumber", listen.discnumber)[m
+[32m+[m
+     %{[m
+       listened_at: listen.listened_at,[m
+       track_metadata: %{[m
+         track_name: listen.track_name,[m
+         artist_name: listen.artist_name,[m
+         release_name: listen.release_name,[m
+[31m-        additional_info: listen.additional_info || %{}[m
+[32m+[m[32m        additional_info: additional_info[m
+       }[m
+     }[m
+   end[m
+ [m
+   # 🆕 NEU: Hybrid Metadata Response Format[m
+   defp format_listen_detailed_hybrid(listen) do[m
+[31m-  # metadata als Map sicherstellen (kommt aus Listen.metadata :: string)[m
+[31m-  metadata =[m
+[31m-    case listen.metadata do[m
+[31m-      str when is_binary(str) ->[m
+[31m-        case Jason.decode(str) do[m
+[31m-          {:ok, map} -> map[m
+[31m-          _ -> %{}[m
+[31m-        end[m
+[32m+[m[32m    # metadata als Map sicherstellen (kommt aus Listen.metadata :: string)[m
+[32m+[m[32m    metadata =[m
+[32m+[m[32m      case listen.metadata do[m
+[32m+[m[32m        nil ->[m
+[32m+[m[32m          %{}[m
+[32m+[m
+[32m+[m[32m        str when is_binary(str) ->[m
+[32m+[m[32m          case Jason.decode(str) do[m
+[32m+[m[32m            {:ok, map} -> map[m
+[32m+[m[32m            _ -> %{}[m
+[32m+[m[32m          end[m
+[32m+[m
+[32m+[m[32m        map when is_map(map) ->[m
+[32m+[m[32m          map[m
+[32m+[m
+[32m+[m[32m        _ ->[m
+[32m+[m[32m          %{}[m
+[32m+[m[32m      end[m
+ [m
+[31m-      map when is_map(map) ->[m
+[31m-        map[m
+[32m+[m[32m    # Genres:[m
+[32m+[m[32m    # 1) Wenn in metadata["genres"] (Liste) → String bauen[m
+[32m+[m[32m    # 2) Sonst vorhandenes additional_info["genres"] weiterverwenden[m
+[32m+[m[32m    base_info = listen.additional_info || %{}[m
+ [m
+[31m-      _ ->[m
+[31m-        %{}[m
+[31m-    end[m
+[32m+[m[32m    genres_from_metadata =[m
+[32m+[m[32m      case metadata["genres"] do[m
+[32m+[m[32m        list when is_list(list) and list != [] ->[m
+[32m+[m[32m          list |> Enum.take(3) |> Enum.join(", ")[m
+ [m
+[31m-  # GENRE-STRING aus metadata["genres"][m
+[31m-  genres =[m
+[31m-    case metadata["genres"] do[m
+[31m-      list when is_list(list) and list != [] ->[m
+[31m-        list |> Enum.take(3) |> Enum.join(", ")[m
+[31m-      _ ->[m
+[31m-        "–"[m
+[31m-    end[m
+[32m+[m[32m        _ ->[m
+[32m+[m[32m          nil[m
+[32m+[m[32m      end[m
+[32m+[m
+[32m+[m[32m    genres = genres_from_metadata || base_info["genres"] || "–"[m
+[32m+[m
+[32m+[m[32m    # Releasejahr – Priorität:[m
+[32m+[m[32m    # 1) ID3/Navidrome: metadata["year"][m
+[32m+[m[32m    # 2) MusicBrainz: metadata["mb_release_year"][m
+[32m+[m[32m    # 3) Fallback: nil[m
+[32m+[m[32m    release_year =[m
+[32m+[m[32m      cond do[m
+[32m+[m[32m        is_integer(metadata["year"]) ->[m
+[32m+[m[32m          metadata["year"][m
+ [m
+[31m-  %{[m
+[31m-    listened_at: listen.listened_at,[m
+[31m-    track_name: listen.track_name,[m
+[31m-    artist_name: listen.artist_name,[m
+[31m-    release_name: listen.release_name,[m
+[31m-    recording_mbid: listen.recording_mbid,[m
+[31m-    artist_mbid: listen.artist_mbid,[m
+[31m-    release_mbid: listen.release_mbid,[m
+[31m-    additional_info: %{[m
+[31m-      # Tier 1: direkt aus Spalten (schnell filterbar)[m
+[31m-      duration_ms: listen.duration_ms,[m
+[31m-      origin_url: listen.origin_url,[m
+[31m-      music_service: listen.music_service,[m
+[31m-      tracknumber: listen.tracknumber,[m
+[31m-      discnumber: listen.discnumber,[m
+[31m-      loved: listen.loved,[m
+[31m-      rating: listen.rating,[m
+[31m-[m
+[31m-      # Tier 2: aus metadata JSON[m
+[31m-      submission_client: get_in(metadata, ["submission_client"]),[m
+[31m-      submission_client_version: get_in(metadata, ["submission_client_version"]),[m
+[31m-      artist_mbids: get_in(metadata, ["artist_mbids"]) || [],[m
+[31m-      artist_names: get_in(metadata, ["artist_names"]) || [],[m
+[31m-      total_tracks: get_in(metadata, ["total_tracks"]),[m
+[31m-[m
+[31m-      # Genre-String für Frontend[m
+[31m-      genres: genres,[m
+[31m-[m
+[31m-      # Tier 3: rohes additional_info als extended[m
+[31m-      extended: listen.additional_info || %{}[m
+[32m+[m[32m        is_binary(metadata["year"]) and String.length(metadata["year"]) >= 4 ->[m
+[32m+[m[32m          String.slice(metadata["year"], 0, 4)[m
+[32m+[m
+[32m+[m[32m        is_integer(metadata["mb_release_year"]) ->[m
+[32m+[m[32m          metadata["mb_release_year"][m
+[32m+[m
+[32m+[m[32m        is_binary(metadata["mb_release_year"]) and String.length(metadata["mb_release_year"]) >= 4 ->[m
+[32m+[m[32m          String.slice(metadata["mb_release_year"], 0, 4)[m
+[32m+[m
+[32m+[m[32m        true ->[m
+[32m+[m[32m          base_info["release_year"] || nil[m
+[32m+[m[32m      end[m
+[32m+[m
+[32m+[m[32m    # duration_ms NICHT hart überschreiben:[m
+[32m+[m[32m    # 1) additional_info.duration_ms[m
+[32m+[m[32m    # 2) sonst listen.duration_ms (aus DB-Spalte)[m
+[32m+[m[32m    duration_ms =[m
+[32m+[m[32m      base_info["duration_ms"] ||[m
+[32m+[m[32m        listen.duration_ms[m
+[32m+[m
+[32m+[m[32m    tracknumber = base_info["tracknumber"] || listen.tracknumber[m
+[32m+[m[32m    discnumber = base_info["discnumber"] || listen.discnumber[m
+[32m+[m
+[32m+[m[32m    # neues additional_info auf Basis der bestehenden Map[m
+[32m+[m[32m    merged_info =[m
+[32m+[m[32m      base_info[m
+[32m+[m[32m      |> Map.put_new("duration_ms", duration_ms)[m
+[32m+[m[32m      |> Map.put_new("tracknumber", tracknumber)[m
+[32m+[m[32m      |> Map.put_new("discnumber", discnumber)[m
+[32m+[m[32m      |> Map.put("genres", genres)[m
+[32m+[m[32m      |> Map.put("release_year", release_year)[m
+[32m+[m
+[32m+[m[32m    %{[m
+[32m+[m[32m      listened_at: listen.listened_at,[m
+[32m+[m[32m      track_name: listen.track_name,[m
+[32m+[m[32m      artist_name: listen.artist_name,[m
+[32m+[m[32m      release_name: listen.release_name,[m
+[32m+[m[32m      recording_mbid: listen.recording_mbid,[m
+[32m+[m[32m      artist_mbid: listen.artist_mbid,[m
+[32m+[m[32m      release_mbid: listen.release_mbid,[m
+[32m+[m[32m      additional_info: merged_info[m
+     }[m
+[31m-  }[m
+[31m-end[m
+[32m+[m[32m  end[m
+ [m
+   defp get_token_from_header(conn) do[m
+     case get_req_header(conn, "authorization") do[m
+[36m@@ -443,12 +552,14 @@[m [mend[m
+   end[m
+ [m
+   defp parse_timestamp(nil), do: DateTime.utc_now() |> DateTime.to_unix()[m
+[32m+[m
+   defp parse_timestamp(ts) when is_binary(ts) do[m
+     case Integer.parse(ts) do[m
+       {timestamp, _} -> timestamp[m
+       :error -> DateTime.utc_now() |> DateTime.to_unix()[m
+     end[m
+   end[m
+[32m+[m
+   defp parse_timestamp(ts) when is_integer(ts), do: ts[m
+   defp parse_timestamp(_), do: DateTime.utc_now() |> DateTime.to_unix()[m
+ [m
+[36m@@ -457,15 +568,16 @@[m [mend[m
+ [m
+     time_filter =[m
+       case range do[m
+[31m-        "week" -> now - (7 * 86400)[m
+[31m-        "month" -> now - (30 * 86400)[m
+[31m-        "year" -> now - (365 * 86400)[m
+[32m+[m[32m        "week" -> now - 7 * 86400[m
+[32m+[m[32m        "month" -> now - 30 * 86400[m
+[32m+[m[32m        "year" -> now - 365 * 86400[m
+         "all_time" -> 0[m
+         _ -> 0[m
+       end[m
+ [m
+[31m-    from l in query,[m
+[32m+[m[32m    from(l in query,[m
+       where: l.user_name == ^user_name and l.listened_at >= ^time_filter[m
+[32m+[m[32m    )[m
+   end[m
+ [m
+   # Helper für Stats-Module: Konvertiere range zu Timestamp[m
+[36m@@ -473,9 +585,9 @@[m [mend[m
+     now = DateTime.utc_now() |> DateTime.to_unix()[m
+ [m
+     case range do[m
+[31m-      "week" -> now - (7 * 86400)[m
+[31m-      "month" -> now - (30 * 86400)[m
+[31m-      "year" -> now - (365 * 86400)[m
+[32m+[m[32m      "week" -> now - 7 * 86400[m
+[32m+[m[32m      "month" -> now - 30 * 86400[m
+[32m+[m[32m      "year" -> now - 365 * 86400[m
+       "all_time" -> nil[m
+       _ -> nil[m
+     end[m
+[1mdiff --git a/backend/lib/app_api_web/router.ex b/backend/lib/app_api_web/router.ex[m
+[1mindex 5726366..bd588a9 100644[m
+[1m--- a/backend/lib/app_api_web/router.ex[m
+[1m+++ b/backend/lib/app_api_web/router.ex[m
+[36m@@ -22,6 +22,11 @@[m [mdefmodule AppApiWeb.Router do[m
+ [m
+     resources "/tokens", TokenController,[m
+       only: [:index, :show, :create, :update, :delete][m
+[32m+[m[41m    [m
+[32m+[m[32m    # Navidrome Setup[m
+[32m+[m[32m    post "/navidrome/connect", NavidromeController, :connect[m
+[32m+[m[32m    get "/navidrome/status", NavidromeController, :status[m
+[32m+[m[32m    delete "/navidrome/disconnect", NavidromeController, :disconnect[m
+   end[m
+ [m
+   # --- ListenBrainz API v1 ---[m
+[1mdiff --git a/frontends/ui-flat/src/components/SettingsPage.tsx b/frontends/ui-flat/src/components/SettingsPage.tsx[m
+[1mindex 7b83a71..19f9301 100644[m
+[1m--- a/frontends/ui-flat/src/components/SettingsPage.tsx[m
+[1m+++ b/frontends/ui-flat/src/components/SettingsPage.tsx[m
+[36m@@ -1,20 +1,19 @@[m
+[31m-import { TokenManager } from "./TokenManager"[m
+[31m-import { DateTimeSettings } from "./DateTimeSettings"[m
+[32m+[m[32mimport { DateTimeSettings } from './DateTimeSettings'[m
+[32m+[m[32mimport { TokenManager } from './TokenManager'[m
+[32m+[m[32mimport { NavidromeSetup } from './NavidromeSetup'[m
+ [m
+[31m-export default function SettingsPage() {[m
+[32m+[m[32mexport default function SettingsPage() {  // ✅ Default export[m
+   return ([m
+[31m-    <div className="flex flex-col gap-6 w-full">[m
+[31m-      <div className="flex items-center gap-3">[m
+[31m-        <h1 className="text-2xl font-bold text-viking-text-primary">Settings</h1>[m
+[31m-        <span className="px-2 py-1 bg-viking-bg-tertiary border border-viking-border-default rounded text-xs font-semibold text-viking-text-secondary uppercase tracking-wider">[m
+[31m-          Configuration[m
+[31m-        </span>[m
+[31m-      </div>[m
+[31m-      [m
+[31m-      <div className="space-y-6">[m
+[31m-        <TokenManager />[m
+[31m-        <DateTimeSettings />[m
+[32m+[m[32m    <div className="flex flex-col gap-6 w-full animate-in fade-in duration-500">[m
+[32m+[m[32m      <div className="card-dense">[m
+[32m+[m[32m        <div className="card-header-dense">[m
+[32m+[m[32m          <h2 className="card-title-dense">Settings</h2>[m
+[32m+[m[32m        </div>[m
+       </div>[m
+[32m+[m
+[32m+[m[32m      <NavidromeSetup />[m
+[32m+[m[32m      <TokenManager />[m
+[32m+[m[32m      <DateTimeSettings />[m
+     </div>[m
+   )[m
+ }[m
+[1mdiff --git a/frontends/ui-flat/src/components/dashboard-content.tsx b/frontends/ui-flat/src/components/dashboard-content.tsx[m
+[1mindex bf2532d..d38b77c 100644[m
+[1m--- a/frontends/ui-flat/src/components/dashboard-content.tsx[m
+[1m+++ b/frontends/ui-flat/src/components/dashboard-content.tsx[m
+[36m@@ -26,8 +26,8 @@[m [mexport interface RecentListen {[m
+   album: string[m
+   playedAt: string[m
+   duration: number[m
+[31m-  device?: string      // 🆕 music_service[m
+[31m-  genres?: string      // 🆕 Genre-String[m
+[32m+[m[32m  releaseYear?: string | number  // Year statt device[m
+[32m+[m[32m  genres?: string[m
+ }[m
+ [m
+ export interface DashboardStats {[m
+[36m@@ -114,17 +114,17 @@[m [mexport default function DashboardContent() {[m
+     // 🎯 Listen for datetime format changes[m
+     const handleFormatChange = () => {[m
+       console.log("📅 DateTime format changed, forcing re-render")[m
+[31m-      setData((prev) => prev ? { ...prev } : null)[m
+[32m+[m[32m      setData((prev) => (prev ? { ...prev } : null))[m
+     }[m
+ [m
+[31m-    window.addEventListener('datetime-format-changed', handleFormatChange)[m
+[32m+[m[32m    window.addEventListener("datetime-format-changed", handleFormatChange)[m
+ [m
+     return () => {[m
+       if (socketRef.current) {[m
+         console.log("Closing WebSocket")[m
+         socketRef.current.close()[m
+       }[m
+[31m-      window.removeEventListener('datetime-format-changed', handleFormatChange)[m
+[32m+[m[32m      window.removeEventListener("datetime-format-changed", handleFormatChange)[m
+     }[m
+   }, [username])[m
+ [m
+[36m@@ -144,10 +144,11 @@[m [mexport default function DashboardContent() {[m
+       const lifetimeJson = await lifetimeResponse.json()[m
+       const lifetimeTotals = lifetimeJson.payload || {}[m
+ [m
+[31m-      const recentResponse = await fetch(`/1/user/${username}/recent-listens?count=500`)[m
+[32m+[m[32m      const recentResponse = await fetch([m
+[32m+[m[32m        `/1/user/${username}/recent-listens?count=500`[m
+[32m+[m[32m      )[m
+       const recentJson = await recentResponse.json()[m
+[31m-      [m
+[31m-      // 🆕 KORRIGIERTES MAPPING[m
+[32m+[m
+       const recentListens = (recentJson.payload?.listens || []).map((listen: any) => ({[m
+         id: listen.listened_at?.toString() || Math.random().toString(),[m
+         track: listen.track_name || "Unknown Track",[m
+[36m@@ -156,15 +157,22 @@[m [mexport default function DashboardContent() {[m
+         playedAt: listen.listened_at[m
+           ? new Date(listen.listened_at * 1000).toISOString()[m
+           : new Date().toISOString(),[m
+[31m-        duration: Math.floor((listen.additional_info?.duration_ms || 0) / 1000),[m
+[31m-        [m
+[31m-        // ✅ Device = music_service aus Spalte[m
+[31m-        device: listen.additional_info?.music_service || "-",[m
+[31m-        [m
+[31m-        // ✅ Genre = fertiger String aus Backend[m
+[32m+[m
+[32m+[m[32m        // ✅ Duration: direkt aus additional_info.duration_ms[m
+[32m+[m[32m        duration: Math.floor([m
+[32m+[m[32m          (listen.additional_info?.duration_ms ??[m
+[32m+[m[32m            listen.additional_info?.extended?.duration_ms ??[m
+[32m+[m[32m            0) / 1000[m
+[32m+[m[32m        ),[m
+[32m+[m
+[32m+[m[32m        // ✅ Releasejahr: vom Backend geliefert (ID3 → MB-Fallback)[m
+[32m+[m[32m        releaseYear: listen.additional_info?.release_year ?? undefined,[m
+[32m+[m
+[32m+[m[32m        // ✅ Genre: String aus additional_info.genres[m
+         genres: listen.additional_info?.genres || "–",[m
+       }))[m
+ [m
+[32m+[m
+       const dashboardData: DashboardStats = {[m
+         filtered: {[m
+           totalScrobbles: totals.total_listens || 0,[m
+[36m@@ -242,7 +250,9 @@[m [mexport default function DashboardContent() {[m
+             <div className="card-header-dense">[m
+               <div className="flex items-center gap-3">[m
+                 <span className="card-title-dense">Overview</span>[m
+[31m-                <span className="text-viking-border-emphasis text-xl font-light">|</span>[m
+[32m+[m[32m                <span className="text-viking-border-emphasis text-xl font-light">[m
+[32m+[m[32m                  |[m
+[32m+[m[32m                </span>[m
+                 <span className="text-xs font-semibold text-viking-text-tertiary uppercase tracking-wider">[m
+                   {PERIODS.find((item) => item.id === period)?.label}[m
+                 </span>[m
+[36m@@ -253,7 +263,9 @@[m [mexport default function DashboardContent() {[m
+                       <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>[m
+                       <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>[m
+                     </span>[m
+[31m-                    <span className="text-[10px] font-bold tracking-widest">LIVE</span>[m
+[32m+[m[32m                    <span className="text-[10px] font-bold tracking-widest">[m
+[32m+[m[32m                      LIVE[m
+[32m+[m[32m                    </span>[m
+                   </div>[m
+                 )}[m
+               </div>[m
+[36m@@ -354,7 +366,9 @@[m [mexport default function DashboardContent() {[m
+                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>[m
+                     <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>[m
+                   </span>[m
+[31m-                  <span className="text-[10px] font-bold tracking-widest">LIVE</span>[m
+[32m+[m[32m                  <span className="text-[10px] font-bold tracking-widest">[m
+[32m+[m[32m                    LIVE[m
+[32m+[m[32m                  </span>[m
+                 </div>[m
+               </div>[m
+ [m
+[36m@@ -366,7 +380,10 @@[m [mexport default function DashboardContent() {[m
+             <div className="flex-1 overflow-auto relative">[m
+               {filteredRecent.length === 0 ? ([m
+                 <div className="absolute inset-0 flex flex-col items-center justify-center gap-6">[m
+[31m-                  <Activity className="w-20 h-20 text-viking-border-emphasis" strokeWidth={1.5} />[m
+[32m+[m[32m                  <Activity[m
+[32m+[m[32m                    className="w-20 h-20 text-viking-border-emphasis"[m
+[32m+[m[32m                    strokeWidth={1.5}[m
+[32m+[m[32m                  />[m
+                   <div className="text-center space-y-2">[m
+                     <h3 className="text-2xl font-bold text-viking-text-primary uppercase tracking-tight">[m
+                       No Signal[m
+[36m@@ -390,14 +407,30 @@[m [mexport default function DashboardContent() {[m
+                   <table className="table-dense">[m
+                     <thead className="sticky top-0 z-10 backdrop-blur-sm">[m
+                       <tr>[m
+[31m-                        <th className="table-head-dense pl-6 text-left w-[22%]">Track</th>[m
+[31m-                        <th className="table-head-dense text-left w-[14%]">Artist</th>[m
+[31m-                        <th className="table-head-dense text-left w-[14%]">Album</th>[m
+[31m-                        <th className="table-head-dense text-left w-[10%]">Device</th>[m
+[31m-                        <th className="table-head-dense text-left w-[12%]">Genre</th>[m
+[31m-                        <th className="table-head-dense text-right w-[10%]">Date</th>[m
+[31m-                        <th className="table-head-dense text-right w-[9%]">Time</th>[m
+[31m-                        <th className="table-head-dense text-right pr-6 w-[8%]">Duration</th>[m
+[32m+[m[32m                        <th className="table-head-dense pl-6 text-left w-[22%]">[m
+[32m+[m[32m                          Track[m
+[32m+[m[32m                        </th>[m
+[32m+[m[32m                        <th className="table-head-dense text-left w-[14%]">[m
+[32m+[m[32m                          Artist[m
+[32m+[m[32m                        </th>[m
+[32m+[m[32m                        <th className="table-head-dense text-left w-[14%]">[m
+[32m+[m[32m                          Album[m
+[32m+[m[32m                        </th>[m
+[32m+[m[32m                        <th className="table-head-dense text-left w-[8%]">[m
+[32m+[m[32m                          Year[m
+[32m+[m[32m                        </th>[m
+[32m+[m[32m                        <th className="table-head-dense text-left w-[12%]">[m
+[32m+[m[32m                          Genre[m
+[32m+[m[32m                        </th>[m
+[32m+[m[32m                        <th className="table-head-dense text-right w-[10%]">[m
+[32m+[m[32m                          Date[m
+[32m+[m[32m                        </th>[m
+[32m+[m[32m                        <th className="table-head-dense text-right w-[9%]">[m
+[32m+[m[32m                          Time[m
+[32m+[m[32m                        </th>[m
+[32m+[m[32m                        <th className="table-head-dense text-right pr-6 w-[8%]">[m
+[32m+[m[32m                          Duration[m
+[32m+[m[32m                        </th>[m
+                       </tr>[m
+                     </thead>[m
+                     <tbody className="divide-y divide-viking-border-subtle">[m
+[36m@@ -412,10 +445,9 @@[m [mexport default function DashboardContent() {[m
+                           <td className="table-cell-dense table-cell-secondary truncate max-w-[150px]">[m
+                             {item.album}[m
+                           </td>[m
+[31m-                          <td className="table-cell-dense table-cell-secondary truncate max-w-[120px]">[m
+[31m-                            {formatDevice(item.device)}[m
+[32m+[m[32m                          <td className="table-cell-dense table-cell-secondary truncate max-w-[80px]">[m
+[32m+[m[32m                            {item.releaseYear ?? "—"}[m
+                           </td>[m
+[31m-                          {/* 🆕 GENRE SPALTE */}[m
+                           <td className="table-cell-dense table-cell-secondary truncate max-w-[140px] font-medium text-emerald-400">[m
+                             {item.genres}[m
+                           </td>[m
+[36m@@ -433,7 +465,6 @@[m [mexport default function DashboardContent() {[m
+                     </tbody>[m
+                   </table>[m
+ [m
+[31m-                  {/* LOAD MORE */}[m
+                   {hasMore && ([m
+                     <div className="sticky bottom-0 bg-gradient-to-t from-viking-bg-secondary via-viking-bg-secondary to-transparent pt-6 pb-4 flex justify-center border-t border-viking-border-subtle">[m
+                       <button[m
+[36m@@ -486,13 +517,11 @@[m [mfunction MetricSegment({[m
+   const displayContext =[m
+     contextStr ??[m
+     (typeof contextValue === "number" ? contextValue.toLocaleString() : "0")[m
+[31m-  [m
+[32m+[m
+   return ([m
+     <div className="h-36 px-5 py-4 flex flex-col justify-between hover:bg-viking-bg-tertiary/30 transition-colors duration-200 group cursor-default">[m
+       <div className="flex items-center justify-between h-5">[m
+[31m-        <div className="metric-label">[m
+[31m-          {label}[m
+[31m-        </div>[m
+[32m+[m[32m        <div className="metric-label">{label}</div>[m
+         {trend && ([m
+           <span className="flex items-center gap-1 text-xs font-bold text-viking-pink bg-viking-pink/10 px-2 py-0.5 rounded border border-viking-pink/30">[m
+             <TrendingUp className="w-3 h-3" strokeWidth={2.5} />[m
+[36m@@ -500,7 +529,7 @@[m [mfunction MetricSegment({[m
+           </span>[m
+         )}[m
+       </div>[m
+[31m-      [m
+[32m+[m
+       <div className="flex items-baseline gap-1 my-auto">[m
+         <span className={`metric-value ${smallValue ? "text-4xl" : ""}`}>[m
+           {loading ? "..." : displayValue}[m
+[36m@@ -511,7 +540,7 @@[m [mfunction MetricSegment({[m
+           </span>[m
+         )}[m
+       </div>[m
+[31m-      [m
+[32m+[m
+       <div className="metric-sub justify-between border-t border-transparent group-hover:border-viking-border-subtle pt-2 transition-colors">[m
+         <span className="uppercase text-[10px] tracking-wider text-viking-text-tertiary">[m
+           {context}[m
+[36m@@ -535,47 +564,47 @@[m [mfunction getDateTimeFormats(): DateTimeFormats {[m
+     }[m
+   }[m
+   return {[m
+[31m-    dateFormat: 'DD.MM.YYYY',[m
+[31m-    timeFormat: 'HH:mm'[m
+[32m+[m[32m    dateFormat: "DD.MM.YYYY",[m
+[32m+[m[32m    timeFormat: "HH:mm",[m
+   }[m
+ }[m
+ [m
+ function formatDate(iso: string) {[m
+   if (!iso) return "-"[m
+[31m-  [m
+[32m+[m
+   const formats = getDateTimeFormats()[m
+   const d = new Date(iso)[m
+[31m-  const day = String(d.getDate()).padStart(2, '0')[m
+[31m-  const month = String(d.getMonth() + 1).padStart(2, '0')[m
+[32m+[m[32m  const day = String(d.getDate()).padStart(2, "0")[m
+[32m+[m[32m  const month = String(d.getMonth() + 1).padStart(2, "0")[m
+   const year = d.getFullYear()[m
+   const year2 = String(year).slice(-2)[m
+[31m-  const monthName = d.toLocaleString('en', { month: 'short' })[m
+[32m+[m[32m  const monthName = d.toLocaleString("en", { month: "short" })[m
+ [m
+   return formats.dateFormat[m
+[31m-    .replace('MMM', monthName)[m
+[31m-    .replace('DD', day)[m
+[31m-    .replace('MM', month)[m
+[31m-    .replace('YYYY', String(year))[m
+[31m-    .replace('YY', year2)[m
+[32m+[m[32m    .replace("MMM", monthName)[m
+[32m+[m[32m    .replace("DD", day)[m
+[32m+[m[32m    .replace("MM", month)[m
+[32m+[m[32m    .replace("YYYY", String(year))[m
+[32m+[m[32m    .replace("YY", year2)[m
+ }[m
+ [m
+ function formatTime(iso: string) {[m
+   if (!iso) return "-"[m
+[31m-  [m
+[32m+[m
+   const formats = getDateTimeFormats()[m
+   const d = new Date(iso)[m
+   const hours24 = d.getHours()[m
+   const hours12 = hours24 % 12 || 12[m
+[31m-  const minutes = String(d.getMinutes()).padStart(2, '0')[m
+[31m-  const seconds = String(d.getSeconds()).padStart(2, '0')[m
+[31m-  const ampm = hours24 >= 12 ? 'PM' : 'AM'[m
+[32m+[m[32m  const minutes = String(d.getMinutes()).padStart(2, "0")[m
+[32m+[m[32m  const seconds = String(d.getSeconds()).padStart(2, "0")[m
+[32m+[m[32m
