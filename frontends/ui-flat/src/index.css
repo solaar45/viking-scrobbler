@@ -127,11 +127,16 @@
     color: hsl(var(--text-tertiary));
   }
 
-  /* Code / Token Fields */
-  code, pre, .font-mono {
+  /* Code Blocks (mit Background) */
+  code, pre {
     background-color: hsl(var(--code-bg));
     color: hsl(var(--code-fg));
     @apply text-sm px-1.5 py-0.5 rounded;
+  }
+
+  /* Mono Font (OHNE Background) */
+  .font-mono {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   }
 
   /* Cards mit neuem Dark Design */
@@ -181,7 +186,7 @@
 
   /* METRICS - Größere Zahlen, besserer Kontrast */
   .metric-value {
-    @apply font-bold text-5xl tracking-tight leading-none;
+    @apply font-bold text-5xl tracking-tight leading-none font-mono;
     color: hsl(var(--foreground));
   }
   
@@ -199,44 +204,40 @@
     color: hsl(var(--text-tertiary));
   }
 
-  /* TABLE - Größere Schriften */
-  .table-dense {
-    @apply w-full text-sm;
-  }
-  
-  .table-head-dense {
-    @apply h-10 text-xs font-semibold uppercase tracking-wider px-4 border-b;
-    background: hsl(var(--card));
-    color: hsl(var(--muted-text));
-    border-color: hsl(var(--border));
-  }
+  /* ========================================
+   TABLES - DENSE VARIANT
+======================================== */
 
-  .table-row-dense {
-    @apply h-10 border-b transition-colors last:border-0;
-    border-color: hsl(var(--border) / 0.3);
-  }
-  
-  .table-row-dense:hover {
-    background: hsl(var(--muted) / 0.3);
-  }
-  
-  .table-cell-dense {
-    @apply py-2 px-4 truncate align-middle;
-  }
-  
-  /* Spezielle Zellen */
-  .table-cell-primary {
-    @apply text-base font-medium text-foreground;
-  }
-  
-  .table-cell-secondary {
-    @apply text-sm text-muted-foreground;
-  }
-  
-  .table-cell-tertiary {
-    @apply text-sm;
-    color: hsl(var(--text-tertiary));
-  }
+.table-dense {
+  @apply w-full text-left border-collapse;
+}
+
+.table-head-dense {
+  @apply text-xs font-semibold uppercase tracking-wider text-viking-text-tertiary;
+  @apply bg-viking-bg-tertiary/80 h-10 px-3;
+}
+
+.table-row-dense {
+  @apply h-12 hover:bg-viking-bg-tertiary/20 transition-colors;
+}
+
+.table-cell-dense {
+  @apply px-3 text-sm;
+}
+
+/* Text Hierarchy */
+.table-cell-primary {
+  @apply font-semibold text-viking-text-primary;
+}
+
+.table-cell-secondary {
+  @apply font-medium text-viking-text-secondary;
+}
+
+.table-cell-tertiary {
+  @apply font-medium text-viking-text-tertiary;
+}
+
 }
 
 /* --- ACCENT COLORS --- */

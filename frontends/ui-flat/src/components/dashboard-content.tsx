@@ -2,7 +2,8 @@
 
 import { useEffect, useState, useMemo, useRef } from "react"
 import { TooltipProvider } from "@/components/ui/tooltip"
-import { TrendingUp, Activity, RefreshCw, ChevronDown, Radio } from "lucide-react"
+import { TrendingUp, Activity, RefreshCw, ChevronDown} from "lucide-react"
+import { DashboardSkeleton } from "./DashboardSkeleton"
 
 // --- TYPES ---
 export interface PeriodStats {
@@ -71,7 +72,6 @@ export default function DashboardContent() {
       console.log("✅ WebSocket connected")
       setIsConnected(true)
 
-      // Join scrobbles channel
       const joinMessage = JSON.stringify({
         topic: `scrobbles:${username}`,
         event: "phx_join",
@@ -86,10 +86,8 @@ export default function DashboardContent() {
       const message = JSON.parse(event.data)
       console.log("📨 WebSocket message:", message)
       
-      // Handle new scrobble event
       if (message.event === "new_scrobble") {
         console.log("🎵 New scrobble detected!", message.payload)
-        // Refresh all data when new scrobble arrives
         fetchStatsComplete()
       }
     }
@@ -114,25 +112,22 @@ export default function DashboardContent() {
     }
   }, [username])
 
-  // Vollständiger Stats-Fetch (ALLES neu laden)
+  // Vollständiger Stats-Fetch
   async function fetchStatsComplete() {
     console.log("🔄 Fetching complete stats...")
     try {
-      // Stats für gewählten Zeitraum laden
       const statsResponse = await fetch(
         `/1/stats/user/${username}/totals?range=${period}`
       )
       const statsJson = await statsResponse.json()
       const totals = statsJson.payload || {}
 
-      // Lifetime Stats laden (immer all_time)
       const lifetimeResponse = await fetch(
         `/1/stats/user/${username}/totals?range=all_time`
       )
       const lifetimeJson = await lifetimeResponse.json()
       const lifetimeTotals = lifetimeJson.payload || {}
 
-      // Recent Listens laden
       const recentResponse = await fetch(`/1/user/${username}/recent-listens?count=500`)
       const recentJson = await recentResponse.json()
       const recentListens = (recentJson.payload?.listens || []).map((listen: any) => ({
@@ -181,7 +176,6 @@ export default function DashboardContent() {
     }
   }
 
-  // Initial Fetch mit Loading State
   async function fetchStats() {
     setLoading(true)
     await fetchStatsComplete()
@@ -192,7 +186,6 @@ export default function DashboardContent() {
   const lifetime = data?.lifetime
   const allRecent = data?.recent ?? []
 
-  // Filtere Recent Listens basierend auf globalem Period-Filter
   const filteredRecent = useMemo(() => {
     if (period === "all_time") return allRecent
 
@@ -209,229 +202,229 @@ export default function DashboardContent() {
     })
   }, [allRecent, period])
 
-  // Zeige nur die ersten X Listens
   const visibleRecent = filteredRecent.slice(0, displayCount)
   const hasMore = filteredRecent.length > displayCount
   const remainingCount = filteredRecent.length - displayCount
 
   return (
     <TooltipProvider>
-      <div className="flex flex-col gap-8 w-full font-sans text-sm">
-        {/* METRIK-CONTAINER */}
-        <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm flex flex-col">
-          {/* HEADER: CLASSIC FILTER BUTTONS */}
-          <div className="flex items-center justify-between px-6 py-4 bg-white border-b border-gray-100 h-20">
-            <div className="flex items-center gap-3">
-              <span className="text-base font-black uppercase tracking-widest text-gray-900">
-                Overview
-              </span>
-              <span className="text-gray-200 text-xl font-light">|</span>
-              <span className="text-sm font-bold text-gray-400 uppercase tracking-widest">
-                {PERIODS.find((item) => item.id === period)?.label}
-              </span>
-              {/* WebSocket Status */}
-              {isConnected && (
-                <div className="flex items-center gap-1.5 px-2 py-1 bg-green-50 text-green-700 rounded-full border border-green-100">
-                  <Radio className="w-3 h-3 animate-pulse" />
-                  <span className="text-[9px] font-bold tracking-widest">REALTIME</span>
-                </div>
-              )}
-            </div>
-
-            {/* Period Selector (Button Group) - GLOBAL FILTER */}
-            <div className="flex gap-1 bg-gray-50 p-1.5 rounded-lg border border-gray-100">
-              {PERIODS.map(({ id, label }) => (
-                <button
-                  key={id}
-                  onClick={() => setPeriod(id)}
-                  className={`text-xs font-bold px-4 py-2 rounded-md transition-all uppercase tracking-wide whitespace-nowrap ${
-                    period === id
-                      ? "bg-slate-900 text-white shadow-md"
-                      : "text-gray-400 hover:text-gray-900 hover:bg-gray-200"
-                  }`}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* GRID */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 divide-x divide-y xl:divide-y-0 border-b border-gray-100 bg-white">
-            <MetricSegment
-              label="Scrobbles"
-              value={filtered?.totalScrobbles}
-              context="Total"
-              contextValue={lifetime?.totalScrobbles}
-              loading={loading}
-            />
-            <MetricSegment
-              label="Artists"
-              value={filtered?.uniqueArtists}
-              context="Total"
-              contextValue={lifetime?.uniqueArtists}
-              loading={loading}
-            />
-            <MetricSegment
-              label="Tracks"
-              value={filtered?.uniqueTracks}
-              context="Total"
-              contextValue={lifetime?.uniqueTracks}
-              loading={loading}
-            />
-            <MetricSegment
-              label="Albums"
-              value={filtered?.uniqueAlbums}
-              context="Total"
-              contextValue={lifetime?.uniqueAlbums}
-              loading={loading}
-            />
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 divide-x divide-y xl:divide-y-0 bg-white">
-            <MetricSegment
-              label="Avg / Day"
-              value={filtered?.avgPerDay}
-              unit="t"
-              context="Life Avg"
-              contextValue={lifetime?.avgPerDay}
-              loading={loading}
-            />
-            <MetricSegment
-              label="Most Active"
-              valueStr={filtered?.mostActiveDay}
-              context="Life Active"
-              contextStr={lifetime?.mostActiveDay}
-              loading={loading}
-              smallValue
-            />
-            <MetricSegment
-              label="Peak Day"
-              valueStr={filtered?.peakDay}
-              context="Max"
-              contextValue={lifetime?.peakValue}
-              loading={loading}
-              smallValue
-            />
-            <MetricSegment
-              label="Streak"
-              value={filtered?.currentStreak}
-              unit="d"
-              trend="🔥"
-              context="Longest"
-              contextValue={lifetime?.currentStreak}
-              loading={loading}
-            />
-          </div>
-        </div>
-
-        {/* RECENT LISTENS */}
-        <div className="bg-white border border-gray-200 rounded-xl flex-1 flex flex-col min-h-[500px] shadow-sm overflow-hidden relative">
-          <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between h-16 bg-white z-20 relative">
-            <div className="flex items-center gap-3">
-              <h3 className="text-base font-black uppercase tracking-widest text-gray-900">
-                Recent Listens
-              </h3>
-              <div className="flex items-center gap-2 px-2.5 py-1 bg-emerald-50 text-emerald-700 rounded-full border border-emerald-100">
-                <span className="relative flex h-2 w-2">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+      {loading ? (
+        <DashboardSkeleton />
+      ) : (
+        <div className="flex flex-col gap-6 w-full animate-in fade-in duration-500">
+          {/* STATS CARD */}
+          <div className="card-dense">
+            {/* HEADER */}
+            <div className="card-header-dense">
+              <div className="flex items-center gap-3">
+                <span className="card-title-dense">Overview</span>
+                <span className="text-viking-border-emphasis text-xl font-light">|</span>
+                <span className="text-xs font-semibold text-viking-text-tertiary uppercase tracking-wider">
+                  {PERIODS.find((item) => item.id === period)?.label}
                 </span>
-                <span className="text-[10px] font-bold tracking-widest">LIVE</span>
-              </div>
-            </div>
-
-            {/* Filtered Count Display (OHNE Updated Timestamp) */}
-            <div className="text-xs font-bold text-gray-400 uppercase tracking-wider">
-              Showing {visibleRecent.length} of {filteredRecent.length} tracks
-            </div>
-          </div>
-
-          <div className="flex-1 overflow-auto bg-white relative">
-            {filteredRecent.length === 0 ? (
-              <div className="absolute inset-0 flex flex-col items-center justify-center gap-8 pb-10">
-                <Activity className="w-24 h-24 text-gray-200" strokeWidth={1} />
-                <div className="text-center space-y-2">
-                  <h3 className="text-2xl font-bold text-gray-900 uppercase tracking-tight">
-                    No Signal
-                  </h3>
-                  <p className="text-gray-400 font-medium">
-                    {period === "all_time"
-                      ? "Listening activity will appear here."
-                      : `No listens found in ${PERIODS.find((p) => p.id === period)?.label.toLowerCase()}.`}
-                  </p>
-                </div>
-                <button
-                  onClick={() => fetchStats()}
-                  className="flex items-center gap-2 px-6 py-3 bg-slate-900 hover:bg-black text-white rounded-lg text-xs font-bold uppercase tracking-widest transition-all shadow-lg hover:shadow-xl mt-4"
-                >
-                  <RefreshCw className="w-4 h-4" />
-                  Refresh Stream
-                </button>
-              </div>
-            ) : (
-              <>
-                <table className="w-full text-left border-collapse">
-                  <thead className="sticky top-0 z-10 bg-gray-50/95 backdrop-blur text-gray-500 font-bold uppercase tracking-wider text-[11px] h-10 border-b border-gray-100">
-                    <tr>
-                      <th className="pl-6 w-[28%]">Track</th>
-                      <th className="w-[20%]">Artist</th>
-                      <th className="w-[20%]">Album</th>
-                      <th className="text-right w-[12%]">Date</th>
-                      <th className="text-right w-[10%]">Time</th>
-                      <th className="text-right pr-6 w-[10%]">Duration</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-50">
-                    {visibleRecent.map((item) => (
-                      <tr
-                        key={item.id}
-                        className="h-12 hover:bg-gray-50 group transition-colors"
-                      >
-                        <td className="pl-6 font-bold text-slate-800 group-hover:text-black truncate max-w-[200px] text-sm">
-                          {item.track}
-                        </td>
-                        <td className="text-gray-600 font-medium truncate max-w-[150px] text-xs">
-                          {item.artist}
-                        </td>
-                        <td className="text-gray-500 font-medium truncate max-w-[150px] text-xs">
-                          {item.album}
-                        </td>
-                        <td className="text-right text-gray-400 font-mono text-xs font-semibold">
-                          {formatDate(item.playedAt)}
-                        </td>
-                        <td className="text-right text-gray-400 font-mono text-xs font-semibold">
-                          {formatTime(item.playedAt)}
-                        </td>
-                        <td className="pr-6 text-right text-gray-400 font-mono text-xs font-semibold">
-                          {formatDuration(item.duration)}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-
-                {/* LOAD MORE BUTTON */}
-                {hasMore && (
-                  <div className="sticky bottom-0 bg-gradient-to-t from-white via-white to-transparent pt-8 pb-6 flex justify-center border-t border-gray-100">
-                    <button
-                      onClick={() => setDisplayCount((prev) => prev + 25)}
-                      className="flex items-center gap-2 px-6 py-3 bg-slate-900 hover:bg-black text-white rounded-lg text-xs font-bold uppercase tracking-widest transition-all shadow-lg hover:shadow-xl"
-                    >
-                      <ChevronDown className="w-4 h-4" />
-                      Load 25 More ({remainingCount} remaining)
-                    </button>
+                {/* Live Badge */}
+                {isConnected && (
+                  <div className="badge-live">
+                    <span className="relative flex h-2 w-2">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                    </span>
+                    <span className="text-[10px] font-bold tracking-widest">LIVE</span>
                   </div>
                 )}
-              </>
-            )}
+              </div>
+
+              {/* Period Filter */}
+              <div className="flex gap-1 bg-viking-bg-tertiary p-1.5 rounded-lg border border-viking-border-default">
+                {PERIODS.map(({ id, label }) => (
+                  <button
+                    key={id}
+                    onClick={() => setPeriod(id)}
+                    className={`text-xs font-semibold px-4 py-2 rounded-md transition-all uppercase tracking-wide whitespace-nowrap ${
+                      period === id
+                        ? "bg-gradient-to-r from-viking-purple to-viking-purple-dark text-white shadow-lg shadow-viking-purple/20"
+                        : "text-viking-text-tertiary hover:text-viking-text-secondary hover:bg-viking-bg-elevated"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* METRICS GRID */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 divide-x divide-viking-border-subtle">
+              <MetricSegment
+                label="Scrobbles"
+                value={filtered?.totalScrobbles}
+                context="Total"
+                contextValue={lifetime?.totalScrobbles}
+                loading={loading}
+              />
+              <MetricSegment
+                label="Artists"
+                value={filtered?.uniqueArtists}
+                context="Total"
+                contextValue={lifetime?.uniqueArtists}
+                loading={loading}
+              />
+              <MetricSegment
+                label="Tracks"
+                value={filtered?.uniqueTracks}
+                context="Total"
+                contextValue={lifetime?.uniqueTracks}
+                loading={loading}
+              />
+              <MetricSegment
+                label="Albums"
+                value={filtered?.uniqueAlbums}
+                context="Total"
+                contextValue={lifetime?.uniqueAlbums}
+                loading={loading}
+              />
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 divide-x divide-viking-border-subtle border-t border-viking-border-subtle">
+              <MetricSegment
+                label="Avg / Day"
+                value={filtered?.avgPerDay}
+                unit="t"
+                context="Life Avg"
+                contextValue={lifetime?.avgPerDay}
+                loading={loading}
+              />
+              <MetricSegment
+                label="Most Active"
+                valueStr={filtered?.mostActiveDay}
+                context="Life Active"
+                contextStr={lifetime?.mostActiveDay}
+                loading={loading}
+                smallValue
+              />
+              <MetricSegment
+                label="Peak Day"
+                valueStr={filtered?.peakDay}
+                context="Max"
+                contextValue={lifetime?.peakValue}
+                loading={loading}
+                smallValue
+              />
+              <MetricSegment
+                label="Streak"
+                value={filtered?.currentStreak}
+                unit="d"
+                trend="🔥"
+                context="Longest"
+                contextValue={lifetime?.currentStreak}
+                loading={loading}
+              />
+            </div>
+          </div>
+
+          {/* RECENT LISTENS TABLE */}
+          <div className="card-dense flex-1 min-h-[500px]">
+            <div className="card-header-dense">
+              <div className="flex items-center gap-3">
+                <h3 className="card-title-dense">Recent Listens</h3>
+                <div className="badge-live">
+                  <span className="relative flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                  </span>
+                  <span className="text-[10px] font-bold tracking-widest">LIVE</span>
+                </div>
+              </div>
+
+              <div className="text-xs font-semibold text-viking-text-tertiary uppercase tracking-wider">
+                Showing {visibleRecent.length} of {filteredRecent.length} tracks
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-auto relative">
+              {filteredRecent.length === 0 ? (
+                <div className="absolute inset-0 flex flex-col items-center justify-center gap-6">
+                  <Activity className="w-20 h-20 text-viking-border-emphasis" strokeWidth={1.5} />
+                  <div className="text-center space-y-2">
+                    <h3 className="text-2xl font-bold text-viking-text-primary uppercase tracking-tight">
+                      No Signal
+                    </h3>
+                    <p className="text-viking-text-secondary font-medium text-sm">
+                      {period === "all_time"
+                        ? "Listening activity will appear here."
+                        : `No listens found in ${PERIODS.find((p) => p.id === period)?.label.toLowerCase()}.`}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => fetchStats()}
+                    className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-viking-purple to-viking-purple-dark hover:from-viking-purple-dark hover:to-viking-purple text-white rounded-lg text-xs font-bold uppercase tracking-widest transition-all shadow-lg shadow-viking-purple/20 hover:shadow-xl hover:shadow-viking-purple/30"
+                  >
+                    <RefreshCw className="w-4 h-4" />
+                    Refresh Stream
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <table className="table-dense">
+                    <thead className="sticky top-0 z-10 backdrop-blur-sm">
+                      <tr>
+                        <th className="table-head-dense pl-6 text-left w-[28%]">Track</th>
+                        <th className="table-head-dense text-left w-[20%]">Artist</th>
+                        <th className="table-head-dense text-left w-[20%]">Album</th>
+                        <th className="table-head-dense text-right w-[12%]">Date</th>
+                        <th className="table-head-dense text-right w-[10%]">Time</th>
+                        <th className="table-head-dense text-right pr-6 w-[10%]">Duration</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-viking-border-subtle">
+                      {visibleRecent.map((item) => (
+                        <tr key={item.id} className="table-row-dense">
+                          <td className="table-cell-dense table-cell-primary pl-6 truncate max-w-[200px]">
+                            {item.track}
+                          </td>
+                          <td className="table-cell-dense table-cell-secondary truncate max-w-[150px]">
+                            {item.artist}
+                          </td>
+                          <td className="table-cell-dense table-cell-secondary truncate max-w-[150px]">
+                            {item.album}
+                          </td>
+                          <td className="table-cell-dense table-cell-secondary text-right truncate max-w-[150px]">
+                            {formatDate(item.playedAt)}
+                          </td>
+                          <td className="table-cell-dense table-cell-secondary text-right truncate max-w-[150px]">
+                            {formatTime(item.playedAt)}
+                          </td>
+                          <td className="table-cell-dense table-cell-secondary text-right pr-6 truncate max-w-[150px]">
+                            {formatDuration(item.duration)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+
+
+                  </table>
+
+                  {/* LOAD MORE */}
+                  {hasMore && (
+                    <div className="sticky bottom-0 bg-gradient-to-t from-viking-bg-secondary via-viking-bg-secondary to-transparent pt-6 pb-4 flex justify-center border-t border-viking-border-subtle">
+                      <button
+                        onClick={() => setDisplayCount((prev) => prev + 25)}
+                        className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-viking-purple to-viking-purple-dark hover:from-viking-purple-dark hover:to-viking-purple text-white rounded-lg text-xs font-bold uppercase tracking-widest transition-all shadow-lg shadow-viking-purple/20 hover:shadow-xl hover:shadow-viking-purple/30"
+                      >
+                        <ChevronDown className="w-4 h-4" />
+                        Load 25 More ({remainingCount} remaining)
+                      </button>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
           </div>
         </div>
-      </div>
+      )}
     </TooltipProvider>
   )
 }
 
-// --- MetricSegment Helper ---
+// --- MetricSegment ---
 type MetricSegmentProps = {
   label: string
   value?: number
@@ -462,41 +455,38 @@ function MetricSegment({
   const displayContext =
     contextStr ??
     (typeof contextValue === "number" ? contextValue.toLocaleString() : "0")
+  
   return (
-    <div className="h-40 px-6 py-5 flex flex-col justify-between hover:bg-gray-50 transition-colors duration-200 group cursor-default relative">
-      <div className="flex items-center justify-between h-6">
-        <div className="text-sm font-bold uppercase tracking-widest text-gray-400 group-hover:text-slate-800 transition-colors">
+    <div className="h-36 px-5 py-4 flex flex-col justify-between hover:bg-viking-bg-tertiary/30 transition-colors duration-200 group cursor-default">
+      <div className="flex items-center justify-between h-5">
+        <div className="metric-label">
           {label}
         </div>
         {trend && (
-          <span className="flex items-center gap-1.5 text-xs font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-100">
-            <TrendingUp className="w-3.5 h-3.5" strokeWidth={3} />
+          <span className="flex items-center gap-1 text-xs font-bold text-viking-pink bg-viking-pink/10 px-2 py-0.5 rounded border border-viking-pink/30">
+            <TrendingUp className="w-3 h-3" strokeWidth={2.5} />
             {trend}
           </span>
         )}
       </div>
-      <div className="flex items-baseline gap-1 mt-auto mb-auto">
-        <span
-          className={`font-mono font-extrabold text-slate-900 leading-none tracking-tighter ${
-            smallValue ? "text-4xl" : "text-5xl xl:text-6xl"
-          }`}
-        >
+      
+      <div className="flex items-baseline gap-1 my-auto">
+        <span className={`metric-value ${smallValue ? "text-4xl" : ""}`}>
           {loading ? "..." : displayValue}
         </span>
         {unit && (
-          <span className="text-lg font-bold text-gray-400 self-end mb-1.5 ml-1">
+          <span className="text-base font-semibold text-viking-text-tertiary self-end mb-1 ml-0.5">
             {unit}
           </span>
         )}
       </div>
-      <div className="h-6 flex items-end border-t border-transparent pt-3 mt-1 group-hover:border-gray-200 transition-colors">
-        <span className="text-gray-400 font-semibold flex items-center gap-2 leading-none text-sm w-full justify-between">
-          <span className="uppercase text-[11px] tracking-wider text-gray-400">
-            {context}
-          </span>
-          <span className="font-mono font-bold text-gray-500 group-hover:text-black">
-            {loading ? "-" : displayContext}
-          </span>
+      
+      <div className="metric-sub justify-between border-t border-transparent group-hover:border-viking-border-subtle pt-2 transition-colors">
+        <span className="uppercase text-[10px] tracking-wider text-viking-text-tertiary">
+          {context}
+        </span>
+        <span className="font-mono font-semibold metric-label-accent">
+          {loading ? "-" : displayContext}
         </span>
       </div>
     </div>
