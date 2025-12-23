@@ -286,6 +286,7 @@ defmodule AppApiWeb.ListenBrainzController do
   end
 
   # GET /1/user/:user_name/recent-listens
+  # 🆕 ANGEPASST FÜR HYBRID METADATA
   def get_recent_listens(conn, %{"user_name" => user_name} = params) do
     count = String.to_integer(params["count"] || "20")
 
@@ -299,7 +300,7 @@ defmodule AppApiWeb.ListenBrainzController do
     json(conn, %{
       payload: %{
         count: length(listens),
-        listens: Enum.map(listens, &format_listen_detailed/1)
+        listens: Enum.map(listens, &format_listen_detailed_hybrid/1)
       }
     })
   end
@@ -372,7 +373,19 @@ defmodule AppApiWeb.ListenBrainzController do
     }
   end
 
-  defp format_listen_detailed(listen) do
+  # 🆕 NEU: Hybrid Metadata Response Format
+  defp format_listen_detailed_hybrid(listen) do
+    # Parse metadata JSON string zu Map (SQLite compatibility)
+    metadata = case listen.metadata do
+      str when is_binary(str) -> 
+        case Jason.decode(str) do
+          {:ok, map} -> map
+          {:error, _} -> %{}
+        end
+      map when is_map(map) -> map
+      _ -> %{}
+    end
+
     %{
       listened_at: listen.listened_at,
       track_name: listen.track_name,
@@ -381,7 +394,26 @@ defmodule AppApiWeb.ListenBrainzController do
       recording_mbid: listen.recording_mbid,
       artist_mbid: listen.artist_mbid,
       release_mbid: listen.release_mbid,
-      additional_info: listen.additional_info || %{}
+      additional_info: %{
+        # Tier 1 Felder (direkt aus Spalten)
+        duration_ms: listen.duration_ms,
+        tracknumber: listen.tracknumber,
+        discnumber: listen.discnumber,
+        origin_url: listen.origin_url,
+        music_service: listen.music_service,
+        loved: listen.loved,
+        rating: listen.rating,
+
+        # Tier 2 Felder (aus metadata JSON String)
+        submission_client: get_in(metadata, ["submission_client"]),
+        submission_client_version: get_in(metadata, ["submission_client_version"]),
+        artist_mbids: get_in(metadata, ["artist_mbids"]) || [],
+        artist_names: get_in(metadata, ["artist_names"]) || [],
+        total_tracks: get_in(metadata, ["total_tracks"]),
+
+        # Tier 3 Felder (Fallback)
+        extended: listen.additional_info || %{}
+      }
     }
   end
 
