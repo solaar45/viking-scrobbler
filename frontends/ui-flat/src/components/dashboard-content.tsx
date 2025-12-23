@@ -26,6 +26,7 @@ export interface RecentListen {
   album: string
   playedAt: string
   duration: number
+  device?: string  // 🆕 NEU
 }
 
 export interface DashboardStats {
@@ -153,6 +154,7 @@ export default function DashboardContent() {
           ? new Date(listen.listened_at * 1000).toISOString()
           : new Date().toISOString(),
         duration: Math.floor((listen.additional_info?.duration_ms || 0) / 1000),
+        device: listen.additional_info?.origin_url || listen.additional_info?.music_service || "Unknown",  // 🆕 NEU
       }))
 
       const dashboardData: DashboardStats = {
@@ -380,12 +382,13 @@ export default function DashboardContent() {
                   <table className="table-dense">
                     <thead className="sticky top-0 z-10 backdrop-blur-sm">
                       <tr>
-                        <th className="table-head-dense pl-6 text-left w-[28%]">Track</th>
-                        <th className="table-head-dense text-left w-[20%]">Artist</th>
-                        <th className="table-head-dense text-left w-[20%]">Album</th>
-                        <th className="table-head-dense text-right w-[12%]">Date</th>
-                        <th className="table-head-dense text-right w-[10%]">Time</th>
-                        <th className="table-head-dense text-right pr-6 w-[10%]">Duration</th>
+                        <th className="table-head-dense pl-6 text-left w-[24%]">Track</th>
+                        <th className="table-head-dense text-left w-[16%]">Artist</th>
+                        <th className="table-head-dense text-left w-[16%]">Album</th>
+                        <th className="table-head-dense text-left w-[12%]">Device</th>
+                        <th className="table-head-dense text-right w-[10%]">Date</th>
+                        <th className="table-head-dense text-right w-[9%]">Time</th>
+                        <th className="table-head-dense text-right pr-6 w-[8%]">Duration</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-viking-border-subtle">
@@ -399,6 +402,9 @@ export default function DashboardContent() {
                           </td>
                           <td className="table-cell-dense table-cell-secondary truncate max-w-[150px]">
                             {item.album}
+                          </td>
+                          <td className="table-cell-dense table-cell-secondary truncate max-w-[120px]">
+                            {formatDevice(item.device)}
                           </td>
                           <td className="table-cell-dense table-cell-secondary text-right truncate max-w-[150px]">
                             {formatDate(item.playedAt)}
@@ -532,15 +538,13 @@ function formatDate(iso: string) {
   const year2 = String(year).slice(-2)
   const monthName = d.toLocaleString('en', { month: 'short' })
 
-  // 🎯 FIX: MMM ZUERST ersetzen
   return formats.dateFormat
-    .replace('MMM', monthName)  // FIRST
+    .replace('MMM', monthName)
     .replace('DD', day)
-    .replace('MM', month)       // THEN
+    .replace('MM', month)
     .replace('YYYY', String(year))
     .replace('YY', year2)
 }
-
 
 function formatTime(iso: string) {
   if (!iso) return "-"
@@ -566,4 +570,17 @@ function formatDuration(sec: number) {
   const m = Math.floor(sec / 60)
   const s = sec % 60
   return `${m}:${s.toString().padStart(2, "0")}`
+}
+
+function formatDevice(device?: string) {
+  if (!device || device === "Unknown") return "-"
+  
+  // URL zu Hostname kürzen (z.B. http://192.168.1.10:4533 → 192.168.1.10)
+  try {
+    const url = new URL(device)
+    return url.hostname
+  } catch {
+    // Wenn keine URL, dann direkt zurückgeben
+    return device.length > 20 ? device.substring(0, 20) + "..." : device
+  }
 }
