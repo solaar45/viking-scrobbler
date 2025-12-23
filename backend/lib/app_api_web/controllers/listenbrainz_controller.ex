@@ -341,11 +341,13 @@ defmodule AppApiWeb.ListenBrainzController do
         Logger.info("Inserted #{count} listens for user #{user_name}")
         
         # 🚀 BROADCAST NEW SCROBBLE
-        AppApiWeb.Endpoint.broadcast(
+        AppApiWeb.Endpoint.broadcast!(
           "scrobbles:#{user_name}",
           "new_scrobble",
           %{count: count, user: user_name, timestamp: DateTime.utc_now() |> DateTime.to_unix()}
         )
+        
+        Logger.info("📡 Broadcast new_scrobble to channel scrobbles:#{user_name}, count: #{count}")
         
         json(conn, %{status: "ok", message: "#{count} listen(s) inserted"})
 
@@ -355,6 +357,7 @@ defmodule AppApiWeb.ListenBrainzController do
         |> put_status(:internal_server_error)
         |> json(%{status: "error", message: "Failed to insert listens"})
     end
+
   end
 
   defp format_listen(listen) do

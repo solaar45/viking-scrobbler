@@ -12,4 +12,11 @@ defmodule AppApiWeb.ScrobbleChannel do
   def handle_in("ping", payload, socket) do
     {:reply, {:ok, payload}, socket}
   end
+
+  # 🎯 NEU: Server broadcasts empfangen und an Clients pushen
+  @impl true
+  def handle_info(%{event: "new_scrobble", payload: payload}, socket) do
+    push(socket, "new_scrobble", payload)
+    {:noreply, socket}
+  end
 end
