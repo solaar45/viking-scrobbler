@@ -1,14 +1,19 @@
 services:
   app:
-    build: .
+    image: solaar45/viking-scrobbler:latest
     container_name: viking-scrobbler
     environment:
-      - MIX_ENV=prod
-      - PHX_SERVER=true
-      - PORT=4000
-      - DATABASE_PATH=/app/data/viking.db
+      MIX_ENV: prod
+      PHX_SERVER: "true"
+      PHX_HOST: "0.0.0.0"  # ← IPv4 erzwingen
+      PORT: 4000
+      DATABASE_PATH: /app/data/viking.db
+      SECRET_KEY_BASE: ${SECRET_KEY_BASE:-please_change_this_secret_key_base_to_at_least_64_characters_long_random_string_for_production_use}
     ports:
-      - "4000:4000"
+      - "0.0.0.0:4000:4000"  # ← Explizit IPv4
     volumes:
-      - ./data:/app/data
+      - viking_data:/app/data
     restart: unless-stopped
+
+volumes:
+  viking_data: 

@@ -2,7 +2,7 @@ defmodule AppApiWeb.ListenBrainzController do
   use AppApiWeb, :controller
   alias AppApi.Repo
   alias AppApi.Listen
-  alias AppApi.DateTimeHelper
+  alias AppApi.Stats
   alias AppApiWeb.TokenController
   import Ecto.Query
   require Logger
@@ -121,184 +121,188 @@ defmodule AppApiWeb.ListenBrainzController do
   end
 
   # GET /1/stats/user/:user_name/listening-activity
-def get_listening_activity(conn, %{"user_name" => user_name} = params) do
-  range = params["range"] || "all_time"
+  def get_listening_activity(conn, %{"user_name" => user_name} = params) do
+    range = params["range"] || "all_time"
 
-  query = build_time_range_query(Listen, user_name, range)
+    query = build_time_range_query(Listen, user_name, range)
 
-  # Smart Grouping basierend auf range - direkt die Queries bauen
-  activity = case range do
-    "week" ->
-      # Gruppiere nach Tag (7 Einträge)
-      query
-      |> select([l], %{
-        time_range: fragment("DATE(datetime(?, 'unixepoch'))", l.listened_at),
-        listen_count: count(l.id)
-      })
-      |> group_by([l], fragment("DATE(datetime(?, 'unixepoch'))", l.listened_at))
-      |> order_by([l], asc: fragment("DATE(datetime(?, 'unixepoch'))", l.listened_at))
-      |> Repo.all()
+    # Smart Grouping basierend auf range - direkt die Queries bauen
+    activity = case range do
+      "week" ->
+        # Gruppiere nach Tag (7 Einträge)
+        query
+        |> select([l], %{
+          time_range: fragment("DATE(datetime(?, 'unixepoch'))", l.listened_at),
+          listen_count: count(l.id)
+        })
+        |> group_by([l], fragment("DATE(datetime(?, 'unixepoch'))", l.listened_at))
+        |> order_by([l], asc: fragment("DATE(datetime(?, 'unixepoch'))", l.listened_at))
+        |> Repo.all()
 
-    "month" ->
-      # Gruppiere nach Woche (4-5 Einträge)
-      query
-      |> select([l], %{
-        time_range: fragment("strftime('%Y-W%W', datetime(?, 'unixepoch'))", l.listened_at),
-        listen_count: count(l.id)
-      })
-      |> group_by([l], fragment("strftime('%Y-W%W', datetime(?, 'unixepoch'))", l.listened_at))
-      |> order_by([l], asc: fragment("strftime('%Y-W%W', datetime(?, 'unixepoch'))", l.listened_at))
-      |> Repo.all()
+      "month" ->
+        # Gruppiere nach Woche (4-5 Einträge)
+        query
+        |> select([l], %{
+          time_range: fragment("strftime('%Y-W%W', datetime(?, 'unixepoch'))", l.listened_at),
+          listen_count: count(l.id)
+        })
+        |> group_by([l], fragment("strftime('%Y-W%W', datetime(?, 'unixepoch'))", l.listened_at))
+        |> order_by([l], asc: fragment("strftime('%Y-W%W', datetime(?, 'unixepoch'))", l.listened_at))
+        |> Repo.all()
 
-    "year" ->
-      # Gruppiere nach Monat (12 Einträge)
-      query
-      |> select([l], %{
-        time_range: fragment("strftime('%Y-%m', datetime(?, 'unixepoch'))", l.listened_at),
-        listen_count: count(l.id)
-      })
-      |> group_by([l], fragment("strftime('%Y-%m', datetime(?, 'unixepoch'))", l.listened_at))
-      |> order_by([l], asc: fragment("strftime('%Y-%m', datetime(?, 'unixepoch'))", l.listened_at))
-      |> Repo.all()
+      "year" ->
+        # Gruppiere nach Monat (12 Einträge)
+        query
+        |> select([l], %{
+          time_range: fragment("strftime('%Y-%m', datetime(?, 'unixepoch'))", l.listened_at),
+          listen_count: count(l.id)
+        })
+        |> group_by([l], fragment("strftime('%Y-%m', datetime(?, 'unixepoch'))", l.listened_at))
+        |> order_by([l], asc: fragment("strftime('%Y-%m', datetime(?, 'unixepoch'))", l.listened_at))
+        |> Repo.all()
 
-    "all_time" ->
-      # Gruppiere nach Jahr
-      query
-      |> select([l], %{
-        time_range: fragment("strftime('%Y', datetime(?, 'unixepoch'))", l.listened_at),
-        listen_count: count(l.id)
-      })
-      |> group_by([l], fragment("strftime('%Y', datetime(?, 'unixepoch'))", l.listened_at))
-      |> order_by([l], asc: fragment("strftime('%Y', datetime(?, 'unixepoch'))", l.listened_at))
-      |> Repo.all()
+      "all_time" ->
+        # Gruppiere nach Jahr
+        query
+        |> select([l], %{
+          time_range: fragment("strftime('%Y', datetime(?, 'unixepoch'))", l.listened_at),
+          listen_count: count(l.id)
+        })
+        |> group_by([l], fragment("strftime('%Y', datetime(?, 'unixepoch'))", l.listened_at))
+        |> order_by([l], asc: fragment("strftime('%Y', datetime(?, 'unixepoch'))", l.listened_at))
+        |> Repo.all()
 
-    _ ->
-      # Default: daily
-      query
-      |> select([l], %{
-        time_range: fragment("DATE(datetime(?, 'unixepoch'))", l.listened_at),
-        listen_count: count(l.id)
-      })
-      |> group_by([l], fragment("DATE(datetime(?, 'unixepoch'))", l.listened_at))
-      |> order_by([l], asc: fragment("DATE(datetime(?, 'unixepoch'))", l.listened_at))
-      |> Repo.all()
+      _ ->
+        # Default: daily
+        query
+        |> select([l], %{
+          time_range: fragment("DATE(datetime(?, 'unixepoch'))", l.listened_at),
+          listen_count: count(l.id)
+        })
+        |> group_by([l], fragment("DATE(datetime(?, 'unixepoch'))", l.listened_at))
+        |> order_by([l], asc: fragment("DATE(datetime(?, 'unixepoch'))", l.listened_at))
+        |> Repo.all()
+    end
+
+    grouping = case range do
+      "week" -> "daily"
+      "month" -> "weekly"
+      "year" -> "monthly"
+      "all_time" -> "yearly"
+      _ -> "daily"
+    end
+
+    json(conn, %{
+      payload: %{
+        listening_activity: activity,
+        range: range,
+        grouping: grouping,
+        user_id: user_name
+      }
+    })
   end
 
-  grouping = case range do
-    "week" -> "daily"
-    "month" -> "weekly"
-    "year" -> "monthly"
-    "all_time" -> "yearly"
-    _ -> "daily"
+  # GET /1/stats/user/:user_name/totals (ERWEITERT)
+  def get_user_totals(conn, %{"user_name" => user_name} = params) do
+    range = params["range"] || "all_time"
+    
+    query = build_time_range_query(Listen, user_name, range)
+
+    # Total Scrobbles
+    total_listens = Repo.aggregate(query, :count, :id)
+
+    # Unique Artists
+    unique_artists = 
+      query
+      |> select([l], l.artist_name)
+      |> distinct(true)
+      |> Repo.aggregate(:count, :artist_name)
+
+    # Unique Tracks
+    unique_tracks = 
+      query
+      |> select([l], fragment("? || ' - ' || ?", l.artist_name, l.track_name))
+      |> distinct(true)
+      |> Repo.all()
+      |> length()
+
+    # Unique Albums
+    unique_albums = 
+      query
+      |> where([l], not is_nil(l.release_name))
+      |> select([l], l.release_name)
+      |> distinct(true)
+      |> Repo.aggregate(:count, :release_name)
+
+    # First & Last Listen
+    first_listen = 
+      query
+      |> order_by([l], asc: l.listened_at)
+      |> limit(1)
+      |> select([l], l.listened_at)
+      |> Repo.one()
+
+    last_listen = 
+      query
+      |> order_by([l], desc: l.listened_at)
+      |> limit(1)
+      |> select([l], l.listened_at)
+      |> Repo.one()
+
+    # --- NEUE ADVANCED STATS ---
+    
+    # Most Active Day (Wochentag mit meisten Scrobbles)
+    from_timestamp = get_range_timestamp(range)
+    {most_active_day, tracks_on_most_active} = Stats.most_active_day(user_name, from_timestamp)
+    
+    # Average Scrobbles per Day
+    avg_per_day = Stats.avg_per_day(user_name, from_timestamp)
+    
+    # Peak Day (einzelner Tag mit meisten Scrobbles)
+    {peak_day, peak_value} = Stats.peak_day(user_name, from_timestamp)
+    
+    # Current Streak (nur für all_time sinnvoll)
+    current_streak = if range == "all_time", do: Stats.current_streak(user_name), else: 0
+
+    json(conn, %{
+      payload: %{
+        total_listens: total_listens,
+        unique_artists: unique_artists,
+        unique_tracks: unique_tracks,
+        unique_albums: unique_albums,
+        first_listen: first_listen,
+        last_listen: last_listen,
+        # NEU:
+        most_active_day: most_active_day,
+        tracks_on_most_active_day: tracks_on_most_active,
+        avg_per_day: avg_per_day,
+        peak_day: peak_day,
+        peak_value: peak_value,
+        current_streak: current_streak,
+        range: range,
+        user_id: user_name
+      }
+    })
   end
 
-  json(conn, %{
-    payload: %{
-      listening_activity: activity,
-      range: range,
-      grouping: grouping,
-      user_id: user_name
-    }
-  })
-end
+  # GET /1/user/:user_name/recent-listens
+  def get_recent_listens(conn, %{"user_name" => user_name} = params) do
+    count = String.to_integer(params["count"] || "20")
 
+    listens = 
+      Listen
+      |> where([l], l.user_name == ^user_name)
+      |> order_by([l], desc: l.listened_at)
+      |> limit(^count)
+      |> Repo.all()
 
-
-  # Nach den anderen Stats-Funktionen hinzufügen:
-
-# GET /1/stats/user/:user_name/totals
-def get_user_totals(conn, %{"user_name" => user_name} = params) do
-  range = params["range"] || "all_time"
-  
-  query = build_time_range_query(Listen, user_name, range)
-
-  # Total Scrobbles
-  total_listens = Repo.aggregate(query, :count, :id)
-
-  # Unique Artists
-  unique_artists = 
-    query
-    |> select([l], l.artist_name)
-    |> distinct(true)
-    |> Repo.aggregate(:count, :artist_name)
-
-  # Unique Tracks
-  unique_tracks = 
-    query
-    |> select([l], fragment("? || ' - ' || ?", l.artist_name, l.track_name))
-    |> distinct(true)
-    |> Repo.all()
-    |> length()
-
-  # Unique Albums
-  unique_albums = 
-    query
-    |> where([l], not is_nil(l.release_name))
-    |> select([l], l.release_name)
-    |> distinct(true)
-    |> Repo.aggregate(:count, :release_name)
-
-  # First & Last Listen
-  first_listen = 
-    query
-    |> order_by([l], asc: l.listened_at)
-    |> limit(1)
-    |> select([l], l.listened_at)
-    |> Repo.one()
-
-  last_listen = 
-    query
-    |> order_by([l], desc: l.listened_at)
-    |> limit(1)
-    |> select([l], l.listened_at)
-    |> Repo.one()
-
-  json(conn, %{
-    payload: %{
-      total_listens: total_listens,
-      unique_artists: unique_artists,
-      unique_tracks: unique_tracks,
-      unique_albums: unique_albums,
-      first_listen: first_listen,
-      last_listen: last_listen,
-      range: range,
-      user_id: user_name
-    }
-  })
-end
-
-# GET /1/user/:user_name/recent-listens
-def get_recent_listens(conn, %{"user_name" => user_name} = params) do
-  count = String.to_integer(params["count"] || "20")
-
-  listens = 
-    Listen
-    |> where([l], l.user_name == ^user_name)
-    |> order_by([l], desc: l.listened_at)
-    |> limit(^count)
-    |> Repo.all()
-
-  json(conn, %{
-    payload: %{
-      count: length(listens),
-      listens: Enum.map(listens, &format_listen_detailed/1)
-    }
-  })
-end
-
-# Private helper für detaillierte Listen-Anzeige
-defp format_listen_detailed(listen) do
-  %{
-    listened_at: listen.listened_at,
-    track_name: listen.track_name,
-    artist_name: listen.artist_name,
-    release_name: listen.release_name,
-    recording_mbid: listen.recording_mbid,
-    artist_mbid: listen.artist_mbid,
-    release_mbid: listen.release_mbid,
-    additional_info: listen.additional_info || %{}
-  }
-end
+    json(conn, %{
+      payload: %{
+        count: length(listens),
+        listens: Enum.map(listens, &format_listen_detailed/1)
+      }
+    })
+  end
 
   # Validate Token
   def validate_token(conn, _params) do
@@ -313,37 +317,45 @@ end
   # Private functions
 
   defp process_listens(conn, payload, user_name) when is_list(payload) do
-  listens =
-    Enum.map(payload, fn listen_data ->
-      track_metadata = listen_data["track_metadata"] || %{}
+    listens =
+      Enum.map(payload, fn listen_data ->
+        track_metadata = listen_data["track_metadata"] || %{}
 
-      %{
-        listened_at: parse_timestamp(listen_data["listened_at"]),
-        track_name: track_metadata["track_name"],
-        artist_name: track_metadata["artist_name"],
-        release_name: track_metadata["release_name"],
-        recording_mbid: get_in(track_metadata, ["additional_info", "recording_mbid"]),
-        artist_mbid: get_in(track_metadata, ["additional_info", "artist_mbid"]),
-        release_mbid: get_in(track_metadata, ["additional_info", "release_mbid"]),
-        additional_info: track_metadata["additional_info"] || %{},
-        user_name: user_name,
-        inserted_at: DateTime.utc_now() |> DateTime.truncate(:second)  # ← DateTime statt NaiveDateTime!
-      }
-    end)
-    |> Enum.reject(&is_nil(&1.track_name))
+        %{
+          listened_at: parse_timestamp(listen_data["listened_at"]),
+          track_name: track_metadata["track_name"],
+          artist_name: track_metadata["artist_name"],
+          release_name: track_metadata["release_name"],
+          recording_mbid: get_in(track_metadata, ["additional_info", "recording_mbid"]),
+          artist_mbid: get_in(track_metadata, ["additional_info", "artist_mbid"]),
+          release_mbid: get_in(track_metadata, ["additional_info", "release_mbid"]),
+          additional_info: track_metadata["additional_info"] || %{},
+          user_name: user_name,
+          inserted_at: DateTime.utc_now() |> DateTime.truncate(:second)
+        }
+      end)
+      |> Enum.reject(&is_nil(&1.track_name))
 
-  case Repo.insert_all(Listen, listens) do
-    {count, _} when count > 0 ->
-      Logger.info("Inserted #{count} listens for user #{user_name}")
-      json(conn, %{status: "ok", message: "#{count} listen(s) inserted"})
+    case Repo.insert_all(Listen, listens) do
+      {count, _} when count > 0 ->
+        Logger.info("Inserted #{count} listens for user #{user_name}")
+        
+        # 🚀 BROADCAST NEW SCROBBLE
+        AppApiWeb.Endpoint.broadcast(
+          "scrobbles:#{user_name}",
+          "new_scrobble",
+          %{count: count, user: user_name, timestamp: DateTime.utc_now() |> DateTime.to_unix()}
+        )
+        
+        json(conn, %{status: "ok", message: "#{count} listen(s) inserted"})
 
-    _ ->
-      Logger.error("Failed to insert listens")
-      conn
-      |> put_status(:internal_server_error)
-      |> json(%{status: "error", message: "Failed to insert listens"})
+      _ ->
+        Logger.error("Failed to insert listens")
+        conn
+        |> put_status(:internal_server_error)
+        |> json(%{status: "error", message: "Failed to insert listens"})
+    end
   end
-end
 
   defp format_listen(listen) do
     %{
@@ -354,6 +366,19 @@ end
         release_name: listen.release_name,
         additional_info: listen.additional_info || %{}
       }
+    }
+  end
+
+  defp format_listen_detailed(listen) do
+    %{
+      listened_at: listen.listened_at,
+      track_name: listen.track_name,
+      artist_name: listen.artist_name,
+      release_name: listen.release_name,
+      recording_mbid: listen.recording_mbid,
+      artist_mbid: listen.artist_mbid,
+      release_mbid: listen.release_mbid,
+      additional_info: listen.additional_info || %{}
     }
   end
 
@@ -376,19 +401,31 @@ end
   defp parse_timestamp(_), do: DateTime.utc_now() |> DateTime.to_unix()
 
   defp build_time_range_query(query, user_name, range) do
-  now = DateTime.utc_now() |> DateTime.to_unix()
+    now = DateTime.utc_now() |> DateTime.to_unix()
 
-  time_filter =
+    time_filter =
+      case range do
+        "week" -> now - (7 * 86400)
+        "month" -> now - (30 * 86400)
+        "year" -> now - (365 * 86400)
+        "all_time" -> 0
+        _ -> 0
+      end
+
+    from l in query,
+      where: l.user_name == ^user_name and l.listened_at >= ^time_filter
+  end
+
+  # Helper für Stats-Module: Konvertiere range zu Timestamp
+  defp get_range_timestamp(range) do
+    now = DateTime.utc_now() |> DateTime.to_unix()
+
     case range do
       "week" -> now - (7 * 86400)
       "month" -> now - (30 * 86400)
       "year" -> now - (365 * 86400)
-      "all_time" -> 0
-      _ -> 0
+      "all_time" -> nil
+      _ -> nil
     end
-
-  from l in query,
-    where: l.user_name == ^user_name and l.listened_at >= ^time_filter
-end
-
+  end
 end

@@ -14,6 +14,11 @@ export default function App() {
     return () => window.removeEventListener('popstate', onPop)
   }, [])
 
+  // Dark Mode forced (bereits in index.css, aber sicherheitshalber)
+  useEffect(() => {
+    document.documentElement.classList.add('dark')
+  }, [])
+
   const renderMain = () => {
     if (path === '/settings') return <SettingsPage />
     return <DashboardContent />
@@ -26,13 +31,15 @@ export default function App() {
       <AppSidebar />
 
       <SidebarInset>
-        <header className="flex h-16 shrink-0 items-center gap-2 border-b px-4 bg-white">
-          <SidebarTrigger className="-ml-1" />
-          <Separator orientation="vertical" className="mr-2 h-4" />
-          <span className="font-semibold text-sm">{title}</span>
+        {/* Header: Dark Background mit subtiler Border */}
+        <header className="flex h-16 shrink-0 items-center gap-2 border-b px-4 bg-viking-bg-secondary border-viking-border-default">
+          <SidebarTrigger className="-ml-1 text-viking-text-secondary hover:text-viking-text-primary" />
+          <Separator orientation="vertical" className="mr-2 h-4 bg-viking-border-default" />
+          <span className="font-semibold text-lg text-viking-text-primary">{title}</span>
         </header>
 
-        <main className="flex flex-1 flex-col gap-4 p-4 lg:p-6 bg-gray-50">
+        {/* Main: Dunklerer Background */}
+        <main className="flex flex-1 flex-col gap-4 p-4 lg:p-6 bg-viking-bg-primary">
           {renderMain()}
         </main>
       </SidebarInset>

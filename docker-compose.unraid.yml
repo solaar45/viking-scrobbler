@@ -7,7 +7,7 @@ services:
       PHX_SERVER: "true"
       PORT: 4000
       DATABASE_PATH: /app/data/viking.db
-      SECRET_KEY_BASE: ${SECRET_KEY_BASE:-CHANGE_THIS_IN_PRODUCTION_MIN_64_CHARS_LONG_RANDOM_STRING_12345}
+      SECRET_KEY_BASE: ${SECRET_KEY_BASE:-CHANGE_ME_MIN_64_CHARS}
     ports:
       - "4000:4000"
     volumes:

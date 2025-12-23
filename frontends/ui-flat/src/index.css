@@ -4,6 +4,7 @@
 
 @layer base {
   :root {
+    /* Shadcn/UI Variables (Light Mode - DEPRECATED für diese App) */
     --background: 0 0% 100%;
     --foreground: 222.2 84% 4.9%; 
     --card: 0 0% 100%;
@@ -24,45 +25,64 @@
     --input: 214.3 31.8% 91.4%;
     --ring: 221.2 83.2% 53.3%;
     --radius: 0.5rem;
-    /* clearer site-wide semantic colors */
-    --text: 222.2 15% 9%;        /* body text (dark) */
-    --heading: 222.2 18% 6%;     /* headings, bolder */
-    --muted-text: 215 12% 55%;   /* secondary/muted */
-    --code-bg: 210 20% 98%;      /* code background */
-    --code-fg: 222.2 12% 8%;     /* code foreground */
   }
  
-  .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
-    --card: 222.2 84% 7.8%;
-    --card-foreground: 210 40% 98%;
-    --popover: 222.2 84% 7.8%;
-    --popover-foreground: 210 40% 98%;
-    --primary: 217.2 91.2% 59.8%;
-    --primary-foreground: 222.2 84% 4.9%;
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 224.3 76.3% 94.1%;
-    /* dark-mode semantic colors */
-    --text: 210 40% 96%;
-    --heading: 210 40% 98%;
-    --muted-text: 215 20% 65%;
-    --code-bg: 222.2 84% 7.8%;
-    --code-fg: 210 40% 98%;
+  /* DARK MODE IST DEFAULT für Viking Scrobbler */
+  .dark, :root {
+    /* Backgrounds (Dunkel → Hell) */
+    --background: 218 26% 7%;        /* #0A0E12 */
+    --foreground: 220 12% 92%;       /* #E8EAED */
+    
+    --card: 216 18% 12%;             /* #141922 */
+    --card-foreground: 220 12% 92%;  /* #E8EAED */
+    
+    --popover: 216 18% 15%;          /* #1E2530 */
+    --popover-foreground: 220 12% 92%;
+    
+    /* Akzentfarben (Lila) */
+    --primary: 258 90% 66%;          /* #8B5CF6 - Lila */
+    --primary-foreground: 220 12% 92%;
+    
+    --secondary: 217 20% 21%;        /* #252D3C */
+    --secondary-foreground: 220 12% 92%;
+    
+    /* Muted (Grau-Blau) */
+    --muted: 217 20% 21%;            /* #252D3C */
+    --muted-foreground: 218 14% 65%; /* #9AA0B0 */
+    
+    /* Accent (Pink für Highlights) */
+    --accent: 330 81% 60%;           /* #EC4899 - Pink */
+    --accent-foreground: 220 12% 92%;
+    
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 220 12% 92%;
+    
+    /* Borders (subtil) */
+    --border: 217 20% 21%;           /* #252D3C */
+    --input: 215 16% 28%;            /* #344155 */
+    --ring: 258 90% 66%;             /* #8B5CF6 - Lila */
+    
+    /* Semantic Colors für App */
+    --text: 220 12% 92%;             /* #E8EAED - Haupttext */
+    --heading: 220 12% 92%;          /* #E8EAED - Headings */
+    --muted-text: 218 14% 65%;       /* #9AA0B0 - Subtext */
+    --text-tertiary: 218 8% 46%;     /* #6B7280 - Meta */
+    
+    /* Code/Mono */
+    --code-bg: 217 20% 21%;
+    --code-fg: 220 12% 92%;
   }
 
   html, body {
-    @apply h-full text-sm antialiased bg-gray-50;
+    @apply h-full antialiased;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     font-feature-settings: "cv11", "ss01";
+    font-size: 15px; /* Base Size = 15px statt 14px */
+  }
+  
+  /* Force Dark Mode */
+  html {
+    @apply dark;
   }
 }
 
@@ -70,87 +90,200 @@
   * {
     @apply border-border;
   }
+  
   body {
     background-color: hsl(var(--background));
     color: hsl(var(--text));
   }
 
-  /* Headings and semantic text colors */
-  h1, h2, h3, h4, h5 {
-    color: hsl(var(--heading));
+  /* Headings - Konsistente Typography */
+  h1 {
+    @apply text-3xl font-bold text-foreground;
+  }
+  
+  h2 {
+    @apply text-2xl font-semibold text-foreground;
+  }
+  
+  h3 {
+    @apply text-xl font-semibold text-foreground;
+  }
+  
+  h4, h5 {
+    @apply text-lg font-medium text-foreground;
   }
 
+  /* Standard Text */
   p, span, a, li, label {
-    color: hsl(var(--text));
+    @apply text-base text-foreground;
   }
 
-  /* Muted text */
+  /* Muted Text */
   .muted, .text-muted {
     color: hsl(var(--muted-text));
   }
+  
+  .text-tertiary {
+    color: hsl(var(--text-tertiary));
+  }
 
-  /* Code / token fields */
+  /* Code / Token Fields */
   code, pre, .font-mono {
     background-color: hsl(var(--code-bg));
     color: hsl(var(--code-fg));
+    @apply text-sm px-1.5 py-0.5 rounded;
   }
 
-  /* Ensure card text contrast */
+  /* Cards mit neuem Dark Design */
   .card-dense, .card {
+    background: linear-gradient(to bottom right, hsl(var(--card)), hsl(217 18% 10%));
+    border: 1px solid hsl(var(--border));
     color: hsl(var(--card-foreground));
-    background-color: hsl(var(--card));
+  }
+  
+  /* Hover States für interaktive Elemente */
+  .card-dense:hover, .card:hover {
+    border-color: hsl(var(--ring) / 0.3);
+    transition: border-color 0.2s ease;
   }
 }
 
-/* --- CUSTOM DENSE UTILITIES (FLAT) --- */
+/* --- CUSTOM DENSE UTILITIES (DARK OPTIMIZED) --- */
 @layer components {
-  /* Container: Nutzt vollen Platz */
+  /* Container */
   .app-container {
     @apply w-full max-w-none px-4 py-4 lg:px-6 lg:py-6 flex flex-col gap-4 h-full;
   }
 
-  /* Card: FLAT DESIGN - No Shadow, Just Border */
+  /* Card: Dark Gradient Background */
   .card-dense {
-    @apply bg-white border border-gray-200 rounded-sm overflow-hidden flex flex-col;
-  }
-
-  /* Header: Feste Höhe, sauber getrennt */
-  .card-header-dense {
-    @apply px-4 py-3 border-b border-gray-100 flex items-center justify-between h-12 bg-white flex-shrink-0;
+    @apply border rounded-lg overflow-hidden flex flex-col;
+    background: linear-gradient(135deg, hsl(var(--card)) 0%, hsl(217 18% 10%) 100%);
+    border-color: hsl(var(--border) / 0.5);
   }
   
-  /* Titel: Klein, Uppercase, Tracking */
-  .card-title-dense {
-    @apply text-sm font-bold uppercase tracking-wide text-gray-900 flex items-center gap-2;
+  .card-dense:hover {
+    border-color: hsl(var(--ring) / 0.3);
   }
 
-  /* METRICS */
+  /* Header */
+  .card-header-dense {
+    @apply px-4 py-3 border-b flex items-center justify-between min-h-[48px] flex-shrink-0;
+    border-color: hsl(var(--border));
+    background: hsl(var(--card));
+  }
+  
+  /* Titel: Größer, Medium Weight */
+  .card-title-dense {
+    @apply text-sm font-semibold uppercase tracking-wider text-foreground flex items-center gap-2;
+    letter-spacing: 0.08em;
+  }
+
+  /* METRICS - Größere Zahlen, besserer Kontrast */
   .metric-value {
-    @apply font-mono text-xl font-bold tracking-tight text-gray-900 leading-none;
+    @apply font-bold text-5xl tracking-tight leading-none;
+    color: hsl(var(--foreground));
   }
   
   .metric-label {
-    @apply text-[10px] uppercase tracking-widest font-bold text-gray-500 group-hover:text-gray-700 transition-colors;
+    @apply text-xs uppercase tracking-wider font-semibold transition-colors;
+    color: hsl(var(--muted-text));
+  }
+  
+  .metric-label-accent {
+    color: hsl(var(--primary));
   }
 
   .metric-sub {
-    @apply text-[10px] text-gray-400 font-medium flex items-center gap-1;
+    @apply text-sm font-medium flex items-center gap-1;
+    color: hsl(var(--text-tertiary));
   }
 
-  /* TABLE: Extrem kompakt */
+  /* TABLE - Größere Schriften */
   .table-dense {
-    @apply w-full text-xs;
+    @apply w-full text-sm;
   }
   
   .table-head-dense {
-    @apply h-8 bg-gray-50 text-[10px] font-bold uppercase tracking-wider text-gray-600 px-4 border-b border-gray-200;
+    @apply h-10 text-xs font-semibold uppercase tracking-wider px-4 border-b;
+    background: hsl(var(--card));
+    color: hsl(var(--muted-text));
+    border-color: hsl(var(--border));
   }
 
   .table-row-dense {
-    @apply h-8 border-b border-gray-50 hover:bg-gray-50 transition-colors last:border-0;
+    @apply h-10 border-b transition-colors last:border-0;
+    border-color: hsl(var(--border) / 0.3);
+  }
+  
+  .table-row-dense:hover {
+    background: hsl(var(--muted) / 0.3);
   }
   
   .table-cell-dense {
-    @apply py-1.5 px-4 truncate align-middle;
+    @apply py-2 px-4 truncate align-middle;
+  }
+  
+  /* Spezielle Zellen */
+  .table-cell-primary {
+    @apply text-base font-medium text-foreground;
+  }
+  
+  .table-cell-secondary {
+    @apply text-sm text-muted-foreground;
+  }
+  
+  .table-cell-tertiary {
+    @apply text-sm;
+    color: hsl(var(--text-tertiary));
+  }
+}
+
+/* --- ACCENT COLORS --- */
+@layer utilities {
+  /* Lila Akzent */
+  .text-purple {
+    color: #8B5CF6;
+  }
+  
+  .bg-purple {
+    background-color: #8B5CF6;
+  }
+  
+  .border-purple {
+    border-color: #8B5CF6;
+  }
+  
+  /* Pink Akzent */
+  .text-pink {
+    color: #EC4899;
+  }
+  
+  .bg-pink {
+    background-color: #EC4899;
+  }
+  
+  /* Grün (Live) */
+  .text-emerald {
+    color: #10B981;
+  }
+  
+  .bg-emerald {
+    background-color: #10B981;
+  }
+  
+  /* Badge Styles */
+  .badge-live {
+    @apply inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-semibold;
+    background: rgba(16, 185, 129, 0.1);
+    border: 1px solid rgba(16, 185, 129, 0.3);
+    color: #10B981;
+  }
+  
+  .badge-purple {
+    @apply inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-semibold;
+    background: rgba(139, 92, 246, 0.1);
+    border: 1px solid rgba(139, 92, 246, 0.3);
+    color: #8B5CF6;
   }
 }

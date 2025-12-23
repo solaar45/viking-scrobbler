@@ -26,7 +26,9 @@ if config_env() == :prod do
       port: port
     ],
     secret_key_base: secret_key_base,
-    server: true  # ← DIESER FIX FEHLTE!
+    server: true,
+    # ✅ WEBSOCKET ORIGIN CHECK FIX
+    check_origin: false  # Erlaubt alle Origins (Home Lab sicher)
 
   config :swoosh, api_client: Swoosh.ApiClient.Finch, finch_name: AppApi.Finch
 end
