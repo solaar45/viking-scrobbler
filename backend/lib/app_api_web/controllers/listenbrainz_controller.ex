@@ -375,47 +375,64 @@ defmodule AppApiWeb.ListenBrainzController do
 
   # 🆕 NEU: Hybrid Metadata Response Format
   defp format_listen_detailed_hybrid(listen) do
-    # Parse metadata JSON string zu Map (SQLite compatibility)
-    metadata = case listen.metadata do
-      str when is_binary(str) -> 
+  # metadata als Map sicherstellen (kommt aus Listen.metadata :: string)
+  metadata =
+    case listen.metadata do
+      str when is_binary(str) ->
         case Jason.decode(str) do
           {:ok, map} -> map
-          {:error, _} -> %{}
+          _ -> %{}
         end
-      map when is_map(map) -> map
-      _ -> %{}
+
+      map when is_map(map) ->
+        map
+
+      _ ->
+        %{}
     end
 
-    %{
-      listened_at: listen.listened_at,
-      track_name: listen.track_name,
-      artist_name: listen.artist_name,
-      release_name: listen.release_name,
-      recording_mbid: listen.recording_mbid,
-      artist_mbid: listen.artist_mbid,
-      release_mbid: listen.release_mbid,
-      additional_info: %{
-        # Tier 1 Felder (direkt aus Spalten)
-        duration_ms: listen.duration_ms,
-        tracknumber: listen.tracknumber,
-        discnumber: listen.discnumber,
-        origin_url: listen.origin_url,
-        music_service: listen.music_service,
-        loved: listen.loved,
-        rating: listen.rating,
+  # GENRE-STRING aus metadata["genres"]
+  genres =
+    case metadata["genres"] do
+      list when is_list(list) and list != [] ->
+        list |> Enum.take(3) |> Enum.join(", ")
+      _ ->
+        "–"
+    end
 
-        # Tier 2 Felder (aus metadata JSON String)
-        submission_client: get_in(metadata, ["submission_client"]),
-        submission_client_version: get_in(metadata, ["submission_client_version"]),
-        artist_mbids: get_in(metadata, ["artist_mbids"]) || [],
-        artist_names: get_in(metadata, ["artist_names"]) || [],
-        total_tracks: get_in(metadata, ["total_tracks"]),
+  %{
+    listened_at: listen.listened_at,
+    track_name: listen.track_name,
+    artist_name: listen.artist_name,
+    release_name: listen.release_name,
+    recording_mbid: listen.recording_mbid,
+    artist_mbid: listen.artist_mbid,
+    release_mbid: listen.release_mbid,
+    additional_info: %{
+      # Tier 1: direkt aus Spalten (schnell filterbar)
+      duration_ms: listen.duration_ms,
+      origin_url: listen.origin_url,
+      music_service: listen.music_service,
+      tracknumber: listen.tracknumber,
+      discnumber: listen.discnumber,
+      loved: listen.loved,
+      rating: listen.rating,
 
-        # Tier 3 Felder (Fallback)
-        extended: listen.additional_info || %{}
-      }
+      # Tier 2: aus metadata JSON
+      submission_client: get_in(metadata, ["submission_client"]),
+      submission_client_version: get_in(metadata, ["submission_client_version"]),
+      artist_mbids: get_in(metadata, ["artist_mbids"]) || [],
+      artist_names: get_in(metadata, ["artist_names"]) || [],
+      total_tracks: get_in(metadata, ["total_tracks"]),
+
+      # Genre-String für Frontend
+      genres: genres,
+
+      # Tier 3: rohes additional_info als extended
+      extended: listen.additional_info || %{}
     }
-  end
+  }
+end
 
   defp get_token_from_header(conn) do
     case get_req_header(conn, "authorization") do

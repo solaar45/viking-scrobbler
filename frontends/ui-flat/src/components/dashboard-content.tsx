@@ -26,7 +26,8 @@ export interface RecentListen {
   album: string
   playedAt: string
   duration: number
-  device?: string  // 🆕 NEU
+  device?: string      // 🆕 music_service
+  genres?: string      // 🆕 Genre-String
 }
 
 export interface DashboardStats {
@@ -145,6 +146,8 @@ export default function DashboardContent() {
 
       const recentResponse = await fetch(`/1/user/${username}/recent-listens?count=500`)
       const recentJson = await recentResponse.json()
+      
+      // 🆕 KORRIGIERTES MAPPING
       const recentListens = (recentJson.payload?.listens || []).map((listen: any) => ({
         id: listen.listened_at?.toString() || Math.random().toString(),
         track: listen.track_name || "Unknown Track",
@@ -154,7 +157,12 @@ export default function DashboardContent() {
           ? new Date(listen.listened_at * 1000).toISOString()
           : new Date().toISOString(),
         duration: Math.floor((listen.additional_info?.duration_ms || 0) / 1000),
-        device: listen.additional_info?.origin_url || listen.additional_info?.music_service || "Unknown",  // 🆕 NEU
+        
+        // ✅ Device = music_service aus Spalte
+        device: listen.additional_info?.music_service || "-",
+        
+        // ✅ Genre = fertiger String aus Backend
+        genres: listen.additional_info?.genres || "–",
       }))
 
       const dashboardData: DashboardStats = {
@@ -382,10 +390,11 @@ export default function DashboardContent() {
                   <table className="table-dense">
                     <thead className="sticky top-0 z-10 backdrop-blur-sm">
                       <tr>
-                        <th className="table-head-dense pl-6 text-left w-[24%]">Track</th>
-                        <th className="table-head-dense text-left w-[16%]">Artist</th>
-                        <th className="table-head-dense text-left w-[16%]">Album</th>
-                        <th className="table-head-dense text-left w-[12%]">Device</th>
+                        <th className="table-head-dense pl-6 text-left w-[22%]">Track</th>
+                        <th className="table-head-dense text-left w-[14%]">Artist</th>
+                        <th className="table-head-dense text-left w-[14%]">Album</th>
+                        <th className="table-head-dense text-left w-[10%]">Device</th>
+                        <th className="table-head-dense text-left w-[12%]">Genre</th>
                         <th className="table-head-dense text-right w-[10%]">Date</th>
                         <th className="table-head-dense text-right w-[9%]">Time</th>
                         <th className="table-head-dense text-right pr-6 w-[8%]">Duration</th>
@@ -405,6 +414,10 @@ export default function DashboardContent() {
                           </td>
                           <td className="table-cell-dense table-cell-secondary truncate max-w-[120px]">
                             {formatDevice(item.device)}
+                          </td>
+                          {/* 🆕 GENRE SPALTE */}
+                          <td className="table-cell-dense table-cell-secondary truncate max-w-[140px] font-medium text-emerald-400">
+                            {item.genres}
                           </td>
                           <td className="table-cell-dense table-cell-secondary text-right truncate max-w-[150px]">
                             {formatDate(item.playedAt)}
@@ -573,14 +586,8 @@ function formatDuration(sec: number) {
 }
 
 function formatDevice(device?: string) {
-  if (!device || device === "Unknown") return "-"
+  if (!device || device === "-") return "-"
   
-  // URL zu Hostname kürzen (z.B. http://192.168.1.10:4533 → 192.168.1.10)
-  try {
-    const url = new URL(device)
-    return url.hostname
-  } catch {
-    // Wenn keine URL, dann direkt zurückgeben
-    return device.length > 20 ? device.substring(0, 20) + "..." : device
-  }
+  // music_service direkt anzeigen (navidrome, spotify, etc.)
+  return device.length > 20 ? device.substring(0, 20) + "..." : device
 }
