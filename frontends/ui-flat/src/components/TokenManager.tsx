@@ -9,6 +9,11 @@ interface Token {
   last_used: string | null;
 }
 
+interface DateTimeFormats {
+  dateFormat: string;
+  timeFormat: string;
+}
+
 export function TokenManager() {
   const [tokens, setTokens] = useState<Token[]>([]);
   const [loading, setLoading] = useState(true);
@@ -20,6 +25,18 @@ export function TokenManager() {
 
   useEffect(() => {
     loadTokens();
+
+    // 🎯 Listen for datetime format changes
+    const handleFormatChange = () => {
+      // Force re-render by cloning tokens array
+      setTokens((prev) => [...prev]);
+    };
+
+    window.addEventListener('datetime-format-changed', handleFormatChange);
+
+    return () => {
+      window.removeEventListener('datetime-format-changed', handleFormatChange);
+    };
   }, []);
 
   const loadTokens = async () => {
@@ -103,9 +120,56 @@ export function TokenManager() {
     }
   };
 
-  const formatDate = (dateStr: string | null) => {
+  // 🎯 FORMAT HELPERS WITH CUSTOM FORMATS
+  const getDateTimeFormats = (): DateTimeFormats => {
+    const saved = localStorage.getItem("datetime_formats");
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch {
+        // Fallback
+      }
+    }
+    return {
+      dateFormat: 'DD.MM.YYYY',
+      timeFormat: 'HH:mm'
+    };
+  };
+
+  const formatDate = (dateStr: string | null): string => {
     if (!dateStr) return "Never";
-    return new Date(dateStr).toLocaleString();
+
+    const formats = getDateTimeFormats();
+    const d = new Date(dateStr);
+
+    // Date formatting
+    const day = String(d.getDate()).padStart(2, '0');
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const year = d.getFullYear();
+    const monthName = d.toLocaleString('en', { month: 'short' });
+
+    const formattedDate = formats.dateFormat
+      .replace('MMM', monthName)  // FIRST: Dec
+      .replace('DD', day)
+      .replace('MM', month)       // THEN: 12
+      .replace('YYYY', String(year))
+      .replace('YY', String(year).slice(-2));
+
+    // Time formatting
+    const hours24 = d.getHours();
+    const hours12 = hours24 % 12 || 12;
+    const minutes = String(d.getMinutes()).padStart(2, '0');
+    const seconds = String(d.getSeconds()).padStart(2, '0');
+    const ampm = hours24 >= 12 ? 'PM' : 'AM';
+
+    const formattedTime = formats.timeFormat
+      .replace('HH', String(hours24).padStart(2, '0'))
+      .replace('h', String(hours12))
+      .replace('mm', minutes)
+      .replace('ss', seconds)
+      .replace('a', ampm);
+
+    return `${formattedDate} ${formattedTime}`;
   };
 
   return (

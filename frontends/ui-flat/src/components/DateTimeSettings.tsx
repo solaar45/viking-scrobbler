@@ -63,19 +63,20 @@ export function DateTimeSettings() {
   }
 
   const formatPreviewDate = () => {
-    const d = previewDate
-    const day = String(d.getDate()).padStart(2, '0')
-    const month = String(d.getMonth() + 1).padStart(2, '0')
-    const year = d.getFullYear()
-    const monthName = d.toLocaleString('en', { month: 'short' })
+  const d = previewDate
+  const day = String(d.getDate()).padStart(2, '0')
+  const month = String(d.getMonth() + 1).padStart(2, '0')
+  const year = d.getFullYear()
+  const monthName = d.toLocaleString('en', { month: 'short' })
 
-    return dateFormat
-      .replace('DD', day)
-      .replace('MM', month)
-      .replace('YYYY', String(year))
-      .replace('YY', String(year).slice(-2))
-      .replace('MMM', monthName)
-  }
+  // 🎯 FIX: MMM ZUERST ersetzen, dann MM!
+  return dateFormat
+    .replace('MMM', monthName)  // FIRST: Dec
+    .replace('DD', day)
+    .replace('MM', month)       // THEN: 12
+    .replace('YYYY', String(year))
+    .replace('YY', String(year).slice(-2))
+}
 
   const formatPreviewTime = () => {
     const d = previewDate

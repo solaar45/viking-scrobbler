@@ -532,13 +532,15 @@ function formatDate(iso: string) {
   const year2 = String(year).slice(-2)
   const monthName = d.toLocaleString('en', { month: 'short' })
 
+  // 🎯 FIX: MMM ZUERST ersetzen
   return formats.dateFormat
+    .replace('MMM', monthName)  // FIRST
     .replace('DD', day)
-    .replace('MM', month)
+    .replace('MM', month)       // THEN
     .replace('YYYY', String(year))
     .replace('YY', year2)
-    .replace('MMM', monthName)
 }
+
 
 function formatTime(iso: string) {
   if (!iso) return "-"
