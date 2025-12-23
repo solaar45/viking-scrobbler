@@ -33,44 +33,44 @@ defmodule AppApi.NavidromeIntegration do
   @doc """
   Batch enrich recent listens without genres for a specific user.
   Returns count of successfully enriched listens.
-  
+
   ## Examples
-  
+
       iex> AppApi.NavidromeIntegration.enrich_recent_listens("viking_user", 50)
       42
   """
   def enrich_recent_listens(user_name, count \\ 50) when is_binary(user_name) and is_integer(count) do
     Logger.info("🔄 Starting batch enrichment for #{user_name}, limit: #{count}")
-    
+
     # Query für Listens ohne Genres
-    query = 
+    query =
       from l in Listen,
       where: l.user_name == ^user_name,
       where: fragment("? NOT LIKE '%genres%'", l.metadata) or l.metadata == "{}",
       order_by: [desc: l.listened_at],
       limit: ^count
-    
+
     listens = Repo.all(query)
     total = length(listens)
-    
+
     if total == 0 do
       Logger.info("✅ No listens found without genres")
       0
     else
       Logger.info("📊 Found #{total} listens without genres, enriching...")
-      
+
       # Enrich jeden Listen mit Rate Limiting
-      enriched_count = 
+      enriched_count =
         listens
         |> Enum.with_index(1)
         |> Enum.map(fn {listen, index} ->
           Logger.info("Processing #{index}/#{total}: #{listen.artist_name} - #{listen.track_name}")
-          
+
           case enrich_listen_from_navidrome(listen) do
             {:ok, _} ->
               :timer.sleep(200)  # Rate limiting (5 requests/sec)
               1
-              
+
             {:error, reason} ->
               Logger.debug("Skipped listen #{listen.id}: #{inspect(reason)}")
               :timer.sleep(100)
@@ -78,9 +78,9 @@ defmodule AppApi.NavidromeIntegration do
           end
         end)
         |> Enum.sum()
-      
+
       Logger.info("✅ Batch enrichment completed: #{enriched_count}/#{total} listens enriched")
-      
+
       enriched_count
     end
   end
@@ -93,10 +93,10 @@ defmodule AppApi.NavidromeIntegration do
       {:ok, _} when save ->
         save_credentials(user_name, url, username, password, false)
         {:ok, "Connected and saved"}
-        
+
       {:ok, msg} ->
         {:ok, msg}
-        
+
       error ->
         error
     end
@@ -109,7 +109,7 @@ defmodule AppApi.NavidromeIntegration do
     case Repo.get_by(NavidromeCredential, user_name: user_name) do
       nil ->
         %{connected: false, source: "none"}
-        
+
       cred ->
         %{
           connected: true,
@@ -126,13 +126,13 @@ defmodule AppApi.NavidromeIntegration do
 
   defp resolve_navidrome_config(listen) do
     user_name = listen.user_name
-    
+
     # Priority 1: DB Credentials
     case get_db_credentials(user_name) do
       {:ok, config} ->
         Logger.debug("Using stored credentials for #{user_name}")
         {:ok, config}
-        
+
       {:error, _} ->
         # Priority 2: Auto-Discovery from origin_url
         case auto_discover_from_listen(listen) do
@@ -141,21 +141,21 @@ defmodule AppApi.NavidromeIntegration do
             # Speichere für zukünftige Verwendung
             save_credentials(user_name, config.url, config.username, config.password, true)
             {:ok, config}
-            
+
           {:error, _} ->
             # Priority 3: Network Scan
             case scan_network_for_navidrome(user_name) do
               {:ok, config} ->
                 Logger.info("✅ Auto-discovered Navidrome via network scan")
                 {:ok, config}
-                
+
               {:error, _} ->
                 # Priority 4: ENV Variables
                 case get_env_credentials() do
                   {:ok, config} ->
                     Logger.debug("Using ENV credentials")
                     {:ok, config}
-                    
+
                   {:error, _} ->
                     {:error, :no_navidrome_config}
                 end
@@ -170,10 +170,10 @@ defmodule AppApi.NavidromeIntegration do
     case Repo.get_by(NavidromeCredential, user_name: user_name) do
       nil ->
         {:error, :not_found}
-        
+
       cred ->
         token = NavidromeCredential.decrypt_token(cred)
-        
+
         if token do
           {:ok, %{
             url: cred.url,
@@ -206,11 +206,11 @@ defmodule AppApi.NavidromeIntegration do
 
   defp auto_discover_from_listen(listen) do
     additional_info = listen.additional_info || %{}
-    
+
     case additional_info["origin_url"] do
       nil ->
         {:error, :no_origin_url}
-        
+
       origin_url ->
         extract_navidrome_from_origin(origin_url, listen.user_name)
     end
@@ -220,19 +220,19 @@ defmodule AppApi.NavidromeIntegration do
     case URI.parse(origin_url) do
       %URI{scheme: scheme, host: host, port: port} when not is_nil(host) ->
         base_url = build_url(scheme, host, port)
-        
+
         # Versuche mit gängigen Default-Credentials
         test_credentials = [
           {username, username},
           {username, "navidrome"},
           {"admin", "admin"},
         ]
-        
+
         Enum.find_value(test_credentials, {:error, :auth_failed}, fn {user, pass} ->
           case test_connection(base_url, user, pass) do
             {:ok, _} ->
               {:ok, %{url: base_url, username: user, password: pass}}
-              
+
             _ ->
               nil
           end
@@ -260,13 +260,13 @@ defmodule AppApi.NavidromeIntegration do
       "http://192.168.1.1:4533",
       "http://192.168.178.1:4533"
     ]
-    
+
     Enum.find_value(candidates, {:error, :not_found}, fn url ->
       case test_connection(url, username, username) do
         {:ok, _} ->
           Logger.info("✅ Found Navidrome at #{url}")
           {:ok, %{url: url, username: username, password: username}}
-          
+
         _ ->
           nil
       end
@@ -280,7 +280,7 @@ defmodule AppApi.NavidromeIntegration do
         |> String.split()
         |> Enum.at(2)
         |> to_string()
-        
+
       _ ->
         "172.17.0.1"
     end
@@ -323,17 +323,17 @@ defmodule AppApi.NavidromeIntegration do
         case Jason.decode(body) do
           {:ok, %{"subsonic-response" => %{"status" => "ok"}}} ->
             {:ok, "Connection successful"}
-            
+
           _ ->
             {:error, "Invalid response"}
         end
 
       {:ok, %{status_code: 401}} ->
         {:error, "Invalid credentials"}
-        
+
       {:ok, %{status_code: code}} ->
         {:error, "HTTP #{code}"}
-        
+
       {:error, %HTTPoison.Error{reason: reason}} ->
         {:error, "Connection failed: #{reason}"}
     end
@@ -367,10 +367,10 @@ defmodule AppApi.NavidromeIntegration do
 
   defp parse_search_response(body, artist, track) do
     case Jason.decode(body) do
-      {:ok, %{"subsonic-response" => %{"searchResult3" => %{"song" => songs}}}} 
+      {:ok, %{"subsonic-response" => %{"searchResult3" => %{"song" => songs}}}}
         when is_list(songs) and length(songs) > 0 ->
-        
-        matched_song = 
+
+        matched_song =
           Enum.find(songs, fn song ->
             String.downcase(song["artist"] || "") == String.downcase(artist) and
             String.downcase(song["title"] || "") == String.downcase(track)
@@ -401,7 +401,7 @@ defmodule AppApi.NavidromeIntegration do
       "bitrate" => song["bitRate"],
       "path" => song["path"]
     }
-    
+
     {:ok, metadata}
   end
 
@@ -416,15 +416,25 @@ defmodule AppApi.NavidromeIntegration do
 
   defp update_listen_with_navidrome_data(listen, navidrome_data) do
     genres = navidrome_data["genres"]
-    
+
     if genres && length(genres) > 0 do
       current_metadata = parse_metadata(listen.metadata)
-      new_metadata = Map.merge(current_metadata, %{
-        "genres" => genres,
-        "source" => "navidrome_id3"
-      })
 
-      changeset = 
+      # Merge selected Navidrome fields into metadata (only when present)
+      extra = %{}
+      |> maybe_put(navidrome_data, "genres", genres)
+      |> maybe_put(navidrome_data, "year", navidrome_data["year"])
+      |> maybe_put(navidrome_data, "album", navidrome_data["album"])
+      |> maybe_put(navidrome_data, "duration_ms", navidrome_data["duration_ms"])
+      |> maybe_put(navidrome_data, "tracknumber", navidrome_data["tracknumber"])
+      |> maybe_put(navidrome_data, "discnumber", navidrome_data["discnumber"])
+      |> maybe_put(navidrome_data, "bitrate", navidrome_data["bitrate"])
+      |> maybe_put(navidrome_data, "path", navidrome_data["path"])
+      |> Map.put("source", "navidrome_id3")
+
+      new_metadata = Map.merge(current_metadata, extra)
+
+      changeset =
         listen
         |> Ecto.Changeset.change(%{
           metadata: Jason.encode!(new_metadata),
@@ -436,6 +446,18 @@ defmodule AppApi.NavidromeIntegration do
       case Repo.update(changeset) do
         {:ok, updated_listen} ->
           Logger.info("✅ Enriched listen #{listen.id} from Navidrome ID3: #{inspect(genres)}")
+
+          # Notify connected clients that this listen was enriched
+          try do
+            AppApiWeb.Endpoint.broadcast!("scrobbles:#{listen.user_name}", "listen_enriched", %{
+              listen_id: updated_listen.id,
+              track_name: updated_listen.track_name,
+              artist_name: updated_listen.artist_name
+            })
+          rescue
+            _ -> Logger.debug("Navidrome broadcast failed or endpoint not available")
+          end
+
           {:ok, updated_listen}
 
         {:error, changeset} ->
@@ -453,5 +475,12 @@ defmodule AppApi.NavidromeIntegration do
       {:ok, map} -> map
       _ -> %{}
     end
+  end
+
+  # Helper: put key/value into acc only when value is present (non-nil)
+  defp maybe_put(acc, _source_map, _key, nil), do: acc
+
+  defp maybe_put(acc, _source_map, key, value) do
+    Map.put(acc, key, value)
   end
 end

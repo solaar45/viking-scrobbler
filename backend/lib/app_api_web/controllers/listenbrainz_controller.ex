@@ -362,29 +362,30 @@ defmodule AppApiWeb.ListenBrainzController do
       {count, _} when count > 0 ->
         Logger.info("Inserted #{count} listens for user #{user_name}")
 
-        # 🆕 GENRE ENRICHMENT PIPELINE (Background Task)
-        Task.start(fn ->
+        # 🆕 GENRE ENRICHMENT: Try Navidrome synchronously so broadcasts include ID3 metadata.
+        # Heavy MusicBrainz lookup runs asynchronously as a fallback.
+        listens_to_process =
           Listen
           |> where([l], l.user_name == ^user_name)
           |> order_by([l], desc: l.listened_at)
           |> limit(^count)
           |> Repo.all()
-          |> Enum.each(fn listen ->
-            # Step 1: Try Navidrome ID3 Tags
-            case AppApi.NavidromeIntegration.enrich_listen_from_navidrome(listen) do
-              {:ok, _} ->
-                Logger.info("✅ Genre from Navidrome ID3 for: #{listen.track_name}")
-                :ok
 
-              {:error, _reason} ->
-                # Step 2: Fallback to MusicBrainz
-                Logger.info("⚠️ Navidrome failed, trying MusicBrainz for: #{listen.track_name}")
+        Enum.each(listens_to_process, fn listen ->
+          case AppApi.NavidromeIntegration.enrich_listen_from_navidrome(listen) do
+            {:ok, _updated} ->
+              Logger.info("✅ Genre from Navidrome ID3 for: #{listen.track_name}")
+
+            {:error, _reason} ->
+              Logger.info("⚠️ Navidrome ID3 missing, scheduling MusicBrainz for: #{listen.track_name}")
+              Task.start(fn ->
+                # fallback to MusicBrainz in background
                 AppApi.GenreEnrichment.enrich_listen(listen)
-            end
+              end)
+          end
 
-            # Rate limiting
-            :timer.sleep(200)
-          end)
+          # small delay to avoid hammering Navidrome if local
+          :timer.sleep(150)
         end)
 
         # 🚀 BROADCAST NEW SCROBBLE
@@ -492,8 +493,8 @@ defmodule AppApiWeb.ListenBrainzController do
 
     # Releasejahr – Priorität:
     # 1) ID3/Navidrome: metadata["year"]
-    # 2) MusicBrainz: metadata["mb_release_year"]
-    # 3) Fallback: nil
+    # 2) MusicBrainz: metadata["mb_release_year"] or metadata["release_year"]
+    # 3) Fallback: base_info["release_year"]
     release_year =
       cond do
         is_integer(metadata["year"]) ->
@@ -507,6 +508,12 @@ defmodule AppApiWeb.ListenBrainzController do
 
         is_binary(metadata["mb_release_year"]) and String.length(metadata["mb_release_year"]) >= 4 ->
           String.slice(metadata["mb_release_year"], 0, 4)
+
+        is_integer(metadata["release_year"]) ->
+          metadata["release_year"]
+
+        is_binary(metadata["release_year"]) and String.length(metadata["release_year"]) >= 4 ->
+          String.slice(metadata["release_year"], 0, 4)
 
         true ->
           base_info["release_year"] || nil

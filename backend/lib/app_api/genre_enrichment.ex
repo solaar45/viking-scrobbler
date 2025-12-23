@@ -177,6 +177,17 @@ defmodule AppApi.GenreEnrichment do
           "✅ Enriched listen #{listen.id} from #{source}: #{inspect(genres)} (year: #{inspect(mb_year)})"
         )
 
+        # Broadcast update so connected clients can refresh their recent-listens
+        try do
+          AppApiWeb.Endpoint.broadcast!("scrobbles:#{listen.user_name}", "listen_enriched", %{
+            listen_id: updated_listen.id,
+            track_name: updated_listen.track_name,
+            artist_name: updated_listen.artist_name
+          })
+        rescue
+          _ -> Logger.debug("Broadcast failed or endpoint not available")
+        end
+
         {:ok, updated_listen}
 
       {:error, _} ->
