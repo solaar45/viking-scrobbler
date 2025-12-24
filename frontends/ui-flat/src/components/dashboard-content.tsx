@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useMemo, useRef } from "react"
 import { TooltipProvider } from "@/components/ui/tooltip"
-import { TrendingUp, Activity, RefreshCw, ChevronDown} from "lucide-react"
+import { Activity, RefreshCw, ChevronDown, TrendingUp, TrendingDown } from "lucide-react"
 import { DashboardSkeleton } from "./DashboardSkeleton"
 
 // --- TYPES ---
@@ -26,7 +26,7 @@ export interface RecentListen {
   album: string
   playedAt: string
   duration: number
-  releaseYear?: string | number  // Year statt device
+  releaseYear?: string | number
   genres?: string
 }
 
@@ -48,6 +48,114 @@ const PERIODS = [
   { id: "all_time", label: "All Time", days: null },
 ]
 
+type TrendInfo = {
+  value?: number
+  label: string
+}
+
+function getTrendLabel(period: string): string {
+  const item = PERIODS.find((p) => p.id === period)
+  if (!item) return "last period"
+
+  switch (item.id) {
+    case "week":
+      return "last week"
+    case "month":
+      return "last month"
+    case "year":
+      return "last year"
+    case "all_time":
+      return "lifetime"
+    default:
+      return "last period"
+  }
+}
+
+// Simple Dummy-Trend: vergleicht filtered mit lifetime
+function calculateTrend(current?: number, lifetime?: number): number | undefined {
+  if (
+    current === undefined ||
+    lifetime === undefined ||
+    lifetime === 0
+  ) {
+    return undefined
+  }
+  const diff = current - lifetime
+  return (diff / lifetime) * 100
+}
+
+// --- METRIC CARD ---
+type MetricSegmentProps = {
+  label: string
+  value?: number
+  valueStr?: string | null
+  unit?: string
+  loading?: boolean
+  trend?: TrendInfo
+}
+
+function MetricSegment({
+  label,
+  value,
+  valueStr,
+  unit,
+  loading,
+  trend,
+}: MetricSegmentProps) {
+  const displayValue =
+    valueStr ?? (typeof value === "number" ? value.toLocaleString() : "0")
+
+  const trendValue = trend?.value
+  const trendLabel = trend?.label ?? "last period"
+  const trendPositive = trendValue !== undefined && trendValue > 0
+  const trendNegative = trendValue !== undefined && trendValue < 0
+
+  return (
+    <div className="bg-viking-bg-secondary hover:bg-viking-bg-tertiary/50 rounded-lg px-5 py-4 min-h-[110px] transition-colors duration-200 cursor-default border border-viking-border-subtle/50">
+
+      {/* Zeile 1: Titel */}
+      <div className="text-lg text-viking-text-secondary mb-3">{label}</div>
+
+      {/* Zeile 2: Wert */}
+      <div className="flex items-baseline gap-1.5 mb-1.5">
+        <span className="font-mono text-4xl font-semibold text-white leading-none">
+          {loading ? "..." : displayValue}
+        </span>
+        {unit && (
+          <span className="font-mono text-base font-semibold text-viking-text-tertiary">
+            {unit}
+          </span>
+        )}
+      </div>
+
+      {/* Zeile 3: Trend */}
+      {trendValue !== undefined && (
+        <div className="flex items-center gap-1.5 text-[11px]">
+          {trendPositive && (
+            <TrendingUp className="w-3 h-3 text-emerald-500" strokeWidth={2.5} />
+          )}
+          {trendNegative && (
+            <TrendingDown className="w-3 h-3 text-red-500" strokeWidth={2.5} />
+          )}
+          <span
+            className={`font-semibold ${trendPositive
+              ? "text-emerald-500"
+              : trendNegative
+                ? "text-red-500"
+                : "text-viking-text-tertiary"
+              }`}
+          >
+            {trendPositive ? "+" : ""}
+            {trendValue.toFixed(1)}%
+          </span>
+          <span className="text-viking-text-tertiary">from {trendLabel}</span>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// --- MAIN COMPONENT ---
 export default function DashboardContent() {
   const [period, setPeriod] = useState<string>("all_time")
   const [data, setData] = useState<DashboardStats | null>(null)
@@ -92,7 +200,7 @@ export default function DashboardContent() {
     socket.onmessage = (event) => {
       const message = JSON.parse(event.data)
       console.log("📨 WebSocket message:", message)
-      
+
       if (message.event === "new_scrobble") {
         console.log("🎵 New scrobble detected!", message.payload)
         fetchStatsComplete()
@@ -111,7 +219,6 @@ export default function DashboardContent() {
 
     socketRef.current = socket
 
-    // 🎯 Listen for datetime format changes
     const handleFormatChange = () => {
       console.log("📅 DateTime format changed, forcing re-render")
       setData((prev) => (prev ? { ...prev } : null))
@@ -149,29 +256,24 @@ export default function DashboardContent() {
       )
       const recentJson = await recentResponse.json()
 
-      const recentListens = (recentJson.payload?.listens || []).map((listen: any) => ({
-        id: listen.listened_at?.toString() || Math.random().toString(),
-        track: listen.track_name || "Unknown Track",
-        artist: listen.artist_name || "Unknown Artist",
-        album: listen.release_name || "Unknown Album",
-        playedAt: listen.listened_at
-          ? new Date(listen.listened_at * 1000).toISOString()
-          : new Date().toISOString(),
-
-        // ✅ Duration: direkt aus additional_info.duration_ms
-        duration: Math.floor(
-          (listen.additional_info?.duration_ms ??
-            listen.additional_info?.extended?.duration_ms ??
-            0) / 1000
-        ),
-
-        // ✅ Releasejahr: vom Backend geliefert (ID3 → MB-Fallback)
-        releaseYear: listen.additional_info?.release_year ?? undefined,
-
-        // ✅ Genre: String aus additional_info.genres
-        genres: listen.additional_info?.genres || "–",
-      }))
-
+      const recentListens = (recentJson.payload?.listens || []).map(
+        (listen: any) => ({
+          id: listen.listened_at?.toString() || Math.random().toString(),
+          track: listen.track_name || "Unknown Track",
+          artist: listen.artist_name || "Unknown Artist",
+          album: listen.release_name || "Unknown Album",
+          playedAt: listen.listened_at
+            ? new Date(listen.listened_at * 1000).toISOString()
+            : new Date().toISOString(),
+          duration: Math.floor(
+            (listen.additional_info?.duration_ms ??
+              listen.additional_info?.extended?.duration_ms ??
+              0) / 1000
+          ),
+          releaseYear: listen.additional_info?.release_year ?? undefined,
+          genres: listen.additional_info?.genres || "–",
+        })
+      )
 
       const dashboardData: DashboardStats = {
         filtered: {
@@ -192,7 +294,8 @@ export default function DashboardContent() {
           uniqueTracks: lifetimeTotals.unique_tracks || 0,
           uniqueAlbums: lifetimeTotals.unique_albums || 0,
           mostActiveDay: lifetimeTotals.most_active_day || null,
-          tracksOnMostActiveDay: lifetimeTotals.tracks_on_most_active_day || 0,
+          tracksOnMostActiveDay:
+            lifetimeTotals.tracks_on_most_active_day || 0,
           avgPerDay: lifetimeTotals.avg_per_day || 0,
           peakDay: lifetimeTotals.peak_day || null,
           peakValue: lifetimeTotals.peak_value || 0,
@@ -215,8 +318,28 @@ export default function DashboardContent() {
   }
 
   const filtered = data?.filtered
-  const lifetime = data?.lifetime
   const allRecent = data?.recent ?? []
+
+  const lifetime = data?.lifetime
+  const trendLabel = getTrendLabel(period)
+
+  const rawBestDay = filtered?.peakDay
+
+  const formattedBestDay =
+    rawBestDay && rawBestDay !== ""
+      ? formatDate(rawBestDay)
+      : rawBestDay ?? null
+
+  const trends = {
+    plays: calculateTrend(filtered?.totalScrobbles, lifetime?.totalScrobbles),
+    artists: calculateTrend(filtered?.uniqueArtists, lifetime?.uniqueArtists),
+    songs: calculateTrend(filtered?.uniqueTracks, lifetime?.uniqueTracks),
+    albums: calculateTrend(filtered?.uniqueAlbums, lifetime?.uniqueAlbums),
+    avgPerDay: calculateTrend(filtered?.avgPerDay, lifetime?.avgPerDay),
+    // für Tage / Streak eher Dummy: aktueller vs. lifetime-Max
+    streak: calculateTrend(filtered?.currentStreak, lifetime?.currentStreak),
+  }
+
 
   const filteredRecent = useMemo(() => {
     if (period === "all_time") return allRecent
@@ -244,10 +367,10 @@ export default function DashboardContent() {
         <DashboardSkeleton />
       ) : (
         <div className="flex flex-col gap-6 w-full animate-in fade-in duration-500">
-          {/* STATS CARD */}
-          <div className="card-dense">
-            {/* HEADER */}
-            <div className="card-header-dense">
+          {/* OVERVIEW HEADER + 8×1 METRICS GRID */}
+          <div className="flex flex-col gap-4">
+            {/* HEADER (abgelöst, wie Recent Listens) */}
+            <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <span className="card-title-dense">Overview</span>
                 <span className="text-viking-border-emphasis text-xl font-light">
@@ -256,7 +379,6 @@ export default function DashboardContent() {
                 <span className="text-xs font-semibold text-viking-text-tertiary uppercase tracking-wider">
                   {PERIODS.find((item) => item.id === period)?.label}
                 </span>
-                {/* Live Badge */}
                 {isConnected && (
                   <div className="badge-live">
                     <span className="relative flex h-2 w-2">
@@ -276,11 +398,10 @@ export default function DashboardContent() {
                   <button
                     key={id}
                     onClick={() => setPeriod(id)}
-                    className={`text-xs font-semibold px-4 py-2 rounded-md transition-all uppercase tracking-wide whitespace-nowrap ${
-                      period === id
-                        ? "bg-gradient-to-r from-viking-purple to-viking-purple-dark text-white shadow-lg shadow-viking-purple/20"
-                        : "text-viking-text-tertiary hover:text-viking-text-secondary hover:bg-viking-bg-elevated"
-                    }`}
+                    className={`text-xs font-semibold px-4 py-2 rounded-md transition-all uppercase tracking-wide whitespace-nowrap ${period === id
+                      ? "bg-gradient-to-r from-viking-purple to-viking-purple-dark text-white shadow-lg shadow-viking-purple/20"
+                      : "text-viking-text-tertiary hover:text-viking-text-secondary hover:bg-viking-bg-elevated"
+                      }`}
                   >
                     {label}
                   </button>
@@ -288,95 +409,115 @@ export default function DashboardContent() {
               </div>
             </div>
 
-            {/* METRICS GRID */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 divide-x divide-viking-border-subtle">
+            {/* 8×1 METRICS GRID – freischwebend */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-8 gap-4">
               <MetricSegment
-                label="Scrobbles"
+                label="Plays"
                 value={filtered?.totalScrobbles}
-                context="Total"
-                contextValue={lifetime?.totalScrobbles}
                 loading={loading}
+                trend={
+                  trends.plays !== undefined
+                    ? { value: trends.plays, label: trendLabel }
+                    : undefined
+                }
               />
               <MetricSegment
                 label="Artists"
                 value={filtered?.uniqueArtists}
-                context="Total"
-                contextValue={lifetime?.uniqueArtists}
                 loading={loading}
+                trend={
+                  trends.artists !== undefined
+                    ? { value: trends.artists, label: trendLabel }
+                    : undefined
+                }
               />
               <MetricSegment
-                label="Tracks"
+                label="Songs"
                 value={filtered?.uniqueTracks}
-                context="Total"
-                contextValue={lifetime?.uniqueTracks}
                 loading={loading}
+                trend={
+                  trends.songs !== undefined
+                    ? { value: trends.songs, label: trendLabel }
+                    : undefined
+                }
               />
               <MetricSegment
                 label="Albums"
                 value={filtered?.uniqueAlbums}
-                context="Total"
-                contextValue={lifetime?.uniqueAlbums}
                 loading={loading}
+                trend={
+                  trends.albums !== undefined
+                    ? { value: trends.albums, label: trendLabel }
+                    : undefined
+                }
               />
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 divide-x divide-viking-border-subtle border-t border-viking-border-subtle">
               <MetricSegment
-                label="Avg / Day"
+                label="Daily Avg"
                 value={filtered?.avgPerDay}
                 unit="t"
-                context="Life Avg"
-                contextValue={lifetime?.avgPerDay}
                 loading={loading}
+                trend={
+                  trends.avgPerDay !== undefined
+                    ? { value: trends.avgPerDay, label: trendLabel }
+                    : undefined
+                }
               />
               <MetricSegment
-                label="Most Active"
+                label="Top Day"
                 valueStr={filtered?.mostActiveDay}
-                context="Life Active"
-                contextStr={lifetime?.mostActiveDay}
                 loading={loading}
-                smallValue
+              // kein sinnvoller %-Trend, daher ohne 3. Zeile
               />
               <MetricSegment
-                label="Peak Day"
-                valueStr={filtered?.peakDay}
-                context="Max"
-                contextValue={lifetime?.peakValue}
+                label="Best Day"
+                valueStr={formattedBestDay}
                 loading={loading}
-                smallValue
               />
+
               <MetricSegment
                 label="Streak"
                 value={filtered?.currentStreak}
                 unit="d"
-                trend="🔥"
-                context="Longest"
-                contextValue={lifetime?.currentStreak}
                 loading={loading}
+                trend={
+                  trends.streak !== undefined
+                    ? { value: trends.streak, label: trendLabel }
+                    : undefined
+                }
               />
             </div>
+
           </div>
 
-          {/* RECENT LISTENS TABLE */}
-          <div className="card-dense flex-1 min-h-[500px]">
-            <div className="card-header-dense">
-              <div className="flex items-center gap-3">
-                <h3 className="card-title-dense">Recent Listens</h3>
-                <div className="badge-live">
-                  <span className="relative flex h-2 w-2">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-                  </span>
-                  <span className="text-[10px] font-bold tracking-widest">
-                    LIVE
-                  </span>
-                </div>
+          {/* RECENT LISTENS HEADER – freischwebend, wie Overview */}
+          <div className="flex items-center justify-between">
+            {/* Linke Seite: Titel + Period + LIVE */}
+            <div className="flex items-center gap-3">
+              <h3 className="card-title-dense">Recent Listens</h3>
+              <span className="text-viking-border-emphasis text-xl font-light">|</span>
+              {/* Period Label wie bei Overview */}
+              <span className="text-xs font-semibold text-viking-text-tertiary uppercase tracking-wider">
+                {PERIODS.find((item) => item.id === period)?.label}
+              </span>
+              {/* Live Badge */}
+              <div className="badge-live">
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                </span>
+                <span className="text-[10px] font-bold tracking-widest">LIVE</span>
               </div>
-
-              <div className="text-xs font-semibold text-viking-text-tertiary uppercase tracking-wider">
+            </div>
+            {/* Rechte Seite: Showing X of Y */}
+            <div className="flex items-center gap-3">
+              <div className="text-xs font-semibold text-viking-text-tertiary uppercase tracking-wider text-right">
                 Showing {visibleRecent.length} of {filteredRecent.length} tracks
               </div>
             </div>
+          </div>
 
+          {/* RECENT LISTENS TABLE – Card nur für Tabelle */}
+          <div className="card-dense flex-1 min-h-[500px]">
             <div className="flex-1 overflow-auto relative">
               {filteredRecent.length === 0 ? (
                 <div className="absolute inset-0 flex flex-col items-center justify-center gap-6">
@@ -480,76 +621,10 @@ export default function DashboardContent() {
               )}
             </div>
           </div>
+
         </div>
       )}
     </TooltipProvider>
-  )
-}
-
-// --- MetricSegment ---
-type MetricSegmentProps = {
-  label: string
-  value?: number
-  valueStr?: string | null
-  unit?: string
-  trend?: string
-  context: string
-  contextValue?: number
-  contextStr?: string | null
-  loading?: boolean
-  smallValue?: boolean
-}
-
-function MetricSegment({
-  label,
-  value,
-  valueStr,
-  unit,
-  trend,
-  context,
-  contextValue,
-  contextStr,
-  loading,
-  smallValue,
-}: MetricSegmentProps) {
-  const displayValue =
-    valueStr ?? (typeof value === "number" ? value.toLocaleString() : "0")
-  const displayContext =
-    contextStr ??
-    (typeof contextValue === "number" ? contextValue.toLocaleString() : "0")
-
-  return (
-    <div className="h-36 px-5 py-4 flex flex-col justify-between hover:bg-viking-bg-tertiary/30 transition-colors duration-200 group cursor-default">
-      <div className="flex items-center justify-between h-5">
-        <div className="metric-label">{label}</div>
-        {trend && (
-          <span className="flex items-center gap-1 text-xs font-bold text-viking-pink bg-viking-pink/10 px-2 py-0.5 rounded border border-viking-pink/30">
-            <TrendingUp className="w-3 h-3" strokeWidth={2.5} />
-            {trend}
-          </span>
-        )}
-      </div>
-
-      <div className="flex items-baseline gap-1 my-auto">
-        <span className={`metric-value ${smallValue ? "text-4xl" : ""}`}>
-          {loading ? "..." : displayValue}
-        </span>
-        {unit && (
-          <span className="text-base font-semibold text-viking-text-tertiary self-end mb-1 ml-0.5">
-            {unit}
-          </span>
-        )}
-      </div>
-
-      <div className="metric-sub justify-between border-t border-transparent group-hover:border-viking-border-subtle pt-2 transition-colors">
-        <span className="uppercase text-[10px] tracking-wider text-viking-text-tertiary">
-          {context}
-        </span>
-        <span className="font-mono font-semibold metric-label-accent">
-          {loading ? "-" : displayContext}
-        </span>
-      </div>
-    </div>
   )
 }
 
@@ -571,9 +646,12 @@ function getDateTimeFormats(): DateTimeFormats {
 
 function formatDate(iso: string) {
   if (!iso) return "-"
+  const d = new Date(iso)
+
+  // Wenn Datum ungültig → früh raus
+  if (isNaN(d.getTime())) return String(iso)
 
   const formats = getDateTimeFormats()
-  const d = new Date(iso)
   const day = String(d.getDate()).padStart(2, "0")
   const month = String(d.getMonth() + 1).padStart(2, "0")
   const year = d.getFullYear()
@@ -590,7 +668,6 @@ function formatDate(iso: string) {
 
 function formatTime(iso: string) {
   if (!iso) return "-"
-
   const formats = getDateTimeFormats()
   const d = new Date(iso)
   const hours24 = d.getHours()

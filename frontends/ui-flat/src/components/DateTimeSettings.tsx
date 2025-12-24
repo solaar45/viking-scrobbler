@@ -63,20 +63,20 @@ export function DateTimeSettings() {
   }
 
   const formatPreviewDate = () => {
-  const d = previewDate
-  const day = String(d.getDate()).padStart(2, '0')
-  const month = String(d.getMonth() + 1).padStart(2, '0')
-  const year = d.getFullYear()
-  const monthName = d.toLocaleString('en', { month: 'short' })
+    const d = previewDate
+    const day = String(d.getDate()).padStart(2, '0')
+    const month = String(d.getMonth() + 1).padStart(2, '0')
+    const year = d.getFullYear()
+    const monthName = d.toLocaleString('en', { month: 'short' })
 
-  // 🎯 FIX: MMM ZUERST ersetzen, dann MM!
-  return dateFormat
-    .replace('MMM', monthName)  // FIRST: Dec
-    .replace('DD', day)
-    .replace('MM', month)       // THEN: 12
-    .replace('YYYY', String(year))
-    .replace('YY', String(year).slice(-2))
-}
+    // 🎯 FIX: MMM ZUERST ersetzen, dann MM!
+    return dateFormat
+      .replace('MMM', monthName)  // FIRST: Dec
+      .replace('DD', day)
+      .replace('MM', month)       // THEN: 12
+      .replace('YYYY', String(year))
+      .replace('YY', String(year).slice(-2))
+  }
 
   const formatPreviewTime = () => {
     const d = previewDate
@@ -95,63 +95,72 @@ export function DateTimeSettings() {
   }
 
   return (
-    <div className="card-dense">
-      <div className="card-header-dense">
-        <span className="card-title-dense">Date & Time Format</span>
+    <>
+      {/* HEADER – freischwebend, wie Overview */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <span className="card-title-dense">Date & Time Format</span>
+        </div>
       </div>
 
-      <div className="p-6 space-y-6">
-        {/* Date Format */}
-        <div className="space-y-3">
-          <label className="metric-label flex items-center gap-2">
-            <Calendar className="w-4 h-4" />
-            Date Format
-          </label>
-          <select
-            value={dateFormat}
-            onChange={(e) => handleDateFormatChange(e.target.value)}
-            className="w-full border rounded-lg px-4 py-3 text-sm bg-card text-foreground border-border focus:outline-none focus:ring-2 focus:ring-primary cursor-pointer"
-          >
-            {DATE_FORMATS.map((format) => (
-              <option key={format.id} value={format.id}>
-                {format.region} {format.label} — {format.example}
-              </option>
-            ))}
-          </select>
-        </div>
+      {/* CARD: Format-Selektoren */}
+      <div className="card-dense">
+        <div className="p-6 space-y-6">
+          {/* Date Format */}
+          <div className="space-y-3">
+            <label className="metric-label flex items-center gap-2">
+              <Calendar className="w-4 h-4" />
+              Date Format
+            </label>
+            <select
+              value={dateFormat}
+              onChange={(e) => handleDateFormatChange(e.target.value)}
+              className="w-full border rounded-lg px-4 py-3 text-sm bg-card text-foreground border-border focus:outline-none focus:ring-2 focus:ring-primary cursor-pointer"
+            >
+              {DATE_FORMATS.map((format) => (
+                <option key={format.id} value={format.id}>
+                  {format.region} {format.label} — {format.example}
+                </option>
+              ))}
+            </select>
+          </div>
 
-        {/* Time Format */}
-        <div className="space-y-3">
-          <label className="metric-label flex items-center gap-2">
-            <Clock className="w-4 h-4" />
-            Time Format
-          </label>
-          <select
-            value={timeFormat}
-            onChange={(e) => handleTimeFormatChange(e.target.value)}
-            className="w-full border rounded-lg px-4 py-3 text-sm bg-card text-foreground border-border focus:outline-none focus:ring-2 focus:ring-primary cursor-pointer"
-          >
-            {TIME_FORMATS.map((format) => (
-              <option key={format.id} value={format.id}>
-                {format.region} {format.label} — {format.example}
-              </option>
-            ))}
-          </select>
-        </div>
+          {/* Time Format */}
+          <div className="space-y-3">
+            <label className="metric-label flex items-center gap-2">
+              <Clock className="w-4 h-4" />
+              Time Format
+            </label>
+            <select
+              value={timeFormat}
+              onChange={(e) => handleTimeFormatChange(e.target.value)}
+              className="w-full border rounded-lg px-4 py-3 text-sm bg-card text-foreground border-border focus:outline-none focus:ring-2 focus:ring-primary cursor-pointer"
+            >
+              {TIME_FORMATS.map((format) => (
+                <option key={format.id} value={format.id}>
+                  {format.region} {format.label} — {format.example}
+                </option>
+              ))}
+            </select>
+          </div>
 
-        {/* Live Preview */}
-        <div className="pt-4 border-t border-border">
-          <label className="metric-label block mb-2">Live Preview</label>
-          <div className="border rounded-lg px-6 py-4 text-center bg-popover border-primary/30">
-            <div className="text-2xl font-semibold font-mono text-foreground">
-              {formatPreviewDate()} <span className="text-muted mx-2">•</span> {formatPreviewTime()}
+          {/* Live Preview – als Info-Box in der Card */}
+          <div className="pt-4 border-t border-border">
+            <label className="metric-label block mb-2">Live Preview</label>
+            <div className="border rounded-lg px-6 py-4 text-center bg-popover border-primary/30">
+              <div className="text-2xl font-semibold font-mono text-white">
+                {formatPreviewDate()}{" "}
+                <span className="text-white mx-2">•</span>{" "}
+                {formatPreviewTime()}
+              </div>
+              <p className="text-xs text-white mt-2">
+                This format will be used across all tables and displays
+              </p>
+
             </div>
-            <p className="text-xs text-muted mt-2">
-              This format will be used across all tables and displays
-            </p>
           </div>
         </div>
       </div>
-    </div>
+    </>
   )
 }

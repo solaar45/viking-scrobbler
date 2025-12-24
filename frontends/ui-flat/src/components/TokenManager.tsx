@@ -173,17 +173,27 @@ export function TokenManager() {
   };
 
   return (
-    <div className="card-dense">
-      {/* HEADER */}
-      <div className="card-header-dense">
+  <>
+    {/* HEADER – freischwebend, wie Overview */}
+    <div className="flex items-center justify-between">
+      <div className="flex items-center gap-3">
         <h2 className="card-title-dense">API Token Management</h2>
+        <span className="text-viking-border-emphasis text-xl font-light">|</span>
+        <span className="text-xs font-semibold text-viking-text-tertiary uppercase tracking-wider">
+          Manage personal API tokens for external services
+        </span>
       </div>
+    </div>
 
+    {/* CARD – gesamter Inhalt */}
+    <div className="card-dense">
       {/* CONTENT */}
       <div className="p-6 space-y-6">
         {/* GENERATE NEW TOKEN */}
         <div className="p-5 bg-viking-bg-tertiary rounded-lg border border-viking-border-default">
-          <h3 className="text-base font-semibold text-viking-text-primary mb-4">Generate New Token</h3>
+          <h3 className="text-base font-semibold text-viking-text-primary mb-4">
+            Generate New Token
+          </h3>
           <div className="flex gap-3">
             <input
               type="text"
@@ -192,8 +202,8 @@ export function TokenManager() {
               placeholder="Token description (e.g., Navidrome, Mobile App)"
               className="flex-1 px-4 py-2.5 bg-viking-bg-secondary border border-viking-border-default rounded-lg text-sm text-viking-text-primary placeholder:text-viking-text-tertiary focus:outline-none focus:ring-2 focus:ring-viking-purple/50 focus:border-viking-purple transition-all"
             />
-            <button 
-              onClick={generateToken} 
+            <button
+              onClick={generateToken}
               className="px-6 py-2.5 bg-gradient-to-r from-viking-purple to-viking-purple-dark hover:from-viking-purple-dark hover:to-viking-purple text-white rounded-lg text-sm font-semibold uppercase tracking-wide shadow-lg shadow-viking-purple/20 hover:shadow-xl hover:shadow-viking-purple/30 transition-all"
             >
               Generate Token
@@ -208,21 +218,21 @@ export function TokenManager() {
               <span className="text-lg">✅</span> Token Generated Successfully!
             </p>
             <p className="text-sm text-viking-text-secondary mb-4">
-              Copy this token now. You won't be able to see it again.
+              Copy this token now. You won&apos;t be able to see it again.
             </p>
             <div className="flex gap-2">
               <code className="flex-1 bg-viking-bg-secondary px-4 py-3 rounded-lg font-mono text-sm break-all select-all text-viking-text-primary border border-viking-border-default">
                 {newToken.token}
               </code>
-              <button 
-                onClick={() => copyToken(newToken.token, newToken.id)} 
+              <button
+                onClick={() => copyToken(newToken.token, newToken.id)}
                 className="px-5 py-3 bg-viking-emerald hover:bg-viking-emerald-dark text-white rounded-lg text-sm font-semibold transition-all shadow-lg shadow-viking-emerald/20"
               >
                 {copiedId === newToken.id ? "✓ Copied!" : "Copy"}
               </button>
             </div>
-            <button 
-              onClick={() => setNewToken(null)} 
+            <button
+              onClick={() => setNewToken(null)}
               className="mt-3 text-sm text-viking-text-tertiary hover:text-viking-text-secondary transition-colors"
             >
               Dismiss
@@ -247,29 +257,31 @@ export function TokenManager() {
           ) : (
             <div className="space-y-3">
               {tokens.map((token) => (
-                <div 
-                  key={token.id} 
+                <div
+                  key={token.id}
                   className="bg-viking-bg-tertiary rounded-lg p-5 border border-viking-border-default hover:border-viking-border-emphasis transition-colors"
                 >
                   <div className="flex items-start justify-between mb-4">
                     <div className="flex-1 min-w-0">
                       {editingId === token.id ? (
                         <div className="flex gap-2 mb-3">
-                          <input 
-                            type="text" 
-                            value={editDescription} 
-                            onChange={(e) => setEditDescription(e.target.value)} 
-                            className="flex-1 px-3 py-2 bg-viking-bg-secondary border border-viking-border-default rounded text-sm text-viking-text-primary focus:outline-none focus:ring-2 focus:ring-viking-purple/50" 
-                            autoFocus 
+                          <input
+                            type="text"
+                            value={editDescription}
+                            onChange={(e) =>
+                              setEditDescription(e.target.value)
+                            }
+                            className="flex-1 px-3 py-2 bg-viking-bg-secondary border border-viking-border-default rounded text-sm text-viking-text-primary focus:outline-none focus:ring-2 focus:ring-viking-purple/50"
+                            autoFocus
                           />
-                          <button 
-                            onClick={() => updateToken(token.id)} 
+                          <button
+                            onClick={() => updateToken(token.id)}
                             className="px-4 py-2 bg-viking-purple hover:bg-viking-purple-dark text-white rounded text-sm font-semibold transition-all"
                           >
                             Save
                           </button>
-                          <button 
-                            onClick={() => setEditingId(null)} 
+                          <button
+                            onClick={() => setEditingId(null)}
                             className="px-4 py-2 border border-viking-border-emphasis rounded text-sm text-viking-text-secondary hover:bg-viking-bg-elevated transition-all"
                           >
                             Cancel
@@ -285,8 +297,8 @@ export function TokenManager() {
                         <code className="flex-1 text-xs font-mono bg-viking-bg-secondary px-3 py-2.5 rounded border border-viking-border-default break-all select-all text-viking-text-secondary">
                           {token.token}
                         </code>
-                        <button 
-                          onClick={() => copyToken(token.token, token.id)} 
+                        <button
+                          onClick={() => copyToken(token.token, token.id)}
                           className="px-4 py-2.5 text-xs bg-viking-purple hover:bg-viking-purple-dark text-white rounded font-semibold transition-all whitespace-nowrap"
                         >
                           {copiedId === token.id ? "✓ Copied!" : "Copy"}
@@ -301,15 +313,18 @@ export function TokenManager() {
 
                     <div className="flex gap-3 ml-4">
                       {editingId !== token.id && (
-                        <button 
-                          onClick={() => { setEditingId(token.id); setEditDescription(token.description); }} 
+                        <button
+                          onClick={() => {
+                            setEditingId(token.id)
+                            setEditDescription(token.description)
+                          }}
                           className="text-sm text-viking-text-secondary hover:text-viking-purple transition-colors font-medium"
                         >
                           Edit
                         </button>
                       )}
-                      <button 
-                        onClick={() => deleteToken(token.id)} 
+                      <button
+                        onClick={() => deleteToken(token.id)}
                         className="text-sm text-red-400 hover:text-red-300 transition-colors font-medium"
                       >
                         Delete
@@ -323,5 +338,6 @@ export function TokenManager() {
         </div>
       </div>
     </div>
-  );
+  </>
+);
 }

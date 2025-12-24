@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Check, X, RefreshCw, Link as LinkIcon } from 'lucide-react'
+import { Check, X, RefreshCw} from 'lucide-react'
 
 interface NavidromeStatus {
   connected: boolean
@@ -77,7 +77,27 @@ export function NavidromeSetup() {
   }
 
   if (status.connected) {
-    return (
+  return (
+    <>
+      {/* HEADER – freischwebend, analog Overview */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <h3 className="card-title-dense">Connect Navidrome</h3>
+          <span className="text-viking-border-emphasis text-xl font-light">|</span>
+          <span className="text-xs font-semibold text-viking-text-tertiary uppercase tracking-wider">
+            Optional – Enables ID3 genre tagging
+          </span>
+        </div>
+
+        <div className="flex items-center gap-2 text-xs text-viking-text-tertiary">
+          <span className="inline-flex items-center gap-1">
+            <span className="h-2 w-2 rounded-full bg-emerald-400"></span>
+            <span className="font-semibold uppercase tracking-wider">Connected</span>
+          </span>
+        </div>
+      </div>
+
+      {/* CARD: Status-Details */}
       <div className="card-dense">
         <div className="card-header-dense">
           <div className="flex items-center gap-2">
@@ -85,61 +105,88 @@ export function NavidromeSetup() {
             <h3 className="card-title-dense">Navidrome Connected</h3>
           </div>
         </div>
-        
+
         <div className="p-6 space-y-4">
           <div className="bg-viking-bg-elevated rounded-lg p-4 border border-viking-border-default">
             <div className="flex items-start justify-between">
               <div className="space-y-2">
                 <div className="flex items-center gap-2">
-                  <span className="text-xs font-semibold text-viking-text-tertiary uppercase">URL</span>
-                  <span className="text-sm font-mono text-viking-text-primary">{status.url}</span>
+                  <span className="text-xs font-semibold text-viking-text-tertiary uppercase">
+                    URL
+                  </span>
+                  <span className="text-sm font-mono text-viking-text-primary">
+                    {status.url}
+                  </span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="text-xs font-semibold text-viking-text-tertiary uppercase">User</span>
-                  <span className="text-sm font-mono text-viking-text-primary">{status.username}</span>
+                  <span className="text-xs font-semibold text-viking-text-tertiary uppercase">
+                    User
+                  </span>
+                  <span className="text-sm font-mono text-viking-text-primary">
+                    {status.username}
+                  </span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="text-xs font-semibold text-viking-text-tertiary uppercase">Source</span>
+                  <span className="text-xs font-semibold text-viking-text-tertiary uppercase">
+                    Source
+                  </span>
                   <span className="text-sm font-semibold text-emerald-400">
-                    {status.source === 'auto' ? '🤖 Auto-Discovered' : '✋ Manually Configured'}
+                    {status.source === "auto"
+                      ? "🤖 Auto-Discovered"
+                      : "✋ Manually Configured"}
                   </span>
                 </div>
               </div>
-              
+
               <button
                 onClick={handleDisconnect}
                 disabled={loading}
                 className="px-4 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-lg text-xs font-bold uppercase transition-colors"
               >
-                {loading ? 'Disconnecting...' : 'Disconnect'}
+                {loading ? "Disconnecting..." : "Disconnect"}
               </button>
             </div>
           </div>
-          
+
           <div className="text-xs text-viking-text-tertiary">
             ✅ Genres are automatically fetched from your ID3 tags
           </div>
         </div>
       </div>
-    )
-  }
+    </>
+  )
+}
+
 
   if (!showSetup) {
-    return (
-      <div className="card-dense">
-        <div className="card-header-dense">
-          <div className="flex items-center gap-2">
-            <LinkIcon className="w-5 h-5 text-viking-text-tertiary" />
-            <h3 className="card-title-dense">Connect Navidrome</h3>
-          </div>
-          <span className="text-xs text-viking-text-tertiary">Optional - Enables ID3 genre tagging</span>
+  return (
+    <>
+      {/* HEADER – freischwebend */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <h3 className="card-title-dense">Connect Navidrome</h3>
+          <span className="text-viking-border-emphasis text-xl font-light">|</span>
+          <span className="text-xs font-semibold text-viking-text-tertiary uppercase tracking-wider">
+            Optional – Enables ID3 genre tagging
+          </span>
         </div>
-        
+
+        <div className="flex items-center gap-2 text-xs text-viking-text-tertiary">
+          <span className="inline-flex items-center gap-1">
+            <span className="h-2 w-2 rounded-full bg-viking-border-subtle"></span>
+            <span className="font-semibold uppercase tracking-wider">Not connected</span>
+          </span>
+        </div>
+      </div>
+
+      {/* CARD: Kurzbeschreibung + Setup Button */}
+      <div className="card-dense">
         <div className="p-6">
           <p className="text-sm text-viking-text-secondary mb-4">
-            Connect your Navidrome instance to automatically fetch genres from your music library's ID3 tags.
+            Connect your Navidrome instance to automatically fetch genres from your music
+            library&apos;s ID3 tags.
           </p>
-          
+
           <button
             onClick={() => setShowSetup(true)}
             className="w-full px-6 py-3 bg-gradient-to-r from-viking-purple to-viking-purple-dark hover:from-viking-purple-dark hover:to-viking-purple text-white rounded-lg font-bold text-sm uppercase tracking-wider transition-all shadow-lg shadow-viking-purple/20"
@@ -148,21 +195,34 @@ export function NavidromeSetup() {
           </button>
         </div>
       </div>
-    )
-  }
+    </>
+  )
+}
+
 
   return (
-    <div className="card-dense">
-      <div className="card-header-dense">
+  <>
+    {/* HEADER – freischwebend */}
+    <div className="flex items-center justify-between">
+      <div className="flex items-center gap-3">
         <h3 className="card-title-dense">Connect Navidrome</h3>
-        <button
-          onClick={() => setShowSetup(false)}
-          className="text-viking-text-tertiary hover:text-viking-text-primary"
-        >
-          <X className="w-5 h-5" />
-        </button>
+        <span className="text-viking-border-emphasis text-xl font-light">|</span>
+        <span className="text-xs font-semibold text-viking-text-tertiary uppercase tracking-wider">
+          Optional – Enables ID3 genre tagging
+        </span>
       </div>
-      
+
+      <button
+        onClick={() => setShowSetup(false)}
+        className="text-viking-text-tertiary hover:text-viking-text-primary flex items-center gap-2 text-xs font-semibold uppercase tracking-wider"
+      >
+        Cancel
+        <X className="w-4 h-4" />
+      </button>
+    </div>
+
+    {/* CARD: Setup-Form */}
+    <div className="card-dense">
       <div className="p-6 space-y-4">
         <div>
           <label className="block text-sm font-medium mb-2">Navidrome URL</label>
@@ -177,7 +237,7 @@ export function NavidromeSetup() {
             The URL where your Navidrome instance is running
           </p>
         </div>
-        
+
         <div>
           <label className="block text-sm font-medium mb-2">Username</label>
           <input
@@ -188,7 +248,7 @@ export function NavidromeSetup() {
             placeholder="your_username"
           />
         </div>
-        
+
         <div>
           <label className="block text-sm font-medium mb-2">Password</label>
           <input
@@ -202,30 +262,36 @@ export function NavidromeSetup() {
             🔒 Password is encrypted and stored securely
           </p>
         </div>
-        
+
         <button
           onClick={handleConnect}
-          disabled={testStatus === 'testing' || !url || !username || !password}
+          disabled={testStatus === "testing" || !url || !username || !password}
           className="w-full px-6 py-3 bg-gradient-to-r from-viking-purple to-viking-purple-dark hover:from-viking-purple-dark hover:to-viking-purple text-white rounded-lg font-bold text-sm uppercase tracking-wider transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
         >
-          {testStatus === 'testing' && <RefreshCw className="w-4 h-4 animate-spin" />}
-          {testStatus === 'testing' ? 'Testing Connection...' : 'Connect'}
+          {testStatus === "testing" && (
+            <RefreshCw className="w-4 h-4 animate-spin" />
+          )}
+          {testStatus === "testing" ? "Testing Connection..." : "Connect"}
         </button>
-        
-        {testStatus === 'success' && (
+
+        {testStatus === "success" && (
           <div className="flex items-center gap-2 text-emerald-400 text-sm bg-emerald-400/10 rounded-lg p-3">
             <Check className="w-5 h-5" />
             <span>✅ Connected! Genres will now be fetched from your ID3 tags.</span>
           </div>
         )}
-        
-        {testStatus === 'error' && (
+
+        {testStatus === "error" && (
           <div className="flex items-center gap-2 text-red-400 text-sm bg-red-400/10 rounded-lg p-3">
             <X className="w-5 h-5" />
-            <span>❌ {errorMessage || 'Connection failed. Check URL and credentials.'}</span>
+            <span>
+              ❌ {errorMessage || "Connection failed. Check URL and credentials."}
+            </span>
           </div>
         )}
       </div>
     </div>
-  )
+  </>
+)
+
 }
