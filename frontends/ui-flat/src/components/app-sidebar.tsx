@@ -13,7 +13,7 @@ import {
 import { 
   Home, 
   Settings, 
-  Music2
+  Webhook
 } from "lucide-react"
 
 const menuItems = [
@@ -32,11 +32,11 @@ export function AppSidebar() {
         <div className="flex items-center gap-3 font-bold text-lg tracking-tight text-viking-text-primary overflow-hidden w-full px-3 transition-all">
           {/* Logo Icon */}
           <div className="p-2 bg-gradient-to-br from-viking-purple to-viking-purple-dark rounded-lg text-white flex-shrink-0 shadow-lg shadow-viking-purple/20">
-             <Music2 className="h-5 w-5" strokeWidth={2} />
+             <Webhook className="h-5 w-5" strokeWidth={2} />
           </div>
           {/* Text (hidden when collapsed) */}
           <span className="group-data-[collapsible=icon]:hidden truncate font-semibold">
-            Scrobbler
+            Viking
           </span>
         </div>
       </SidebarHeader>

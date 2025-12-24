@@ -7,18 +7,18 @@ interface DateTimeFormats {
 }
 
 const DATE_FORMATS = [
-  { id: 'DD.MM.YYYY', label: 'DD.MM.YYYY', example: '23.12.2024', region: '🇩🇪 Europe' },
-  { id: 'DD/MM/YYYY', label: 'DD/MM/YYYY', example: '23/12/2024', region: '🇬🇧 UK' },
-  { id: 'MM/DD/YYYY', label: 'MM/DD/YYYY', example: '12/23/2024', region: '🇺🇸 US' },
-  { id: 'YYYY-MM-DD', label: 'YYYY-MM-DD', example: '2024-12-23', region: '🌐 ISO' },
-  { id: 'DD MMM YYYY', label: 'DD MMM YYYY', example: '23 Dec 2024', region: '🌍 Int' },
+  { id: 'DD.MM.YYYY', label: 'DD.MM.YYYY', example: '23.12.2024' },
+  { id: 'DD/MM/YYYY', label: 'DD/MM/YYYY', example: '23/12/2024' },
+  { id: 'MM/DD/YYYY', label: 'MM/DD/YYYY', example: '12/23/2024' },
+  { id: 'YYYY-MM-DD', label: 'YYYY-MM-DD', example: '2024-12-23' },
+  { id: 'DD MMM YYYY', label: 'DD MMM YYYY', example: '23 Dec 2024' },
 ]
 
 const TIME_FORMATS = [
-  { id: 'HH:mm', label: '24-hour', example: '14:30', region: '🇪🇺' },
-  { id: 'HH:mm:ss', label: '24-hour (seconds)', example: '14:30:45', region: '🇪🇺' },
-  { id: 'h:mm a', label: '12-hour', example: '2:30 PM', region: '🇺🇸' },
-  { id: 'h:mm:ss a', label: '12-hour (seconds)', example: '2:30:45 PM', region: '🇺🇸' },
+  { id: 'HH:mm', label: '24-hour', example: '14:30' },
+  { id: 'HH:mm:ss', label: '24-hour (seconds)', example: '14:30:45' },
+  { id: 'h:mm a', label: '12-hour', example: '2:30 PM' },
+  { id: 'h:mm:ss a', label: '12-hour (seconds)', example: '2:30:45 PM' },
 ]
 
 export function DateTimeSettings() {
@@ -69,11 +69,10 @@ export function DateTimeSettings() {
     const year = d.getFullYear()
     const monthName = d.toLocaleString('en', { month: 'short' })
 
-    // 🎯 FIX: MMM ZUERST ersetzen, dann MM!
     return dateFormat
-      .replace('MMM', monthName)  // FIRST: Dec
+      .replace('MMM', monthName)
       .replace('DD', day)
-      .replace('MM', month)       // THEN: 12
+      .replace('MM', month)
       .replace('YYYY', String(year))
       .replace('YY', String(year).slice(-2))
   }
@@ -119,7 +118,7 @@ export function DateTimeSettings() {
             >
               {DATE_FORMATS.map((format) => (
                 <option key={format.id} value={format.id}>
-                  {format.region} {format.label} — {format.example}
+                  {format.label} — {format.example}
                 </option>
               ))}
             </select>
@@ -138,7 +137,7 @@ export function DateTimeSettings() {
             >
               {TIME_FORMATS.map((format) => (
                 <option key={format.id} value={format.id}>
-                  {format.region} {format.label} — {format.example}
+                  {format.label} — {format.example}
                 </option>
               ))}
             </select>
@@ -156,7 +155,6 @@ export function DateTimeSettings() {
               <p className="text-xs text-white mt-2">
                 This format will be used across all tables and displays
               </p>
-
             </div>
           </div>
         </div>

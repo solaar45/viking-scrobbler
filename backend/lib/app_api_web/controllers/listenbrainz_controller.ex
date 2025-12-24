@@ -280,7 +280,7 @@ defmodule AppApiWeb.ListenBrainzController do
     avg_per_day = Stats.avg_per_day(user_name, from_timestamp)
 
     # Peak Day (einzelner Tag mit meisten Scrobbles)
-    {peak_day, peak_value} = Stats.peak_day(user_name, from_timestamp)
+    peak_day_data = Stats.peak_day(user_name, from_timestamp)
 
     # Current Streak (nur für all_time sinnvoll)
     current_streak = if range == "all_time", do: Stats.current_streak(user_name), else: 0
@@ -297,8 +297,9 @@ defmodule AppApiWeb.ListenBrainzController do
         most_active_day: most_active_day,
         tracks_on_most_active_day: tracks_on_most_active,
         avg_per_day: avg_per_day,
-        peak_day: peak_day,
-        peak_value: peak_value,
+        # ISO-String für Frontend
+        peak_day: peak_day_data.date,
+        peak_count: peak_day_data.count,
         current_streak: current_streak,
         range: range,
         user_id: user_name
@@ -377,7 +378,10 @@ defmodule AppApiWeb.ListenBrainzController do
               Logger.info("✅ Genre from Navidrome ID3 for: #{listen.track_name}")
 
             {:error, _reason} ->
-              Logger.info("⚠️ Navidrome ID3 missing, scheduling MusicBrainz for: #{listen.track_name}")
+              Logger.info(
+                "⚠️ Navidrome ID3 missing, scheduling MusicBrainz for: #{listen.track_name}"
+              )
+
               Task.start(fn ->
                 # fallback to MusicBrainz in background
                 AppApi.GenreEnrichment.enrich_listen(listen)

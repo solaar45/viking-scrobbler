@@ -1,6 +1,6 @@
 import { SidebarProvider, SidebarInset, SidebarTrigger } from '@/components/ui/sidebar'
 import { AppSidebar } from '@/components/app-sidebar'
-import DashboardContent from '@/components/dashboard-content'
+import DashboardPage from '@/components/DashboardPage'  // statt DashboardContent
 import SettingsPage from '@/components/SettingsPage'
 import { Separator } from '@/components/ui/separator'
 import { useEffect, useState } from 'react'
@@ -21,7 +21,7 @@ export default function App() {
 
   const renderMain = () => {
     if (path === '/settings') return <SettingsPage />
-    return <DashboardContent />
+    return <DashboardPage />  // statt <DashboardContent />
   }
 
   const title = path === '/settings' ? 'Settings' : 'Dashboard'
