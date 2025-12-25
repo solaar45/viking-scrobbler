@@ -1,19 +1,45 @@
 services:
-  app:
+  viking-scrobbler:
     image: solaar45/viking-scrobbler:latest
     container_name: viking-scrobbler
+    
     environment:
       MIX_ENV: prod
       PHX_SERVER: "true"
-      PHX_HOST: "0.0.0.0"  # ← IPv4 erzwingen
-      PORT: 4000
+      PORT: ${PORT:-4000}
       DATABASE_PATH: /app/data/viking.db
-      SECRET_KEY_BASE: ${SECRET_KEY_BASE:-please_change_this_secret_key_base_to_at_least_64_characters_long_random_string_for_production_use}
+      
+      # 🔐 Security: Generate with `openssl rand -base64 48`
+      SECRET_KEY_BASE: ${SECRET_KEY_BASE:-please_generate_a_secure_key_with_mix_phx_gen_secret_min_64_chars}
+      
+      # 🌐 Optional: Only if you have IPv6 issues
+      PHX_HOST: ${PHX_HOST:-}
+      
+      # 🎵 Optional: Navidrome Auto-Discovery (leave empty for manual setup)
+      NAVIDROME_URL: ${NAVIDROME_URL:-}
+      NAVIDROME_USERNAME: ${NAVIDROME_USERNAME:-}
+      NAVIDROME_PASSWORD: ${NAVIDROME_PASSWORD:-}
+    
     ports:
-      - "0.0.0.0:4000:4000"  # ← Explizit IPv4
+      # Format: HOST:CONTAINER
+      # Use PORT env var or default 4000
+      - "${BIND_IP:-0.0.0.0}:${PORT:-4000}:4000"
+    
     volumes:
-      - viking_data:/app/data
+      # Uses DATA_PATH env var or docker volume
+      - ${DATA_PATH:-viking_data}:/app/data
+    
     restart: unless-stopped
+    
+    # 🏥 Health Check
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:4000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
 
+# Named volume (only used if DATA_PATH not set)
 volumes:
-  viking_data: 
+  viking_data:
+    driver: local
