@@ -2,41 +2,45 @@
 
 A modern music scrobbling service built with Elixir/Phoenix and React. Viking Scrobbler provides a ListenBrainz-compatible API for tracking your listening history with an elegant web dashboard for visualizing your music statistics.
 
-## Table of Contents
+![Docker Pulls](https://img.shields.io/docker/pulls/solaar45/viking-scrobbler)
+![GitHub Stars](https://img.shields.io/github/stars/solaar45/viking-scrobbler)
+![License](https://img.shields.io/github/license/solaar45/viking-scrobbler)
+
+---
+
+## 📋 Table of Contents
 
 - [Features](#features)
 - [Architecture](#architecture)
-- [Prerequisites](#prerequisites)
-- [Installation](#installation)
-  - [Docker Deployment (Recommended)](#docker-deployment-recommended)
-  - [Development Setup](#development-setup)
+- [Quick Start](#quick-start)
+- [Deployment Scenarios](#deployment-scenarios)
+  - [Docker Compose (Recommended)](#1-docker-compose-recommended)
+  - [Unraid](#2-unraid)
+  - [Custom Server](#3-custom-server-production)
+  - [Development Setup](#4-development-setup)
 - [Configuration](#configuration)
-- [Usage](#usage)
-  - [Token Management](#token-management)
-  - [Navidrome Integration](#navidrome-integration)
-  - [API Endpoints](#api-endpoints)
+- [Navidrome Integration](#navidrome-integration)
 - [Dashboard Features](#dashboard-features)
-- [Development](#development)
-  - [Backend Development](#backend-development)
-  - [Frontend Development](#frontend-development)
-  - [Database](#database)
 - [API Documentation](#api-documentation)
 - [Troubleshooting](#troubleshooting)
 - [Contributing](#contributing)
-- [License](#license)
 
-## Features
+---
 
-- ListenBrainz API v1 compatible endpoints
-- Navidrome subsonic scrobbling support
-- Token-based authentication
-- Real-time listening statistics
-- Time-based filtering (Last 7 Days, Last 30 Days, Last 365 Days, All Time)
-- Smart activity grouping (daily, weekly, monthly, yearly)
-- Modern responsive web dashboard
-- SQLite database (no external database required)
-- Docker support for easy deployment
-- Unraid-ready with docker-compose
+## ✨ Features
+
+- 🎵 **ListenBrainz API v1** compatible endpoints
+- 🎼 **Navidrome** subsonic scrobbling support with genre enrichment
+- 🔐 **Token-based authentication** for secure API access
+- 📊 **Real-time statistics** with WebSocket updates
+- 🕒 **Time-based filtering** (Last 7 Days, 30 Days, Year, All Time)
+- 📈 **Smart activity grouping** (daily/weekly/monthly/yearly)
+- 🎨 **Modern responsive dashboard** built with React + Tailwind
+- 💾 **SQLite database** (no external database required)
+- 🐳 **Docker-ready** with multi-stage builds
+- 🖥️ **Unraid-compatible** with simple setup
+
+---
 
 ## Architecture
 
@@ -71,147 +75,368 @@ A modern music scrobbling service built with Elixir/Phoenix and React. Viking Sc
 - Node.js 20+
 - SQLite3
 
-## Installation
+---
 
-### Docker Deployment (Recommended)
+## 🚀 Quick Start
 
-1. Clone the repository:
+**Get Viking Scrobbler running in 60 seconds:**
+
 ```bash
-git clone https://github.com/yourusername/viking-scrobbler.git
+# 1. Pull the image
+docker pull solaar45/viking-scrobbler:latest
+
+# 2. Create a secure secret key
+export SECRET_KEY_BASE=$(openssl rand -base64 48)
+
+# 3. Start the container
+docker run -d \
+  --name viking-scrobbler \
+  -p 4000:4000 \
+  -e SECRET_KEY_BASE="$SECRET_KEY_BASE" \
+  -v viking_data:/app/data \
+  solaar45/viking-scrobbler:latest
+
+# 4. Access the dashboard
+open http://localhost:4000
+```
+
+---
+
+## 📦 Deployment Scenarios
+
+### 1. Docker Compose (Recommended)
+
+**Best for:** Home servers, development, testing
+
+#### Setup
+
+1. **Clone the repository:**
+```bash
+git clone https://github.com/solaar45/viking-scrobbler.git
 cd viking-scrobbler
 ```
 
-2. Create data directory:
+2. **Copy and customize environment variables:**
 ```bash
-mkdir -p data
+cp .env.example .env
+nano .env  # Edit with your settings
 ```
 
-3. Start the containers:
+**Minimal `.env`:**
+```env
+SECRET_KEY_BASE=generate_with_openssl_rand_base64_48
+DATA_PATH=viking_data  # Uses Docker named volume
+```
+
+3. **Start the service:**
 ```bash
 docker-compose up -d
 ```
 
-4. Access the dashboard:
-```
-http://localhost:3000
+4. **Access:**
+- Dashboard: `http://localhost:4000`
+- API: `http://localhost:4000/1/`
+
+#### Stop/Update
+
+```bash
+# Stop
+docker-compose down
+
+# Update to latest version
+docker-compose pull
+docker-compose up -d
 ```
 
-5. Access the API:
-```
-http://localhost:4000
+---
+
+### 2. Unraid
+
+**Best for:** Unraid servers with persistent storage
+
+#### Method A: Docker Compose
+
+1. **Create app directory:**
+```bash
+mkdir -p /mnt/user/appdata/viking-scrobbler
+cd /mnt/user/appdata/viking-scrobbler
 ```
 
-### Development Setup
+2. **Download `docker-compose.yml` and `.env.example`:**
+```bash
+wget https://raw.githubusercontent.com/solaar45/viking-scrobbler/main/docker-compose.yml
+wget https://raw.githubusercontent.com/solaar45/viking-scrobbler/main/.env.example
+```
+
+3. **Create `.env` file:**
+```bash
+cp .env.example .env
+nano .env
+```
+
+**Unraid-specific `.env`:**
+```env
+# Use host path for persistent storage
+DATA_PATH=/mnt/user/appdata/viking-scrobbler/data
+
+# Generate secure key
+SECRET_KEY_BASE=your_64_character_random_string_here
+
+# Optional: Custom port if 4000 is taken
+PORT=4000
+BIND_IP=0.0.0.0
+```
+
+4. **Start container:**
+```bash
+docker-compose up -d
+```
+
+#### Method B: Unraid Template (Coming Soon)
+
+Download `viking-scrobbler.xml` and place in:
+```
+/boot/config/plugins/dockerMan/templates-user/
+```
+
+---
+
+### 3. Custom Server (Production)
+
+**Best for:** VPS, dedicated servers, custom setups
+
+#### Setup
+
+1. **Create directory structure:**
+```bash
+sudo mkdir -p /opt/viking-scrobbler/data
+cd /opt/viking-scrobbler
+```
+
+2. **Create `.env` file:**
+```bash
+cat > .env << EOF
+DATA_PATH=/opt/viking-scrobbler/data
+SECRET_KEY_BASE=$(openssl rand -base64 48)
+PORT=4000
+BIND_IP=0.0.0.0
+EOF
+```
+
+3. **Download `docker-compose.yml`:**
+```bash
+wget https://raw.githubusercontent.com/solaar45/viking-scrobbler/main/docker-compose.yml
+```
+
+4. **Start service:**
+```bash
+docker-compose up -d
+```
+
+#### Reverse Proxy (Nginx Example)
+
+```nginx
+server {
+    listen 80;
+    server_name scrobbler.yourdomain.com;
+
+    location / {
+        proxy_pass http://localhost:4000;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+    }
+}
+```
+
+---
+
+### 4. Development Setup
+
+**Best for:** Contributing, testing, customization
+
+#### Prerequisites
+- Elixir 1.16+ & Erlang/OTP 26+
+- Node.js 20+
+- SQLite3
 
 #### Backend Setup
 
-1. Navigate to backend directory:
 ```bash
-cd backend/app_api
-```
+cd backend
 
-2. Install dependencies:
-```bash
+# Install dependencies
 mix deps.get
-```
 
-3. Create and migrate database:
-```bash
+# Create database
 mix ecto.create
 mix ecto.migrate
-```
 
-4. Start Phoenix server:
-```bash
+# Start Phoenix server
 mix phx.server
 ```
 
-Backend will be available at `http://localhost:4000`
+Backend runs at: `http://localhost:4000`
 
 #### Frontend Setup
 
-1. Navigate to frontend directory:
 ```bash
-cd frontend/app_web
-```
+cd frontend
 
-2. Install dependencies:
-```bash
+# Install dependencies
 npm install
-```
 
-3. Start development server:
-```bash
+# Start development server
 npm run dev
 ```
 
-Frontend will be available at `http://localhost:5173`
+Frontend runs at: `http://localhost:5173`
 
-## Configuration
+---
 
-### Environment Variables
+## ⚙️ Configuration
 
-Create a `.env` file in the project root:
+### Environment Variables Reference
+
+Create a `.env` file based on `.env.example`:
 
 ```env
-# Backend
-PHX_HOST=localhost
-PHX_PORT=4000
-SECRET_KEY_BASE=your_secret_key_here
-DATABASE_PATH=/data/viking.db
+# === Data Storage ===
+# Docker named volume (default)
+DATA_PATH=viking_data
 
-# Frontend
-VITE_API_URL=http://localhost:4000
+# OR: Host path for Unraid/Production
+# DATA_PATH=/mnt/user/appdata/viking-scrobbler/data
+# DATA_PATH=/opt/viking-scrobbler/data
+
+# === Security ===
+# Generate with: openssl rand -base64 48
+SECRET_KEY_BASE=your_64_character_minimum_random_string
+
+# === Network ===
+PORT=4000
+BIND_IP=0.0.0.0
+
+# Only set if you have IPv6 binding issues
+# PHX_HOST=0.0.0.0
+
+# === Navidrome Integration (Optional) ===
+# Leave empty for auto-discovery or manual setup via Web UI
+# NAVIDROME_URL=http://localhost:4533
+# NAVIDROME_USERNAME=your_username
+# NAVIDROME_PASSWORD=your_password
 ```
 
 ### Docker Compose Configuration
 
-The `docker-compose.yml` can be customized for your environment:
+The `docker-compose.yml` uses environment variables with sensible defaults:
 
 ```yaml
 services:
   viking-scrobbler:
+    image: solaar45/viking-scrobbler:latest
     ports:
-      - "3000:80"      # Frontend
-      - "4000:4000"    # Backend API
+      - "${BIND_IP:-0.0.0.0}:${PORT:-4000}:4000"
     volumes:
-      - ./data:/data   # Database persistence
+      - ${DATA_PATH:-viking_data}:/app/data
+    environment:
+      SECRET_KEY_BASE: ${SECRET_KEY_BASE}
+      # ... other settings
 ```
 
-### Unraid Configuration
+**Key features:**
+- ✅ Works without `.env` (uses defaults)
+- ✅ Customizable via `.env` file
+- ✅ Supports both Docker volumes and host paths
+- ✅ Health checks included
 
-For Unraid deployment, use the provided `docker-compose.yml`:
+---
 
-1. Place the project in `/mnt/user/appdata/viking-scrobbler/`
-2. Map ports as needed in Unraid Docker settings
-3. Ensure `/data` volume is mapped for database persistence
+## 🎵 Navidrome Integration
 
-## Usage
+Viking Scrobbler integrates seamlessly with Navidrome for automatic genre enrichment and scrobbling.
 
-### Token Management
+### Setup in Navidrome
 
-1. Open the web dashboard
-2. Click "Setup" button in the top-right corner
-3. Generate a new API token
-4. Copy the token for use with Navidrome or other clients
+1. **Open Navidrome settings**
+2. Navigate to **"Last.fm / ListenBrainz"**
+3. Configure:
+   - **Scrobbler:** ListenBrainz
+   - **API URL:** `http://your-viking-server:4000`
+   - **Token:** Generate in Viking dashboard (Settings → Token Management)
+4. **Test Connection** → Should show "✅ Connected"
+5. **Enable scrobbling**
 
-### Navidrome Integration
+### Genre Enrichment
 
-Configure Navidrome to use Viking Scrobbler:
+Viking Scrobbler automatically enriches listens with genres from:
+1. **Navidrome ID3 tags** (primary source)
+2. **MusicBrainz API** (fallback)
 
-1. In Navidrome settings, go to "Last.fm/ListenBrainz"
-2. Select "ListenBrainz" as the scrobbler
-3. Set API URL: `http://your-server:4000`
-4. Enter your Viking Scrobbler token
-5. Click "Test" to verify connection
-6. Enable scrobbling
+**Features:**
+- Zero-configuration auto-discovery
+- Hybrid credential resolution (DB → ENV → Auto-scan)
+- Background enrichment pipeline
+- Rate-limited API calls
 
-### API Endpoints
+---
+
+## 🎨 Dashboard Features
+
+### Overview Section
+- **Real-time statistics** with live updates
+- **Time-based filtering:** Week, Month, Year, All Time
+- **Key metrics:**
+  - Total Scrobbles
+  - Unique Artists
+  - Unique Tracks
+  - Unique Albums
+
+### Activity Chart
+Smart grouping based on time range:
+- **Week:** Daily breakdown
+- **Month:** Weekly breakdown
+- **Year:** Monthly breakdown
+- **All Time:** Yearly overview
+
+### Top Lists
+- **Top Artists** with play counts
+- **Top Tracks** with artist info
+- **Top Albums** with metadata
+
+### Recent Listens
+Real-time table with:
+- Track, Artist, Album
+- Release Year
+- Genres (from Navidrome/MusicBrainz)
+- Timestamp with configurable format
+- Duration
+
+### Settings
+- **Token Management:** Generate/revoke API tokens
+- **DateTime Format:** Customize date/time display
+- **Navidrome Setup:** Connect to your music server
+
+---
+
+## 📚 API Documentation
+
+Viking Scrobbler implements the **ListenBrainz API v1** specification.
+
+### Authentication
+
+All endpoints require a token in the Authorization header:
+```http
+Authorization: Token YOUR_TOKEN_HERE
+```
+
+### Core Endpoints
 
 #### Submit Listens
 ```bash
 POST /1/submit-listens
-Authorization: Token YOUR_TOKEN_HERE
 Content-Type: application/json
 
 {
@@ -229,205 +454,197 @@ Content-Type: application/json
 
 #### Get Recent Listens
 ```bash
-GET /1/user/:user_name/listens?count=25
+GET /1/user/{user_name}/listens?count=25&max_ts=1234567890
 ```
 
-#### Get User Statistics
+#### Get Statistics
 ```bash
-GET /1/stats/user/:user_name/totals?range=week
-GET /1/stats/user/:user_name/artists?range=month&count=10
-GET /1/stats/user/:user_name/recordings?range=year&count=10
-GET /1/stats/user/:user_name/listening-activity?range=all_time
+# Totals
+GET /1/stats/user/{user_name}/totals?range=week
+
+# Top Artists
+GET /1/stats/user/{user_name}/artists?range=month&count=10
+
+# Top Tracks
+GET /1/stats/user/{user_name}/recordings?range=year&count=10
+
+# Listening Activity
+GET /1/stats/user/{user_name}/listening-activity?range=all_time
 ```
 
-## Dashboard Features
-
-### Filtered Statistics Section
-Time-based filtering for:
-- Total Scrobbles
-- Unique Artists
-- Unique Tracks
-- Unique Albums
-- Smart Activity Chart (daily/weekly/monthly/yearly grouping)
-- Top Artists and Tracks
-
-### Lifetime Statistics Section
-Always displays all-time data:
-- Most Active Day of Week
-- Average Listens per Day
-- Peak Day Count
-- Current Listening Streak
-- Recent Listens (last 20 tracks)
-
-## Development
-
-### Backend Development
-
-Run tests:
+#### Validate Token
 ```bash
-cd backend/app_api
-mix test
-```
-
-Format code:
-```bash
-mix format
-```
-
-Check code quality:
-```bash
-mix credo
-```
-
-### Frontend Development
-
-Run linter:
-```bash
-cd frontend/app_web
-npm run lint
-```
-
-Build for production:
-```bash
-npm run build
-```
-
-### Database
-
-SQLite database schema:
-
-```sql
-CREATE TABLE listens (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  user_name TEXT NOT NULL,
-  track_name TEXT NOT NULL,
-  artist_name TEXT NOT NULL,
-  release_name TEXT,
-  listened_at INTEGER NOT NULL,
-  recording_mbid TEXT,
-  artist_mbid TEXT,
-  release_mbid TEXT,
-  additional_info TEXT,
-  inserted_at DATETIME NOT NULL
-);
-```
-
-Access database directly:
-```bash
-sqlite3 data/viking.db
-```
-
-## API Documentation
-
-Viking Scrobbler implements the ListenBrainz API v1 specification with the following endpoints:
-
-### Authentication
-All endpoints require a valid token in the Authorization header:
-```
+GET /1/validate-token
 Authorization: Token YOUR_TOKEN_HERE
 ```
 
-### Supported Endpoints
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/1/submit-listens` | POST | Submit single or multiple listens |
-| `/1/user/:user_name/listens` | GET | Get user's listen history |
-| `/1/user/:user_name/recent-listens` | GET | Get recent listens |
-| `/1/stats/user/:user_name/artists` | GET | Get top artists |
-| `/1/stats/user/:user_name/recordings` | GET | Get top tracks |
-| `/1/stats/user/:user_name/listening-activity` | GET | Get listening activity chart data |
-| `/1/stats/user/:user_name/totals` | GET | Get aggregated statistics |
-| `/1/validate-token` | GET | Validate API token |
-
 ### Time Range Parameters
 
-All statistics endpoints support `range` parameter:
-- `week` - Last 7 days
-- `month` - Last 30 days
-- `year` - Last 365 days
-- `all_time` - All historical data (default)
+| Parameter | Description |
+|-----------|-------------|
+| `week` | Last 7 days |
+| `month` | Last 30 days |
+| `year` | Last 365 days |
+| `all_time` | All historical data (default) |
 
-## Troubleshooting
+---
+
+## 🏗️ Project Structure
+
+```
+viking-scrobbler/
+├── backend/              # Elixir/Phoenix API
+│   ├── lib/
+│   │   ├── app_api/      # Core business logic
+│   │   └── app_api_web/  # Controllers, views, router
+│   ├── priv/
+│   │   └── repo/         # Database migrations
+│   └── mix.exs
+├── frontend/             # React/TypeScript UI
+│   ├── src/
+│   │   ├── components/   # React components
+│   │   ├── lib/          # Utilities
+│   │   └── main.tsx
+│   └── package.json
+├── Dockerfile            # Multi-stage Docker build
+├── docker-compose.yml    # Universal deployment config
+├── .env.example          # Environment variables template
+└── README.md
+```
+
+---
+
+## 🐛 Troubleshooting
 
 ### Common Issues
 
-**Problem:** Database locked error
-```
-Solution: Ensure only one instance is accessing the database. Check for orphaned processes.
+#### Container won't start
+```bash
+# Check logs
+docker logs viking-scrobbler
+
+# Common causes:
+# - Port 4000 already in use
+# - Missing SECRET_KEY_BASE
+# - Insufficient permissions on data directory
 ```
 
-**Problem:** CORS errors in browser
-```
-Solution: Verify backend is running and CORS is properly configured in router.ex
+#### Database locked error
+```bash
+# Stop all instances
+docker-compose down
+
+# Remove lock file
+rm -f /path/to/data/viking.db-shm
+rm -f /path/to/data/viking.db-wal
+
+# Restart
+docker-compose up -d
 ```
 
-**Problem:** Token validation fails
-```
-Solution: Regenerate token in dashboard. Ensure token is sent in Authorization header.
+#### Can't connect from Navidrome
+```bash
+# Check if container is running
+docker ps | grep viking
+
+# Test API endpoint
+curl http://localhost:4000/api/health
+
+# Check firewall rules (if on different hosts)
+sudo ufw status
 ```
 
-**Problem:** Docker container won't start
-```
-Solution: Check logs with: docker logs viking-scrobbler
-Verify ports 3000 and 4000 are not in use by other applications.
+#### Frontend shows "Failed to fetch"
+```bash
+# Verify backend is accessible
+curl -I http://localhost:4000
+
+# Check browser console for CORS errors
+# Backend should allow all origins in production
 ```
 
-**Problem:** Frontend shows "Failed to fetch"
-```
-Solution: Verify backend is accessible at the configured API URL.
-Check network connectivity between frontend and backend containers.
-```
+#### Token validation fails
+1. Regenerate token in dashboard Settings
+2. Ensure token is sent as: `Authorization: Token YOUR_TOKEN`
+3. Check token hasn't been revoked
 
 ### Debug Mode
 
-Enable detailed logging in Phoenix:
-```elixir
-# config/dev.exs
-config :logger, level: :debug
+Enable verbose logging:
+```bash
+docker-compose down
+docker-compose up  # Without -d to see logs
 ```
 
-## Contributing
+---
 
-Contributions are welcome! Please follow these guidelines:
+## 🤝 Contributing
 
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+Contributions are welcome! Here's how:
+
+1. **Fork** the repository
+2. **Create** a feature branch (`git checkout -b feature/amazing-feature`)
+3. **Commit** your changes (`git commit -m 'Add amazing feature'`)
+4. **Push** to the branch (`git push origin feature/amazing-feature`)
+5. **Open** a Pull Request
 
 ### Code Style
 
-- Backend: Follow Elixir style guide, use `mix format`
-- Frontend: Follow TypeScript/React best practices, use ESLint
-- Write descriptive commit messages
-- Add tests for new features
+- **Backend:** Follow Elixir style guide, run `mix format`
+- **Frontend:** Use ESLint + Prettier
+- **Commits:** Follow [Conventional Commits](https://www.conventionalcommits.org/)
 
-## License
+### Running Tests
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+```bash
+# Backend tests
+cd backend && mix test
 
-## Acknowledgments
+# Frontend tests
+cd frontend && npm test
 
-- ListenBrainz for API specification
-- Navidrome for subsonic API inspiration
-- Phoenix Framework team
-- React and Vite communities
+# Docker build test
+docker build -t viking-test .
+```
 
-## Support
+---
 
-For issues and questions:
-- Open an issue on GitHub
-- Check existing issues for solutions
-- Review troubleshooting section above
+## 📜 License
 
-## Roadmap
+This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) file for details.
 
-Planned features:
-- Multi-user support with user registration
-- MusicBrainz metadata enrichment
-- Export functionality (CSV, JSON)
-- Advanced analytics and insights
-- Mobile-responsive improvements
-- Last.fm API compatibility
+---
+
+## 🙏 Acknowledgments
+
+- [ListenBrainz](https://listenbrainz.org/) for API specification
+- [Navidrome](https://www.navidrome.org/) for subsonic API inspiration
+- [Phoenix Framework](https://www.phoenixframework.org/) team
+- [React](https://react.dev/) and [Vite](https://vitejs.dev/) communities
+
+---
+
+## 📞 Support
+
+- 🐛 **Bug Reports:** [GitHub Issues](https://github.com/solaar45/viking-scrobbler/issues)
+- 💡 **Feature Requests:** [GitHub Discussions](https://github.com/solaar45/viking-scrobbler/discussions)
+- 📖 **Documentation:** This README + inline code comments
+
+---
+
+## 🗺️ Roadmap
+
+- [ ] Multi-user support with registration
+- [ ] Enhanced MusicBrainz metadata enrichment
+- [ ] Export functionality (CSV, JSON)
+- [ ] Advanced analytics and insights
+- [ ] Mobile app (React Native)
+- [ ] Last.fm API compatibility
+- [ ] Spotify integration
+- [ ] Docker Hub automated builds
+
+---
+
+**Made with ❤️ by the Viking Scrobbler community**
+
+⭐ Star this repo if you find it useful!
