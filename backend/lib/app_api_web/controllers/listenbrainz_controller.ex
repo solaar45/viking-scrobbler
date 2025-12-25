@@ -337,6 +337,141 @@ defmodule AppApiWeb.ListenBrainzController do
     })
   end
 
+  # ===== NEU: SKIP-DETECTION ENDPOINTS =====
+
+  @doc """
+  GET /1/listens/:id/validation
+  Returns skip validation details for a specific listen
+  """
+  def validation(conn, %{"id" => id}) do
+    alias AppApi.Listens.Validator
+
+    case Repo.get(Listen, id) do
+      nil ->
+        conn
+        |> put_status(:not_found)
+        |> json(%{error: "Listen not found"})
+
+      listen ->
+        validation = Validator.validate_listen(listen.duration, listen.played_duration)
+
+        json(conn, %{
+          listen_id: listen.id,
+          track_name: listen.track_name,
+          artist_name: listen.artist_name,
+          duration: listen.duration,
+          played_duration: listen.played_duration,
+          validation: %{
+            is_valid: validation.is_valid,
+            is_skipped: validation.is_skipped,
+            scrobble_percentage: validation.scrobble_percentage,
+            skip_reason: validation.skip_reason,
+            required_duration: validation.required_duration
+          },
+          explanation: Validator.explain_skip_reason(validation.skip_reason)
+        })
+    end
+  end
+
+  @doc """
+  GET /1/stats/user/:user_name/skip-summary
+  Returns skip statistics for a user
+  """
+  def skip_summary(conn, %{"user_name" => user_name} = params) do
+    # Time range filter (optional)
+    range = params["range"] || "all_time"
+    query = build_time_range_query(Listen, user_name, range)
+
+    # Aggregierte Skip-Stats
+    stats =
+      query
+      |> select([l], %{
+        total_listens: count(l.id),
+        skipped_count: sum(fragment("CASE WHEN ? THEN 1 ELSE 0 END", l.is_skipped)),
+        valid_count:
+          sum(
+            fragment("CASE WHEN NOT ? OR ? IS NULL THEN 1 ELSE 0 END", l.is_skipped, l.is_skipped)
+          ),
+        avg_completion: avg(l.scrobble_percentage)
+      })
+      |> Repo.one()
+
+    # Null-Safety
+    total = stats.total_listens || 0
+    skipped = stats.skipped_count || 0
+    valid = stats.valid_count || 0
+    avg_completion = stats.avg_completion || 0.0
+
+    # Calculate skip rate
+    skip_rate =
+      if total > 0 do
+        Float.round(skipped / total * 100, 2)
+      else
+        0.0
+      end
+
+    # Top skip reasons
+    skip_reasons =
+      query
+      |> where([l], l.is_skipped == true)
+      |> group_by([l], l.skip_reason)
+      |> select([l], %{
+        reason: l.skip_reason,
+        count: count(l.id)
+      })
+      |> order_by([l], desc: count(l.id))
+      |> Repo.all()
+
+    json(conn, %{
+      payload: %{
+        user_id: user_name,
+        range: range,
+        total_listens: total,
+        valid_scrobbles: valid,
+        skipped: skipped,
+        skip_rate: skip_rate,
+        avg_completion_rate: Float.round(avg_completion, 2),
+        skip_reasons: skip_reasons
+      }
+    })
+  end
+
+  @doc """
+  GET /1/user/:user_name/listens/recent?include_skipped=false
+  Enhanced recent listens with skip filtering
+  """
+  def get_recent_listens_filtered(conn, %{"user_name" => user_name} = params) do
+    count = String.to_integer(params["count"] || "20")
+    # default true
+    include_skipped = params["include_skipped"] != "false"
+
+    query =
+      Listen
+      |> where([l], l.user_name == ^user_name)
+      |> order_by([l], desc: l.listened_at)
+
+    # Filter skipped wenn nicht explizit gewünscht
+    query =
+      if include_skipped do
+        query
+      else
+        query |> where([l], l.is_skipped == false or is_nil(l.is_skipped))
+      end
+
+    listens =
+      query
+      |> limit(^count)
+      |> Repo.all()
+
+    json(conn, %{
+      payload: %{
+        count: length(listens),
+        include_skipped: include_skipped,
+        listens: Enum.map(listens, &format_listen_with_skip_info/1)
+      }
+    })
+  end
+
   # Private functions
 
   defp process_listens(conn, payload, user_name) when is_list(payload) do
@@ -552,6 +687,23 @@ defmodule AppApiWeb.ListenBrainzController do
       release_mbid: listen.release_mbid,
       additional_info: merged_info
     }
+  end
+
+  # ===== HELPER: Format Listen mit Skip-Info =====
+
+  defp format_listen_with_skip_info(listen) do
+    base = format_listen_detailed_hybrid(listen)
+
+    # Skip-Info hinzufügen
+    skip_info = %{
+      is_skipped: listen.is_skipped || false,
+      scrobble_percentage: listen.scrobble_percentage,
+      skip_reason: listen.skip_reason,
+      duration: listen.duration,
+      played_duration: listen.played_duration
+    }
+
+    Map.put(base, :skip_info, skip_info)
   end
 
   defp get_token_from_header(conn) do

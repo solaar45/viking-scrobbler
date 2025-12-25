@@ -196,9 +196,9 @@ defmodule AppApi.GenreEnrichment do
   end
 
   # Rückwärtskompatibilität für alte Aufrufe ohne Jahr
-  defp update_listen_metadata(listen, genres, source) do
-    update_listen_metadata(listen, genres, nil, source)
-  end
+  # defp update_listen_metadata(listen, genres, source) do
+  #  update_listen_metadata(listen, genres, nil, source)
+  #end
 
   defp maybe_put_mb_year(metadata, nil), do: metadata
 
