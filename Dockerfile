@@ -5,11 +5,11 @@ FROM node:20-alpine AS flat-builder
 WORKDIR /build
 
 # Dependencies installieren
-COPY frontends/ui-flat/package*.json ./
+COPY frontend/package*.json ./
 RUN npm install
 
 # Source-Code kopieren
-COPY frontends/ui-flat/ .
+COPY frontend/ .
 
 # Vite-Build → erzeugt dist/index.html + assets/*
 RUN npm run build

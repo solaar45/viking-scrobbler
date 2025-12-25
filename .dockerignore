@@ -5,8 +5,8 @@
 # Build artifacts
 backend/app_api/_build
 backend/app_api/deps
-frontend/app_web/node_modules
-frontend/app_web/dist
+frontend/node_modules
+frontend/dist
 
 # Data
 data/
@@ -19,3 +19,16 @@ unraid-templates/
 # Docker
 docker-compose*.yml
 .dockerignore
+
+**/.git
+**/.github
+**/node_modules
+**/dist
+**/_build
+**/deps
+**/.elixir_ls
+**/erl_crash.dump
+*.swp
+*.swo
+.DS_Store
+unraid-templates/
