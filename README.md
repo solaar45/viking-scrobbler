@@ -489,31 +489,6 @@ Authorization: Token YOUR_TOKEN_HERE
 
 ---
 
-## 🏗️ Project Structure
-
-```
-viking-scrobbler/
-├── backend/              # Elixir/Phoenix API
-│   ├── lib/
-│   │   ├── app_api/      # Core business logic
-│   │   └── app_api_web/  # Controllers, views, router
-│   ├── priv/
-│   │   └── repo/         # Database migrations
-│   └── mix.exs
-├── frontend/             # React/TypeScript UI
-│   ├── src/
-│   │   ├── components/   # React components
-│   │   ├── lib/          # Utilities
-│   │   └── main.tsx
-│   └── package.json
-├── Dockerfile            # Multi-stage Docker build
-├── docker-compose.yml    # Universal deployment config
-├── .env.example          # Environment variables template
-└── README.md
-```
-
----
-
 ## 🐛 Troubleshooting
 
 ### Common Issues
