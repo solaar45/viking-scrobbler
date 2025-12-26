@@ -10,7 +10,6 @@ defmodule AppApiWeb.Router do
 
   pipeline :api do
     plug(:accepts, ["json"])
-    # ✅ CORS mit OPTIONS-Support
     plug(CORSPlug,
       origin: ["*"],
       methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
@@ -18,49 +17,57 @@ defmodule AppApiWeb.Router do
     )
   end
 
-  # --- API ROUTES ---
+  # ============================================================================
+  # API ROUTES (Frontend)
+  # ============================================================================
   scope "/api", AppApiWeb do
     pipe_through(:api)
 
     get("/health", HealthController, :index)
 
+    # Token Management
     resources("/tokens", TokenController, only: [:index, :show, :create, :update, :delete])
 
-    # Navidrome Setup
+    # Navidrome Integration
     post("/navidrome/connect", NavidromeController, :connect)
     get("/navidrome/status", NavidromeController, :status)
     delete("/navidrome/disconnect", NavidromeController, :disconnect)
 
     # Export/Import
     get("/export/listens", ExportController, :export_listens)
-    post("/import", ListenBrainzController, :import_listens)
+    post("/import/listens", ImportController, :import_listens)  # ← Import Controller
 
     # Metadata Enrichment
     get("/enrichment/scan", EnrichmentController, :scan)
     post("/enrichment/start", EnrichmentController, :start)
   end
 
-  # --- ListenBrainz API v1 ---
+  # ============================================================================
+  # LISTENBRAINZ API v1 (Navidrome Scrobbling)
+  # ============================================================================
   scope "/1", AppApiWeb do
     pipe_through(:api)
 
+    # Scrobbling
     post("/submit-listens", ListenBrainzController, :submit_listens)
+
+    # User Data
     get("/user/:user_name/listens", ListenBrainzController, :get_listens)
     get("/user/:user_name/recent-listens", ListenBrainzController, :get_recent_listens)
+
+    # Statistics
     get("/stats/user/:user_name/artists", ListenBrainzController, :get_user_artists)
     get("/stats/user/:user_name/recordings", ListenBrainzController, :get_user_recordings)
-
-    get(
-      "/stats/user/:user_name/listening-activity",
-      ListenBrainzController,
-      :get_listening_activity
-    )
-
+    get("/stats/user/:user_name/listening-activity", ListenBrainzController, :get_listening_activity)
     get("/stats/user/:user_name/totals", ListenBrainzController, :get_user_totals)
+
+    # Token Validation
     get("/validate-token", ListenBrainzController, :validate_token)
   end
 
-  # --- FRONTEND / THEME SWITCH ---
+  # ============================================================================
+  # FRONTEND (SPA)
+  # ============================================================================
   scope "/", AppApiWeb do
     pipe_through(:browser)
 
@@ -68,6 +75,9 @@ defmodule AppApiWeb.Router do
     get("/*path", FrontendController, :index)
   end
 
+  # ============================================================================
+  # DEV ROUTES
+  # ============================================================================
   if Application.compile_env(:app_api, :dev_routes) do
     scope "/dev" do
       pipe_through([:fetch_session, :protect_from_forgery])

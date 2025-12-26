@@ -288,103 +288,105 @@ export function DataExportImport() {
     }
 
     const handleImport = async () => {
-    if (!selectedFile || !fileValidation?.valid) {
-        setImportError('Please select a valid file first.')
-        return
+        if (!selectedFile || !fileValidation?.valid) {
+            setImportError('Please select a valid file first.')
+            return
+        }
+
+        setImportLoading(true)
+        setImportError(null)
+        setImportResult(null)
+        setImportProgress(0)
+
+        try {
+            const text = await selectedFile.text()
+            console.log('📄 Raw file content:', text.substring(0, 200))
+
+            const data = JSON.parse(text)
+            console.log('📦 Parsed JSON:', data)
+
+            // Normalize payload format
+            let listensArray = []
+
+            if (Array.isArray(data)) {
+                listensArray = data
+            } else if (data.listens && Array.isArray(data.listens)) {
+                listensArray = data.listens
+            } else if (data.payload && Array.isArray(data.payload)) {
+                listensArray = data.payload
+            } else {
+                throw new Error('Invalid file format: No listens array found')
+            }
+
+            console.log(`✅ Found ${listensArray.length} listens to import`)
+
+            if (listensArray.length === 0) {
+                throw new Error('No listens found in file')
+            }
+
+            const payload = {
+                listen_type: "import",
+                metadata_source: metadataSource,  // "original" | "navidrome" | "musicbrainz"
+                import_mode: "skip",              // TODO: Add UI option
+                deduplicate: true,                // TODO: Add UI option
+                payload: listensArray
+            }
+
+            console.log('🚀 Sending to API:', {
+                url: `${API_BASE}/api/import/listens`,
+                payload_count: listensArray.length,
+                metadata_source: metadataSource
+            })
+
+            const res = await fetch(`${API_BASE}/api/import/listens`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(payload),
+            })
+
+            console.log('📡 Response status:', res.status)
+
+            if (!res.ok) {
+                const errorText = await res.text()
+                console.error('❌ API Error:', errorText)
+                throw new Error(`Import failed: ${res.statusText}`)
+            }
+
+            const result = await res.json()
+            console.log('✅ API Result:', result)
+
+            if (result.status !== 'ok') {
+                throw new Error(result.message || 'Import failed')
+            }
+
+            // Update UI with import results
+            setImportResult({
+                success: true,
+                imported: result.stats.imported,
+                enriched: result.stats.enriched,
+                duplicates_skipped: result.stats.duplicates_skipped,
+                failed: result.stats.failed,
+                errors: result.stats.errors || [],
+                total: result.stats.total
+            })
+
+            setImportProgress(100)
+            setSelectedFile(null)
+            setFileValidation(null)
+
+            // Reset file input
+            const fileInput = document.getElementById('file-upload') as HTMLInputElement
+            if (fileInput) fileInput.value = ''
+
+        } catch (error) {
+            console.error('💥 Import error:', error)
+            setImportError(error instanceof Error ? error.message : 'Import failed')
+        } finally {
+            setImportLoading(false)
+        }
     }
-
-    setImportLoading(true)
-    setImportError(null)
-    setImportResult(null)
-    setImportProgress(0)
-
-    try {
-        const text = await selectedFile.text()
-        console.log('📄 Raw file content:', text.substring(0, 200))  // ← DEBUG
-        
-        const data = JSON.parse(text)
-        console.log('📦 Parsed JSON:', data)  // ← DEBUG
-
-        // ✅ Normalisiere payload Format
-        let listensArray = []
-        
-        if (Array.isArray(data)) {
-            listensArray = data
-        } else if (data.listens && Array.isArray(data.listens)) {
-            listensArray = data.listens
-        } else if (data.payload && Array.isArray(data.payload)) {
-            listensArray = data.payload
-        } else {
-            throw new Error('Invalid file format: No listens array found')
-        }
-
-        console.log(`✅ Found ${listensArray.length} listens to import`)  // ← DEBUG
-
-        if (listensArray.length === 0) {
-            throw new Error('No listens found in file')
-        }
-
-        const payload = {
-            listen_type: "import",
-            metadata_source: metadataSource,
-            payload: listensArray
-        }
-
-        console.log('🚀 Sending to API:', {
-            url: `${API_BASE}/api/import`,
-            payload_count: listensArray.length,
-            metadata_source: metadataSource
-        })  // ← DEBUG
-
-        const res = await fetch(`${API_BASE}/api/import`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(payload),
-        })
-
-        console.log('📡 Response status:', res.status)  // ← DEBUG
-
-        if (!res.ok) {
-            const errorText = await res.text()
-            console.error('❌ API Error:', errorText)  // ← DEBUG
-            throw new Error(`Import failed: ${res.statusText}`)
-        }
-
-        const result = await res.json()
-        console.log('✅ API Result:', result)  // ← DEBUG
-
-        if (result.status !== 'ok') {
-            throw new Error(result.message || 'Import failed')
-        }
-
-        const importedCount = parseInt(result.message.match(/\d+/)?.[0] || '0')
-
-        setImportResult({
-            success: true,
-            imported: importedCount,
-            enriched: result.enrichment === 'processing' ? importedCount : 0,
-            duplicates_skipped: 0,
-            failed: 0,
-            errors: [],
-            total: importedCount
-        })
-        
-        setImportProgress(100)
-        setSelectedFile(null)
-        setFileValidation(null)
-
-        const fileInput = document.getElementById('file-upload') as HTMLInputElement
-        if (fileInput) fileInput.value = ''
-
-    } catch (error) {
-        console.error('💥 Import error:', error)  // ← DEBUG
-        setImportError(error instanceof Error ? error.message : 'Import failed')
-    } finally {
-        setImportLoading(false)
-    }
-}
 
     return (
         <Card className="bg-gray-800/50 backdrop-blur-lg border-gray-700">
