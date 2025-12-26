@@ -28,6 +28,27 @@ defmodule AppApi.GenreEnrichment do
   end
 
   @doc """
+  Enriches a listen and returns the enriched metadata map.
+  Used by manual enrichment process.
+  """
+  def enrich_listen_metadata(%Listen{} = listen) do
+    case enrich_listen(listen) do
+      {:ok, updated_listen} ->
+        metadata = parse_metadata(updated_listen.metadata)
+        
+        enriched_data = %{
+          "genres" => metadata["genres"],
+          "release_year" => metadata["mb_release_year"] || metadata["release_year"]
+        }
+        
+        {:ok, enriched_data}
+      
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  @doc """
   Background task: Enrich all listens without genres
   """
   def enrich_missing_genres(limit \\ 50) do
@@ -193,11 +214,6 @@ defmodule AppApi.GenreEnrichment do
       {:error, _} ->
         {:error, :update_failed}
     end
-  end
-
-  # Rückwärtskompatibilität für alte Aufrufe ohne Jahr
-  defp update_listen_metadata(listen, genres, source) do
-    update_listen_metadata(listen, genres, nil, source)
   end
 
   defp maybe_put_mb_year(metadata, nil), do: metadata
