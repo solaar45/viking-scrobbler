@@ -303,22 +303,12 @@ export function DataExportImport() {
             console.log('📄 Raw file content:', text.substring(0, 200))
 
             const data = JSON.parse(text)
-            console.log('📦 Parsed JSON:', data)
+            console.log('📦 Parsed JSON keys:', Object.keys(data))
 
-            // Normalize payload format
-            let listensArray = []
+            // 🆕 MULTI-FORMAT PARSER
+            let listensArray = normalizeImportFormat(data)
 
-            if (Array.isArray(data)) {
-                listensArray = data
-            } else if (data.listens && Array.isArray(data.listens)) {
-                listensArray = data.listens
-            } else if (data.payload && Array.isArray(data.payload)) {
-                listensArray = data.payload
-            } else {
-                throw new Error('Invalid file format: No listens array found')
-            }
-
-            console.log(`✅ Found ${listensArray.length} listens to import`)
+            console.log(`✅ Normalized ${listensArray.length} listens for import`)
 
             if (listensArray.length === 0) {
                 throw new Error('No listens found in file')
@@ -326,16 +316,17 @@ export function DataExportImport() {
 
             const payload = {
                 listen_type: "import",
-                metadata_source: metadataSource,  // "original" | "navidrome" | "musicbrainz"
-                import_mode: "skip",              // TODO: Add UI option
-                deduplicate: true,                // TODO: Add UI option
+                metadata_source: metadataSource,
+                import_mode: "skip",
+                deduplicate: true,
                 payload: listensArray
             }
 
             console.log('🚀 Sending to API:', {
                 url: `${API_BASE}/api/import/listens`,
                 payload_count: listensArray.length,
-                metadata_source: metadataSource
+                metadata_source: metadataSource,
+                first_listen: listensArray[0]
             })
 
             const res = await fetch(`${API_BASE}/api/import/listens`, {
@@ -361,7 +352,6 @@ export function DataExportImport() {
                 throw new Error(result.message || 'Import failed')
             }
 
-            // Update UI with import results
             setImportResult({
                 success: true,
                 imported: result.stats.imported,
@@ -376,7 +366,6 @@ export function DataExportImport() {
             setSelectedFile(null)
             setFileValidation(null)
 
-            // Reset file input
             const fileInput = document.getElementById('file-upload') as HTMLInputElement
             if (fileInput) fileInput.value = ''
 
@@ -387,6 +376,140 @@ export function DataExportImport() {
             setImportLoading(false)
         }
     }
+
+    // 🆕 MULTI-FORMAT NORMALIZER
+    function normalizeImportFormat(data: any): any[] {
+        console.log('🔍 Detecting format...')
+
+        // Format 1: Maloja
+        if (data.maloja && data.scrobbles && Array.isArray(data.scrobbles)) {
+            console.log('✅ Format: Maloja (detected maloja.export_time)')
+            return data.scrobbles.map(convertMalojaToListenBrainz)
+        }
+
+        // Format 2: ListenBrainz (direct array)
+        if (Array.isArray(data)) {
+            console.log('✅ Format: ListenBrainz (array)')
+            return data.map(convertToListenBrainzFormat)
+        }
+
+        // Format 3: ListenBrainz (wrapped)
+        if (data.listens && Array.isArray(data.listens)) {
+            console.log('✅ Format: ListenBrainz (wrapped)')
+            return data.listens.map(convertToListenBrainzFormat)
+        }
+
+        if (data.payload && Array.isArray(data.payload)) {
+            console.log('✅ Format: ListenBrainz (payload)')
+            return data.payload.map(convertToListenBrainzFormat)
+        }
+
+        // Format 4: Generic scrobbles (without maloja metadata)
+        if (data.scrobbles && Array.isArray(data.scrobbles)) {
+            console.log('✅ Format: Generic scrobbles')
+            return data.scrobbles.map(convertMalojaToListenBrainz)
+        }
+
+        // Format 5: Navidrome export
+        if (data.data && Array.isArray(data.data)) {
+            console.log('✅ Format: Navidrome')
+            return data.data.map(convertToListenBrainzFormat)
+        }
+
+        // Format 6: Last.fm backup
+        if (data.recenttracks && data.recenttracks.track) {
+            console.log('✅ Format: Last.fm')
+            const tracks = Array.isArray(data.recenttracks.track)
+                ? data.recenttracks.track
+                : [data.recenttracks.track]
+            return tracks.map(convertLastfmToListenBrainz)
+        }
+
+        throw new Error(`Unsupported format. Found keys: ${Object.keys(data).join(', ')}`)
+    }
+
+    // Convert Maloja format to ListenBrainz format
+    function convertMalojaToListenBrainz(scrobble: any) {
+        const track = scrobble.track || {}
+        const artists = track.artists || []
+        const artistName = Array.isArray(artists) ? artists.join(', ') : String(artists)
+
+        // Extract album title
+        const album = track.album || {}
+        const albumTitle = album.albumtitle || album.title || null
+
+        console.log('🎵 Converting Maloja scrobble:', {
+            time: scrobble.time,
+            title: track.title,
+            artist: artistName,
+            album: albumTitle
+        })
+
+        return {
+            listened_at: scrobble.time,
+            track_metadata: {
+                track_name: track.title || 'Unknown',
+                artist_name: artistName || 'Unknown',
+                release_name: albumTitle,
+                additional_info: {
+                    duration_ms: track.length ? track.length * 1000 : scrobble.duration ? scrobble.duration * 1000 : null,
+                    origin_url: scrobble.origin || null,
+                    music_service: extractServiceFromOrigin(scrobble.origin)
+                }
+            }
+        }
+    }
+
+    // Convert Last.fm format to ListenBrainz format
+    function convertLastfmToListenBrainz(track: any) {
+        return {
+            listened_at: parseInt(track.date?.uts || Math.floor(Date.now() / 1000)),
+            track_metadata: {
+                track_name: track.name || 'Unknown',
+                artist_name: track.artist?.['#text'] || track.artist?.name || 'Unknown',
+                release_name: track.album?.['#text'] || null,
+                additional_info: {
+                    recording_mbid: track.mbid || null
+                }
+            }
+        }
+    }
+
+    // Ensure ListenBrainz format (pass-through or normalize)
+    function convertToListenBrainzFormat(listen: any) {
+        // Already in correct format
+        if (listen.listened_at && listen.track_metadata) {
+            return listen
+        }
+
+        // Generic fallback
+        return {
+            listened_at: listen.timestamp || listen.time || Math.floor(Date.now() / 1000),
+            track_metadata: {
+                track_name: listen.track || listen.title || 'Unknown',
+                artist_name: listen.artist || 'Unknown',
+                release_name: listen.album || null,
+                additional_info: listen.additional_info || {}
+            }
+        }
+    }
+
+    // Extract music service from origin string
+    function extractServiceFromOrigin(origin: string | null): string | null {
+        if (!origin) return null
+
+        const lower = origin.toLowerCase()
+
+        if (lower.includes('navidrome')) return 'navidrome'
+        if (lower.includes('spotify')) return 'spotify'
+        if (lower.includes('youtube')) return 'youtube'
+        if (lower.includes('soundcloud')) return 'soundcloud'
+        if (lower.includes('lastfm') || lower.includes('last.fm')) return 'lastfm'
+        if (lower.includes('maloja')) return 'maloja'
+
+        return null
+    }
+
 
     return (
         <Card className="bg-gray-800/50 backdrop-blur-lg border-gray-700">
