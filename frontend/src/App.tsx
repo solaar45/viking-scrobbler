@@ -1,6 +1,8 @@
 import { SidebarProvider, SidebarInset, SidebarTrigger } from '@/components/ui/sidebar'
 import { AppSidebar } from '@/components/app-sidebar'
-import DashboardPage from '@/components/DashboardPage'  // statt DashboardContent
+import { OverviewPage } from '@/components/OverviewPage'
+import { RecentListensPage } from '@/components/RecentListensPage'
+import { StatisticsPage } from '@/components/StatisticsPage'
 import SettingsPage from '@/components/SettingsPage'
 import { Separator } from '@/components/ui/separator'
 import { useEffect, useState } from 'react'
@@ -14,31 +16,58 @@ export default function App() {
     return () => window.removeEventListener('popstate', onPop)
   }, [])
 
-  // Dark Mode forced (bereits in index.css, aber sicherheitshalber)
+  // Dark Mode forced
   useEffect(() => {
     document.documentElement.classList.add('dark')
   }, [])
 
   const renderMain = () => {
-    if (path === '/settings') return <SettingsPage />
-    return <DashboardPage />  // statt <DashboardContent />
+    switch (path) {
+      case '/':
+      case '/overview':
+        return <OverviewPage />
+      case '/recent':
+        return <RecentListensPage />
+      case '/statistics':
+        return <StatisticsPage />
+      case '/settings':
+        return <SettingsPage />
+      default:
+        return <OverviewPage />
+    }
   }
 
-  const title = path === '/settings' ? 'Settings' : 'Dashboard'
+  const getTitle = () => {
+    switch (path) {
+      case '/':
+      case '/overview':
+        return 'Overview'
+      case '/recent':
+        return 'Recent Listens'
+      case '/statistics':
+        return 'Statistics'
+      case '/settings':
+        return 'Settings'
+      default:
+        return 'Overview'
+    }
+  }
+
+  const title = getTitle()
 
   return (
     <SidebarProvider defaultOpen={true}>
       <AppSidebar />
 
       <SidebarInset>
-        {/* Header: Dark Background mit subtiler Border */}
+        {/* Header */}
         <header className="flex h-16 shrink-0 items-center gap-2 border-b px-4 bg-viking-bg-secondary border-viking-border-default">
           <SidebarTrigger className="-ml-1 text-viking-text-secondary hover:text-viking-text-primary" />
           <Separator orientation="vertical" className="mr-2 h-4 bg-viking-border-default" />
           <span className="font-semibold text-lg text-viking-text-primary">{title}</span>
         </header>
 
-        {/* Main: Dunklerer Background */}
+        {/* Main */}
         <main className="flex flex-1 flex-col gap-4 p-4 lg:p-6 bg-viking-bg-primary">
           {renderMain()}
         </main>

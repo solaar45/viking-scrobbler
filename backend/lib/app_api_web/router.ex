@@ -40,6 +40,21 @@ defmodule AppApiWeb.Router do
     # Metadata Enrichment
     get("/enrichment/scan", EnrichmentController, :scan)
     post("/enrichment/start", EnrichmentController, :start)
+
+    # ═══════════════════════════════════════════════════════════
+    # STATS ENDPOINTS (NEW)
+    # ═══════════════════════════════════════════════════════════
+
+    get "/stats/overview", StatsController, :overview
+    get "/stats/top-artists", StatsController, :top_artists
+    get "/stats/top-tracks", StatsController, :top_tracks
+    get "/stats/top-albums", StatsController, :top_albums
+    get "/stats/top-genres", StatsController, :top_genres
+    get "/stats/top-years", StatsController, :top_years
+    get "/stats/top-dates", StatsController, :top_dates
+    get "/stats/top-times", StatsController, :top_times
+    get "/stats/top-durations", StatsController, :top_durations
+
   end
 
   # ============================================================================
