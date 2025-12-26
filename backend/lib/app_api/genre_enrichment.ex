@@ -63,30 +63,28 @@ defmodule AppApi.GenreEnrichment do
   # === PRIVATE ===
 
   defp fetch_and_update_genres(listen) do
-  Logger.info("🎵 MusicBrainz Fallback: Searching for #{listen.track_name}")
+    Logger.info("🎵 MusicBrainz Fallback: Searching for #{listen.track_name}")
 
-  # ✅ Prüfe MBIDs - nur nutzen wenn vorhanden und nicht leer
-  cond do
-    not is_nil(listen.recording_mbid) and listen.recording_mbid != "" ->
-      Logger.debug("Using recording MBID: #{listen.recording_mbid}")
-      fetch_genres_by_recording(listen)
+    # ✅ Prüfe MBIDs - nur nutzen wenn vorhanden und nicht leer
+    cond do
+      not is_nil(listen.recording_mbid) and listen.recording_mbid != "" ->
+        Logger.debug("Using recording MBID: #{listen.recording_mbid}")
+        fetch_genres_by_recording(listen)
 
-    not is_nil(listen.release_mbid) and listen.release_mbid != "" ->
-      Logger.debug("Using release MBID: #{listen.release_mbid}")
-      fetch_genres_by_release(listen)
+      not is_nil(listen.release_mbid) and listen.release_mbid != "" ->
+        Logger.debug("Using release MBID: #{listen.release_mbid}")
+        fetch_genres_by_release(listen)
 
-    not is_nil(listen.artist_mbid) and listen.artist_mbid != "" ->
-      Logger.debug("Using artist MBID: #{listen.artist_mbid}")
-      fetch_genres_by_artist(listen)
+      not is_nil(listen.artist_mbid) and listen.artist_mbid != "" ->
+        Logger.debug("Using artist MBID: #{listen.artist_mbid}")
+        fetch_genres_by_artist(listen)
 
-    true ->
-      # ✅ Keine MBIDs → Direkt zur Textsuche
-      Logger.debug("No MBIDs found, using text search")
-      search_and_fetch_genres(listen)
+      true ->
+        # ✅ Keine MBIDs → Direkt zur Textsuche
+        Logger.debug("No MBIDs found, using text search")
+        search_and_fetch_genres(listen)
+    end
   end
-end
-
-
 
   # --- RECORDING ---
 
@@ -133,24 +131,23 @@ end
   # --- ARTIST ---
 
   defp fetch_genres_by_artist(listen) do
-  # ✅ Zusätzliche Sicherheitsprüfung
-  if is_nil(listen.artist_mbid) or listen.artist_mbid == "" do
-    Logger.warning("⚠️ Artist MBID is empty despite check, skipping")
-    {:error, :no_mbid}
-  else
-    url = "#{@musicbrainz_api}/artist/#{listen.artist_mbid}?inc=genres+tags&fmt=json"
+    # ✅ Zusätzliche Sicherheitsprüfung
+    if is_nil(listen.artist_mbid) or listen.artist_mbid == "" do
+      Logger.warning("⚠️ Artist MBID is empty despite check, skipping")
+      {:error, :no_mbid}
+    else
+      url = "#{@musicbrainz_api}/artist/#{listen.artist_mbid}?inc=genres+tags&fmt=json"
 
-    case http_get(url) do
-      {:ok, data} ->
-        genres = extract_genres_and_tags(data)
-        update_listen_metadata(listen, genres, nil, "musicbrainz_artist")
+      case http_get(url) do
+        {:ok, data} ->
+          genres = extract_genres_and_tags(data)
+          update_listen_metadata(listen, genres, nil, "musicbrainz_artist")
 
-      _ ->
-        {:error, :no_genres_found}
+        _ ->
+          {:error, :no_genres_found}
+      end
     end
   end
-end
-
 
   # --- SEARCH FALLBACK ---
 
