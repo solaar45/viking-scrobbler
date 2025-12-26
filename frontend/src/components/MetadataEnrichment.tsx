@@ -1,9 +1,5 @@
 import { useState } from 'react'
-import { Sparkles, Search, Loader2, CheckCircle2, AlertCircle, Database } from 'lucide-react'
-import { Card, CardContent } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Progress } from '@/components/ui/progress'
+import { Sparkles, Search, RefreshCw, CheckCircle2, AlertCircle, Database } from 'lucide-react'
 
 const API_BASE = window.location.origin
 
@@ -70,7 +66,6 @@ export function MetadataEnrichment() {
       }
 
       setEnrichmentResult(data)
-      // Refresh scan after enrichment
       setTimeout(handleScan, 1000)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Enrichment failed')
@@ -81,134 +76,155 @@ export function MetadataEnrichment() {
 
   return (
     <>
+      {/* HEADER */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <h3 className="card-title-dense">Metadata Enrichment</h3>
           <span className="text-viking-border-emphasis text-xl font-light">|</span>
           <span className="text-xs font-semibold text-viking-text-tertiary uppercase tracking-wider">
-            Automatically add missing genres and release years from Navidrome/MusicBrainz
+            Automatically add missing genres and release years
           </span>
         </div>
       </div>
 
-      <Card className="bg-gray-800/50 backdrop-blur-lg border-gray-700">
-        <CardContent className="space-y-4">
-        {/* Info Box */}
-        <div className="bg-blue-900/20 border border-blue-700/50 rounded-lg p-4">
-          <p className="text-sm text-blue-300 font-semibold mb-2">How it works:</p>
-          <ul className="text-xs text-gray-400 space-y-1 list-disc list-inside">
-            <li>Scans your listens for missing genres and release years</li>
-            <li>Fetches metadata from Navidrome (primary) and MusicBrainz (fallback)</li>
-            <li>Updates existing listens without creating duplicates</li>
-            <li>Respects API rate limits (processes in batches)</li>
-          </ul>
-        </div>
+      {/* CARD */}
+      <div className="card-dense">
+        <div className="p-6 space-y-6">
+          {/* Info Box */}
+          <div className="bg-viking-bg-elevated rounded-lg p-4 border border-viking-border-default">
+            <p className="text-sm font-semibold text-viking-text-primary mb-2">
+              How it works:
+            </p>
+            <ul className="text-xs text-viking-text-secondary space-y-1 list-disc list-inside">
+              <li>Scans your listens for missing genres and release years</li>
+              <li>Fetches metadata from Navidrome (primary) and MusicBrainz (fallback)</li>
+              <li>Updates existing listens without creating duplicates</li>
+              <li>Respects API rate limits (processes in batches)</li>
+            </ul>
+          </div>
 
-        {/* Scan Section */}
-        <div className="space-y-3">
-          <Button
-            onClick={handleScan}
-            disabled={scanning || enriching}
-            className="w-full bg-blue-600 hover:bg-blue-700"
-          >
-            {scanning ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Scanning Database...
-              </>
-            ) : (
-              <>
-                <Search className="mr-2 h-4 w-4" />
-                Scan for Missing Metadata
-              </>
-            )}
-          </Button>
-
-          {/* Scan Result */}
-          {scanResult && (
-            <Alert className={scanResult.missing_count > 0 ? 'bg-yellow-900/20 border-yellow-700' : 'bg-green-900/20 border-green-700'}>
-              <Database className={`h-4 w-4 ${scanResult.missing_count > 0 ? 'text-yellow-400' : 'text-green-400'}`} />
-              <AlertDescription className={scanResult.missing_count > 0 ? 'text-yellow-300' : 'text-green-300'}>
-                {scanResult.missing_count > 0 ? (
-                  <>
-                    <strong>Found {scanResult.missing_count} tracks</strong> without complete metadata
-                  </>
-                ) : (
-                  <>
-                    <strong>All listens have metadata!</strong> No enrichment needed.
-                  </>
-                )}
-              </AlertDescription>
-            </Alert>
-          )}
-        </div>
-
-        {/* Enrichment Section */}
-        {scanResult && scanResult.missing_count > 0 && (
-          <div className="space-y-3 pt-2">
-            <Button
-              onClick={handleEnrich}
-              disabled={enriching}
-              className="w-full bg-purple-600 hover:bg-purple-700"
+          {/* Scan Section */}
+          <div className="space-y-4">
+            <button
+              onClick={handleScan}
+              disabled={scanning || enriching}
+              className="w-full px-6 py-2.5 bg-gradient-to-r from-viking-purple to-viking-purple-dark hover:from-viking-purple-dark hover:to-viking-purple text-white rounded-lg text-sm font-semibold uppercase tracking-wide shadow-lg shadow-viking-purple/20 hover:shadow-xl hover:shadow-viking-purple/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
-              {enriching ? (
+              {scanning ? (
                 <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Enriching Metadata...
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                  Scanning Database...
                 </>
               ) : (
                 <>
-                  <Sparkles className="mr-2 h-4 w-4" />
-                  Start Enrichment ({scanResult.missing_count} tracks)
+                  <Search className="w-4 h-4" />
+                  Scan for Missing Metadata
                 </>
               )}
-            </Button>
+            </button>
 
-            {enriching && (
-              <div className="space-y-2">
-                <Progress value={50} className="h-2" />
-                <p className="text-xs text-gray-400 text-center">
-                  Processing tracks... This may take a few minutes.
-                </p>
+            {/* Scan Result */}
+            {scanResult && (
+              <div className={`rounded-lg p-4 border ${
+                scanResult.missing_count > 0
+                  ? 'bg-yellow-500/10 border-yellow-500/30'
+                  : 'bg-viking-emerald/10 border-viking-emerald/30'
+              }`}>
+                <div className="flex items-start gap-3">
+                  <Database className={`w-5 h-5 flex-shrink-0 mt-0.5 ${
+                    scanResult.missing_count > 0 ? 'text-yellow-400' : 'text-viking-emerald'
+                  }`} />
+                  <div>
+                    <p className={`text-sm font-semibold ${
+                      scanResult.missing_count > 0 ? 'text-yellow-400' : 'text-viking-emerald'
+                    }`}>
+                      {scanResult.missing_count > 0 ? (
+                        <>Found {scanResult.missing_count} tracks without complete metadata</>
+                      ) : (
+                        <>All listens have metadata! No enrichment needed.</>
+                      )}
+                    </p>
+                  </div>
+                </div>
               </div>
             )}
           </div>
-        )}
 
-        {/* Enrichment Result */}
-        {enrichmentResult && (
-          <Alert className="bg-green-900/20 border-green-700">
-            <CheckCircle2 className="h-4 w-4 text-green-400" />
-            <AlertDescription className="text-green-300">
-              <strong>Enrichment complete!</strong>
-              <div className="mt-2 text-sm space-y-1">
+          {/* Enrichment Section */}
+          {scanResult && scanResult.missing_count > 0 && (
+            <div className="space-y-4">
+              <button
+                onClick={handleEnrich}
+                disabled={enriching}
+                className="w-full px-6 py-2.5 bg-gradient-to-r from-viking-purple to-viking-purple-dark hover:from-viking-purple-dark hover:to-viking-purple text-white rounded-lg text-sm font-semibold uppercase tracking-wide shadow-lg shadow-viking-purple/20 hover:shadow-xl hover:shadow-viking-purple/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              >
+                {enriching ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    Enriching Metadata...
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="w-4 h-4" />
+                    Start Enrichment ({scanResult.missing_count} tracks)
+                  </>
+                )}
+              </button>
+
+              {enriching && (
+                <div className="space-y-2">
+                  <div className="h-2 bg-viking-bg-tertiary rounded-full overflow-hidden">
+                    <div className="h-full bg-gradient-to-r from-viking-purple to-viking-purple-dark animate-pulse w-1/2 rounded-full"></div>
+                  </div>
+                  <p className="text-xs text-viking-text-tertiary text-center">
+                    Processing tracks... This may take a few minutes.
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Enrichment Result */}
+          {enrichmentResult && (
+            <div className="bg-viking-emerald/10 border border-viking-emerald/30 rounded-lg p-5">
+              <div className="flex items-start gap-3 mb-3">
+                <CheckCircle2 className="w-5 h-5 text-viking-emerald flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-viking-emerald font-semibold text-sm">
+                    Enrichment complete!
+                  </p>
+                </div>
+              </div>
+              <div className="text-sm text-viking-text-secondary space-y-1 ml-8">
                 <div>✓ Processed: {enrichmentResult.processed} tracks</div>
                 <div>✓ Enriched: {enrichmentResult.enriched} tracks</div>
                 {enrichmentResult.failed > 0 && (
                   <div className="text-yellow-400">⚠ Not found: {enrichmentResult.failed} tracks</div>
                 )}
               </div>
-            </AlertDescription>
-          </Alert>
-        )}
+            </div>
+          )}
 
-        {/* Error */}
-        {error && (
-          <Alert variant="destructive">
-            <AlertCircle className="h-4 w-4" />
-            <AlertDescription>
-              <strong>Error:</strong> {error}
-            </AlertDescription>
-          </Alert>
-        )}
+          {/* Error */}
+          {error && (
+            <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-5">
+              <div className="flex items-start gap-3">
+                <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-red-400 font-semibold text-sm">Error</p>
+                  <p className="text-sm text-viking-text-secondary mt-1">{error}</p>
+                </div>
+              </div>
+            </div>
+          )}
 
-        {/* Tips */}
-        <div className="text-xs text-gray-500 space-y-1 pt-2">
-          <p><strong>💡 Tip:</strong> Run enrichment after importing data from other sources</p>
-          <p><strong>⏱️ Note:</strong> Large libraries may take several minutes to process</p>
+          {/* Tips */}
+          <div className="text-xs text-viking-text-tertiary space-y-1 pt-2">
+            <p><strong>💡 Tip:</strong> Run enrichment after importing data from other sources</p>
+            <p><strong>⏱️ Note:</strong> Large libraries may take several minutes to process</p>
+          </div>
         </div>
-      </CardContent>
-    </Card>
+      </div>
     </>
   )
 }
