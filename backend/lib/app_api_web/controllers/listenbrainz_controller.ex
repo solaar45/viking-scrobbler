@@ -1,16 +1,33 @@
 defmodule AppApiWeb.ListenBrainzController do
+  @moduledoc """
+  ListenBrainz API v1 Implementation
+
+  Handles:
+  - Real-time scrobbling from Navidrome
+  - ListenBrainz-compatible API endpoints
+  - Statistics and user data retrieval
+  """
+
   use AppApiWeb, :controller
-  alias AppApi.Repo
-  alias AppApi.Listen
-  alias AppApi.Stats
+  alias AppApi.{Repo, Listen, Stats}
   alias AppApiWeb.TokenController
   import Ecto.Query
   require Logger
 
-  # POST /1/submit-listens (ListenBrainz API v1)
+  # ============================================================================
+  # PUBLIC API ENDPOINTS
+  # ============================================================================
+
+  @doc """
+  POST /1/submit-listens
+
+  ListenBrainz API v1 endpoint for submitting listens.
+  Used by Navidrome for real-time scrobbling.
+
+  Requires: Token authentication
+  """
   def submit_listens(conn, params) do
-    # ⬇️ NEU: Debug-Log
-    Logger.info("📥 RAW PAYLOAD: #{inspect(params, pretty: true)}")
+    Logger.info("📥 ListenBrainz API: #{inspect(params["listen_type"])}")
 
     token = get_token_from_header(conn)
 
@@ -21,13 +38,14 @@ defmodule AppApiWeb.ListenBrainzController do
 
         case listen_type do
           "single" ->
-            process_listens(conn, payload, user_name)
+            process_live_scrobbles(conn, payload, user_name)
 
           "playing_now" ->
             json(conn, %{status: "ok", message: "playing_now received"})
 
           "import" ->
-            process_listens(conn, payload, user_name)
+            # ListenBrainz bulk import (e.g. from Last.fm)
+            process_live_scrobbles(conn, payload, user_name)
 
           _ ->
             conn
@@ -42,7 +60,7 @@ defmodule AppApiWeb.ListenBrainzController do
     end
   end
 
-  # GET /1/user/:user_name/listens
+  @doc "GET /1/user/:user_name/listens"
   def get_listens(conn, %{"user_name" => user_name} = params) do
     count = String.to_integer(params["count"] || "25")
     max_ts = parse_timestamp(params["max_ts"])
@@ -69,7 +87,26 @@ defmodule AppApiWeb.ListenBrainzController do
     })
   end
 
-  # GET /1/stats/user/:user_name/artists
+  @doc "GET /1/user/:user_name/recent-listens"
+  def get_recent_listens(conn, %{"user_name" => user_name} = params) do
+    count = String.to_integer(params["count"] || "20")
+
+    listens =
+      Listen
+      |> where([l], l.user_name == ^user_name)
+      |> order_by([l], desc: l.listened_at)
+      |> limit(^count)
+      |> Repo.all()
+
+    json(conn, %{
+      payload: %{
+        count: length(listens),
+        listens: Enum.map(listens, &format_listen_detailed_hybrid/1)
+      }
+    })
+  end
+
+  @doc "GET /1/stats/user/:user_name/artists"
   def get_user_artists(conn, %{"user_name" => user_name} = params) do
     count = String.to_integer(params["count"] || "10")
     range = params["range"] || "all_time"
@@ -99,7 +136,7 @@ defmodule AppApiWeb.ListenBrainzController do
     })
   end
 
-  # GET /1/stats/user/:user_name/recordings
+  @doc "GET /1/stats/user/:user_name/recordings"
   def get_user_recordings(conn, %{"user_name" => user_name} = params) do
     count = String.to_integer(params["count"] || "10")
     range = params["range"] || "all_time"
@@ -130,17 +167,14 @@ defmodule AppApiWeb.ListenBrainzController do
     })
   end
 
-  # GET /1/stats/user/:user_name/listening-activity
+  @doc "GET /1/stats/user/:user_name/listening-activity"
   def get_listening_activity(conn, %{"user_name" => user_name} = params) do
     range = params["range"] || "all_time"
-
     query = build_time_range_query(Listen, user_name, range)
 
-    # Smart Grouping basierend auf range - direkt die Queries bauen
     activity =
       case range do
         "week" ->
-          # Gruppiere nach Tag (7 Einträge)
           query
           |> select([l], %{
             time_range: fragment("DATE(datetime(?, 'unixepoch'))", l.listened_at),
@@ -151,49 +185,36 @@ defmodule AppApiWeb.ListenBrainzController do
           |> Repo.all()
 
         "month" ->
-          # Gruppiere nach Woche (4-5 Einträge)
           query
           |> select([l], %{
             time_range: fragment("strftime('%Y-W%W', datetime(?, 'unixepoch'))", l.listened_at),
             listen_count: count(l.id)
           })
-          |> group_by(
-            [l],
-            fragment("strftime('%Y-W%W', datetime(?, 'unixepoch'))", l.listened_at)
-          )
-          |> order_by([l],
-            asc: fragment("strftime('%Y-W%W', datetime(?, 'unixepoch'))", l.listened_at)
-          )
+          |> group_by([l], fragment("strftime('%Y-W%W', datetime(?, 'unixepoch'))", l.listened_at))
+          |> order_by([l], asc: fragment("strftime('%Y-W%W', datetime(?, 'unixepoch'))", l.listened_at))
           |> Repo.all()
 
         "year" ->
-          # Gruppiere nach Monat (12 Einträge)
           query
           |> select([l], %{
             time_range: fragment("strftime('%Y-%m', datetime(?, 'unixepoch'))", l.listened_at),
             listen_count: count(l.id)
           })
           |> group_by([l], fragment("strftime('%Y-%m', datetime(?, 'unixepoch'))", l.listened_at))
-          |> order_by([l],
-            asc: fragment("strftime('%Y-%m', datetime(?, 'unixepoch'))", l.listened_at)
-          )
+          |> order_by([l], asc: fragment("strftime('%Y-%m', datetime(?, 'unixepoch'))", l.listened_at))
           |> Repo.all()
 
         "all_time" ->
-          # Gruppiere nach Jahr
           query
           |> select([l], %{
             time_range: fragment("strftime('%Y', datetime(?, 'unixepoch'))", l.listened_at),
             listen_count: count(l.id)
           })
           |> group_by([l], fragment("strftime('%Y', datetime(?, 'unixepoch'))", l.listened_at))
-          |> order_by([l],
-            asc: fragment("strftime('%Y', datetime(?, 'unixepoch'))", l.listened_at)
-          )
+          |> order_by([l], asc: fragment("strftime('%Y', datetime(?, 'unixepoch'))", l.listened_at))
           |> Repo.all()
 
         _ ->
-          # Default: daily
           query
           |> select([l], %{
             time_range: fragment("DATE(datetime(?, 'unixepoch'))", l.listened_at),
@@ -223,23 +244,19 @@ defmodule AppApiWeb.ListenBrainzController do
     })
   end
 
-  # GET /1/stats/user/:user_name/totals (ERWEITERT)
+  @doc "GET /1/stats/user/:user_name/totals"
   def get_user_totals(conn, %{"user_name" => user_name} = params) do
     range = params["range"] || "all_time"
-
     query = build_time_range_query(Listen, user_name, range)
 
-    # Total Scrobbles
     total_listens = Repo.aggregate(query, :count, :id)
 
-    # Unique Artists
     unique_artists =
       query
       |> select([l], l.artist_name)
       |> distinct(true)
       |> Repo.aggregate(:count, :artist_name)
 
-    # Unique Tracks
     unique_tracks =
       query
       |> select([l], fragment("? || ' - ' || ?", l.artist_name, l.track_name))
@@ -247,7 +264,6 @@ defmodule AppApiWeb.ListenBrainzController do
       |> Repo.all()
       |> length()
 
-    # Unique Albums
     unique_albums =
       query
       |> where([l], not is_nil(l.release_name))
@@ -255,7 +271,6 @@ defmodule AppApiWeb.ListenBrainzController do
       |> distinct(true)
       |> Repo.aggregate(:count, :release_name)
 
-    # First & Last Listen
     first_listen =
       query
       |> order_by([l], asc: l.listened_at)
@@ -270,19 +285,10 @@ defmodule AppApiWeb.ListenBrainzController do
       |> select([l], l.listened_at)
       |> Repo.one()
 
-    # --- NEUE ADVANCED STATS ---
-
-    # Most Active Day (Wochentag mit meisten Scrobbles)
     from_timestamp = get_range_timestamp(range)
     {most_active_day, tracks_on_most_active} = Stats.most_active_day(user_name, from_timestamp)
-
-    # Average Scrobbles per Day
     avg_per_day = Stats.avg_per_day(user_name, from_timestamp)
-
-    # Peak Day (einzelner Tag mit meisten Scrobbles)
     peak_day_data = Stats.peak_day(user_name, from_timestamp)
-
-    # Current Streak (nur für all_time sinnvoll)
     current_streak = if range == "all_time", do: Stats.current_streak(user_name), else: 0
 
     json(conn, %{
@@ -293,11 +299,9 @@ defmodule AppApiWeb.ListenBrainzController do
         unique_albums: unique_albums,
         first_listen: first_listen,
         last_listen: last_listen,
-        # NEU:
         most_active_day: most_active_day,
         tracks_on_most_active_day: tracks_on_most_active,
         avg_per_day: avg_per_day,
-        # ISO-String für Frontend
         peak_day: peak_day_data.date,
         peak_count: peak_day_data.count,
         current_streak: current_streak,
@@ -307,27 +311,7 @@ defmodule AppApiWeb.ListenBrainzController do
     })
   end
 
-  # GET /1/user/:user_name/recent-listens
-  # 🆕 ANGEPASST FÜR HYBRID METADATA
-  def get_recent_listens(conn, %{"user_name" => user_name} = params) do
-    count = String.to_integer(params["count"] || "20")
-
-    listens =
-      Listen
-      |> where([l], l.user_name == ^user_name)
-      |> order_by([l], desc: l.listened_at)
-      |> limit(^count)
-      |> Repo.all()
-
-    json(conn, %{
-      payload: %{
-        count: length(listens),
-        listens: Enum.map(listens, &format_listen_detailed_hybrid/1)
-      }
-    })
-  end
-
-  # Validate Token
+  @doc "GET /1/validate-token"
   def validate_token(conn, _params) do
     json(conn, %{
       code: 200,
@@ -337,9 +321,11 @@ defmodule AppApiWeb.ListenBrainzController do
     })
   end
 
-  # Private functions
+  # ============================================================================
+  # PRIVATE FUNCTIONS
+  # ============================================================================
 
-  defp process_listens(conn, payload, user_name) when is_list(payload) do
+  defp process_live_scrobbles(conn, payload, user_name) when is_list(payload) do
     listens =
       Enum.map(payload, fn listen_data ->
         track_metadata = listen_data["track_metadata"] || %{}
@@ -361,45 +347,37 @@ defmodule AppApiWeb.ListenBrainzController do
 
     case Repo.insert_all(Listen, listens) do
       {count, _} when count > 0 ->
-        Logger.info("Inserted #{count} listens for user #{user_name}")
+        Logger.info("✅ Scrobbled #{count} tracks for #{user_name}")
 
-        # 🆕 GENRE ENRICHMENT: Try Navidrome synchronously so broadcasts include ID3 metadata.
-        # Heavy MusicBrainz lookup runs asynchronously as a fallback.
-        listens_to_process =
+        # Real-time metadata enrichment
+        listens_to_enrich =
           Listen
           |> where([l], l.user_name == ^user_name)
           |> order_by([l], desc: l.listened_at)
           |> limit(^count)
           |> Repo.all()
 
-        Enum.each(listens_to_process, fn listen ->
-          case AppApi.NavidromeIntegration.enrich_listen_from_navidrome(listen) do
-            {:ok, _updated} ->
-              Logger.info("✅ Genre from Navidrome ID3 for: #{listen.track_name}")
+        Task.start(fn ->
+          Enum.each(listens_to_enrich, fn listen ->
+            case AppApi.NavidromeIntegration.enrich_listen_from_navidrome(listen) do
+              {:ok, _} ->
+                Logger.debug("✅ Enriched from Navidrome: #{listen.track_name}")
 
-            {:error, _reason} ->
-              Logger.info(
-                "⚠️ Navidrome ID3 missing, scheduling MusicBrainz for: #{listen.track_name}"
-              )
+              {:error, _} ->
+                Logger.debug("⚠️ Navidrome failed, trying MusicBrainz: #{listen.track_name}")
+                Task.start(fn -> AppApi.GenreEnrichment.enrich_listen(listen) end)
+            end
 
-              Task.start(fn ->
-                # fallback to MusicBrainz in background
-                AppApi.GenreEnrichment.enrich_listen(listen)
-              end)
-          end
-
-          # small delay to avoid hammering Navidrome if local
-          :timer.sleep(150)
+            :timer.sleep(150)
+          end)
         end)
 
-        # 🚀 BROADCAST NEW SCROBBLE
+        # Broadcast to frontend
         AppApiWeb.Endpoint.broadcast!(
           "scrobbles:#{user_name}",
           "new_scrobble",
           %{count: count, user: user_name, timestamp: DateTime.utc_now() |> DateTime.to_unix()}
         )
-
-        Logger.info("📡 Broadcast new_scrobble to channel scrobbles:#{user_name}, count: #{count}")
 
         json(conn, %{status: "ok", message: "#{count} listen(s) inserted"})
 
@@ -413,33 +391,24 @@ defmodule AppApiWeb.ListenBrainzController do
   end
 
   defp format_listen(listen) do
-    # Parse metadata JSON
     metadata =
       case listen.metadata do
-        nil ->
-          %{}
-
+        nil -> %{}
         str when is_binary(str) ->
           case Jason.decode(str) do
             {:ok, map} -> map
             _ -> %{}
           end
-
-        map when is_map(map) ->
-          map
-
-        _ ->
-          %{}
+        map when is_map(map) -> map
+        _ -> %{}
       end
 
-    # Genres als String
     genres_string =
       case metadata["genres"] do
         list when is_list(list) and list != [] -> Enum.join(list, ", ")
         _ -> nil
       end
 
-    # additional_info aus DB + genres mergen
     additional_info =
       (listen.additional_info || %{})
       |> Map.put("genres", genres_string)
@@ -458,82 +427,48 @@ defmodule AppApiWeb.ListenBrainzController do
     }
   end
 
-  # 🆕 NEU: Hybrid Metadata Response Format
   defp format_listen_detailed_hybrid(listen) do
-    # metadata als Map sicherstellen (kommt aus Listen.metadata :: string)
     metadata =
       case listen.metadata do
-        nil ->
-          %{}
-
+        nil -> %{}
         str when is_binary(str) ->
           case Jason.decode(str) do
             {:ok, map} -> map
             _ -> %{}
           end
-
-        map when is_map(map) ->
-          map
-
-        _ ->
-          %{}
+        map when is_map(map) -> map
+        _ -> %{}
       end
 
-    # Genres:
-    # 1) Wenn in metadata["genres"] (Liste) → String bauen
-    # 2) Sonst vorhandenes additional_info["genres"] weiterverwenden
     base_info = listen.additional_info || %{}
 
     genres_from_metadata =
       case metadata["genres"] do
         list when is_list(list) and list != [] ->
           list |> Enum.take(3) |> Enum.join(", ")
-
-        _ ->
-          nil
+        _ -> nil
       end
 
     genres = genres_from_metadata || base_info["genres"] || "–"
 
-    # Releasejahr – Priorität:
-    # 1) ID3/Navidrome: metadata["year"]
-    # 2) MusicBrainz: metadata["mb_release_year"] or metadata["release_year"]
-    # 3) Fallback: base_info["release_year"]
     release_year =
       cond do
-        is_integer(metadata["year"]) ->
-          metadata["year"]
-
+        is_integer(metadata["year"]) -> metadata["year"]
         is_binary(metadata["year"]) and String.length(metadata["year"]) >= 4 ->
           String.slice(metadata["year"], 0, 4)
-
-        is_integer(metadata["mb_release_year"]) ->
-          metadata["mb_release_year"]
-
+        is_integer(metadata["mb_release_year"]) -> metadata["mb_release_year"]
         is_binary(metadata["mb_release_year"]) and String.length(metadata["mb_release_year"]) >= 4 ->
           String.slice(metadata["mb_release_year"], 0, 4)
-
-        is_integer(metadata["release_year"]) ->
-          metadata["release_year"]
-
+        is_integer(metadata["release_year"]) -> metadata["release_year"]
         is_binary(metadata["release_year"]) and String.length(metadata["release_year"]) >= 4 ->
           String.slice(metadata["release_year"], 0, 4)
-
-        true ->
-          base_info["release_year"] || nil
+        true -> base_info["release_year"] || nil
       end
 
-    # duration_ms NICHT hart überschreiben:
-    # 1) additional_info.duration_ms
-    # 2) sonst listen.duration_ms (aus DB-Spalte)
-    duration_ms =
-      base_info["duration_ms"] ||
-        listen.duration_ms
-
+    duration_ms = base_info["duration_ms"] || listen.duration_ms
     tracknumber = base_info["tracknumber"] || listen.tracknumber
     discnumber = base_info["discnumber"] || listen.discnumber
 
-    # neues additional_info auf Basis der bestehenden Map
     merged_info =
       base_info
       |> Map.put_new("duration_ms", duration_ms)
@@ -563,14 +498,12 @@ defmodule AppApiWeb.ListenBrainzController do
   end
 
   defp parse_timestamp(nil), do: DateTime.utc_now() |> DateTime.to_unix()
-
   defp parse_timestamp(ts) when is_binary(ts) do
     case Integer.parse(ts) do
       {timestamp, _} -> timestamp
       :error -> DateTime.utc_now() |> DateTime.to_unix()
     end
   end
-
   defp parse_timestamp(ts) when is_integer(ts), do: ts
   defp parse_timestamp(_), do: DateTime.utc_now() |> DateTime.to_unix()
 
@@ -591,7 +524,6 @@ defmodule AppApiWeb.ListenBrainzController do
     )
   end
 
-  # Helper für Stats-Module: Konvertiere range zu Timestamp
   defp get_range_timestamp(range) do
     now = DateTime.utc_now() |> DateTime.to_unix()
 

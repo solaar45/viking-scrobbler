@@ -44,7 +44,8 @@ defmodule AppApi.MixProject do
     {:cors_plug, "~> 3.0"},
     {:httpoison, "~> 2.3"},       # ← NUR DIESE EINE ZEILE
     {:oban, "~> 2.17"},
-    {:quantum, "~> 3.5"}
+    {:quantum, "~> 3.5"},
+    {:csv, "~> 3.2"} # CSV encoding/decoding
   ]
 end
 
