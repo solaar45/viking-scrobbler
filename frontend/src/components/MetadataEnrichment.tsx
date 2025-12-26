@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Sparkles, Search, Loader2, CheckCircle2, AlertCircle, Database } from 'lucide-react'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Progress } from '@/components/ui/progress'
@@ -80,20 +80,19 @@ export function MetadataEnrichment() {
   }
 
   return (
-    <Card className="bg-gray-800/50 backdrop-blur-lg border-gray-700">
-      <CardHeader>
+    <>
+      <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <Sparkles className="h-6 w-6 text-purple-400" />
-          <div>
-            <CardTitle className="text-white">Metadata Enrichment</CardTitle>
-            <CardDescription className="text-gray-400">
-              Automatically add missing genres and release years from Navidrome/MusicBrainz
-            </CardDescription>
-          </div>
+          <h3 className="card-title-dense">Metadata Enrichment</h3>
+          <span className="text-viking-border-emphasis text-xl font-light">|</span>
+          <span className="text-xs font-semibold text-viking-text-tertiary uppercase tracking-wider">
+            Automatically add missing genres and release years from Navidrome/MusicBrainz
+          </span>
         </div>
-      </CardHeader>
+      </div>
 
-      <CardContent className="space-y-4">
+      <Card className="bg-gray-800/50 backdrop-blur-lg border-gray-700">
+        <CardContent className="space-y-4">
         {/* Info Box */}
         <div className="bg-blue-900/20 border border-blue-700/50 rounded-lg p-4">
           <p className="text-sm text-blue-300 font-semibold mb-2">How it works:</p>
@@ -210,5 +209,6 @@ export function MetadataEnrichment() {
         </div>
       </CardContent>
     </Card>
+    </>
   )
 }

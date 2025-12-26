@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import { Download, Database, AlertCircle, Loader2 } from 'lucide-react'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Download, AlertCircle, Loader2 } from 'lucide-react'
+import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -51,20 +51,19 @@ export function DataExportImport() {
     }
 
     return (
-        <Card className="bg-gray-800/50 backdrop-blur-lg border-gray-700">
-            <CardHeader>
+        <>
+            <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                    <Database className="h-6 w-6 text-blue-400" />
-                    <div>
-                        <CardTitle className="text-white">Data Export</CardTitle>
-                        <CardDescription className="text-gray-400">
-                            Download your scrobbles as JSON or CSV
-                        </CardDescription>
-                    </div>
+                    <h3 className="card-title-dense">Data Export</h3>
+                    <span className="text-viking-border-emphasis text-xl font-light">|</span>
+                    <span className="text-xs font-semibold text-viking-text-tertiary uppercase tracking-wider">
+                        Download your scrobbles as JSON or CSV
+                    </span>
                 </div>
-            </CardHeader>
+            </div>
 
-            <CardContent>
+            <Card className="bg-gray-800/50 backdrop-blur-lg border-gray-700">
+                <CardContent>
                 <div className="space-y-4">
                     <div className="space-y-2">
                         <Label htmlFor="export-format" className="text-gray-300">
@@ -133,5 +132,6 @@ export function DataExportImport() {
                 </div>
             </CardContent>
         </Card>
+        </>
     )
 }
