@@ -43,7 +43,7 @@ defmodule AppApiWeb.TokenController do
 
   # List all tokens
   def index(conn, _params) do
-    tokens = 
+    tokens =
       UserToken
       |> where([t], t.active == true)
       |> order_by(desc: :inserted_at)
@@ -76,7 +76,7 @@ defmodule AppApiWeb.TokenController do
 
       token ->
         attrs = %{description: params["description"]}
-        
+
         case Repo.update(UserToken.changeset(token, attrs)) do
           {:ok, updated_token} ->
             json(conn, %{status: "ok", token: format_token(updated_token)})
@@ -105,17 +105,18 @@ defmodule AppApiWeb.TokenController do
 
   # Validate token (internal use by ListenBrainz)
   def validate(nil), do: {:error, "No token provided"}
+
   def validate(token_string) do
     case Repo.get_by(UserToken, token: token_string, active: true) do
-      nil -> 
+      nil ->
         {:error, "Invalid token"}
-      
+
       token ->
         # Update last_used timestamp mit sauberem DateTime
         token
         |> UserToken.changeset(%{last_used: DateTimeHelper.utc_now()})
         |> Repo.update()
-        
+
         {:ok, token.user_name}
     end
   end

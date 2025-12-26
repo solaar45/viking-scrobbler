@@ -14,7 +14,8 @@ defmodule AppApi.Repo.Migrations.CreateListens do
       add :user_name, :string
       # ENTFERNT: add :inserted_at, :naive_datetime, null: false
 
-      timestamps(updated_at: false)  # Fügt inserted_at automatisch hinzu
+      # Fügt inserted_at automatisch hinzu
+      timestamps(updated_at: false)
     end
 
     create index(:listens, [:listened_at])

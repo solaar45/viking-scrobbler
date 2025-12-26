@@ -7,33 +7,33 @@ defmodule AppApi.Repo.Migrations.AddHybridMetadataStorage do
       # Device/Origin (für Device-Spalte im Frontend)
       add :origin_url, :string
       add :music_service, :string
-      
+
       # Technical Metadata
       add :duration_ms, :integer
       add :tracknumber, :integer
       add :discnumber, :integer
-      
+
       # Social/User Interaction
       add :loved, :boolean, default: false
       add :rating, :integer
-      
+
       # ===== TIER 2: JSON für strukturierte Metadaten =====
       # SQLite: :text (wird als JSON String gespeichert)
       add :metadata, :text, default: "{}"
     end
-    
+
     # ===== INDIZES für Performance =====
     # SQLite unterstützt nur B-Tree Indizes
     create index(:listens, [:music_service])
     create index(:listens, [:loved])
     create index(:listens, [:duration_ms])
     create index(:listens, [:origin_url])
-    
+
     # Composite Indizes für häufige Kombinationen
     create index(:listens, [:user_name, :loved])
     create index(:listens, [:user_name, :listened_at])
     create index(:listens, [:user_name, :music_service])
-    
+
     # ===== BESTEHENDE DATEN MIGRIEREN =====
     # SQLite JSON-Funktionen verwenden
     execute """
@@ -77,7 +77,7 @@ defmodule AppApi.Repo.Migrations.AddHybridMetadataStorage do
       'total_tracks', json_extract(metadata, '$.total_tracks')
     )
     """
-    
+
     # Indizes entfernen
     drop_if_exists index(:listens, [:user_name, :music_service])
     drop_if_exists index(:listens, [:user_name, :listened_at])
@@ -86,7 +86,7 @@ defmodule AppApi.Repo.Migrations.AddHybridMetadataStorage do
     drop_if_exists index(:listens, [:duration_ms])
     drop_if_exists index(:listens, [:loved])
     drop_if_exists index(:listens, [:music_service])
-    
+
     # Spalten entfernen
     alter table(:listens) do
       remove :origin_url

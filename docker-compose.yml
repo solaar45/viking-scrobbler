@@ -2,6 +2,8 @@ services:
   viking-scrobbler:
     image: solaar45/viking-scrobbler:latest
     container_name: viking-scrobbler
+    env_file:
+      - .env
     
     environment:
       MIX_ENV: prod
@@ -27,8 +29,8 @@ services:
     
     volumes:
       # Uses DATA_PATH env var or docker volume
-      - ${DATA_PATH:-viking_data}:/app/data
-    
+      - "${DATA_PATH}:/app/data"
+
     restart: unless-stopped
     
     # 🏥 Health Check
@@ -38,8 +40,3 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
-
-# Named volume (only used if DATA_PATH not set)
-volumes:
-  viking_data:
-    driver: local

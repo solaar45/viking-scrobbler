@@ -3,7 +3,7 @@ import Config
 if config_env() == :prod do
   # SQLite Config
   database_path = System.get_env("DATABASE_PATH") || "/app/data/viking.db"
-  
+
   config :app_api, AppApi.Repo,
     database: database_path,
     pool_size: String.to_integer(System.get_env("POOL_SIZE") || "5")
@@ -28,7 +28,8 @@ if config_env() == :prod do
     secret_key_base: secret_key_base,
     server: true,
     # ✅ WEBSOCKET ORIGIN CHECK FIX
-    check_origin: false  # Erlaubt alle Origins (Home Lab sicher)
+    # Erlaubt alle Origins (Home Lab sicher)
+    check_origin: false
 
   config :swoosh, api_client: Swoosh.ApiClient.Finch, finch_name: AppApi.Finch
 
@@ -37,5 +38,4 @@ if config_env() == :prod do
     navidrome_url: System.get_env("NAVIDROME_URL"),
     navidrome_username: System.get_env("NAVIDROME_USERNAME"),
     navidrome_password: System.get_env("NAVIDROME_PASSWORD")
-
 end

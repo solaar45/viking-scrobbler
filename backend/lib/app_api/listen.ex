@@ -26,8 +26,10 @@ defmodule AppApi.Listen do
     field :rating, :integer
 
     # ===== NEU: SKIP-DETECTION FELDER =====
-    field :duration, :integer              # Track-Länge in Sekunden
-    field :played_duration, :integer       # Tatsächlich gehört in Sekunden
+    # Track-Länge in Sekunden
+    field :duration, :integer
+    # Tatsächlich gehört in Sekunden
+    field :played_duration, :integer
     field :is_skipped, :boolean, default: false
     field :scrobble_percentage, :float
     field :skip_reason, :string
@@ -41,19 +43,41 @@ defmodule AppApi.Listen do
 
   # NEU: Erweiterte Tier 1 Felder inkl. Skip-Detection
   @tier1_fields [
-    :listened_at, :track_name, :artist_name, :release_name,
-    :recording_mbid, :artist_mbid, :release_mbid, :user_name,
-    :origin_url, :music_service, :duration_ms, :tracknumber,
-    :discnumber, :loved, :rating,
+    :listened_at,
+    :track_name,
+    :artist_name,
+    :release_name,
+    :recording_mbid,
+    :artist_mbid,
+    :release_mbid,
+    :user_name,
+    :origin_url,
+    :music_service,
+    :duration_ms,
+    :tracknumber,
+    :discnumber,
+    :loved,
+    :rating,
     # Skip-Detection
-    :duration, :played_duration, :is_skipped, :scrobble_percentage, :skip_reason
+    :duration,
+    :played_duration,
+    :is_skipped,
+    :scrobble_percentage,
+    :skip_reason
   ]
 
   # Tier 2 Keys die aus additional_info in metadata JSONB extrahiert werden
   @tier2_keys [
-    "genres", "tags", "release_year", "label", "isrc",
-    "submission_client", "submission_client_version",
-    "artist_mbids", "artist_names", "total_tracks"
+    "genres",
+    "tags",
+    "release_year",
+    "label",
+    "isrc",
+    "submission_client",
+    "submission_client_version",
+    "artist_mbids",
+    "artist_names",
+    "total_tracks"
   ]
 
   @doc false
@@ -62,8 +86,10 @@ defmodule AppApi.Listen do
     |> cast(attrs, @tier1_fields ++ [:metadata, :additional_info])
     |> validate_required([:listened_at, :track_name, :artist_name])
     |> auto_extract_metadata()
-    |> auto_extract_duration()      # NEU
-    |> validate_and_mark_skipped()  # NEU
+    # NEU
+    |> auto_extract_duration()
+    # NEU
+    |> validate_and_mark_skipped()
   end
 
   # ===== NEU: SKIP-DETECTION LOGIC =====
@@ -125,9 +151,12 @@ defmodule AppApi.Listen do
   end
 
   defp put_if_present(changeset, _field, nil), do: changeset
-  defp put_if_present(changeset, field, value) when is_binary(value) or is_integer(value) or is_boolean(value) do
+
+  defp put_if_present(changeset, field, value)
+       when is_binary(value) or is_integer(value) or is_boolean(value) do
     put_change(changeset, field, value)
   end
+
   defp put_if_present(changeset, _field, _value), do: changeset
 
   # ===== PUBLIC: Query Helpers (Existing + New) =====
@@ -245,7 +274,10 @@ defmodule AppApi.Listen do
       select: %{
         total_listens: count(l.id),
         skipped_count: sum(fragment("CASE WHEN ? THEN 1 ELSE 0 END", l.is_skipped)),
-        valid_count: sum(fragment("CASE WHEN NOT ? OR ? IS NULL THEN 1 ELSE 0 END", l.is_skipped, l.is_skipped)),
+        valid_count:
+          sum(
+            fragment("CASE WHEN NOT ? OR ? IS NULL THEN 1 ELSE 0 END", l.is_skipped, l.is_skipped)
+          ),
         avg_completion: avg(l.scrobble_percentage)
       }
   end
@@ -261,5 +293,6 @@ defmodule AppApi.Listen do
       {:error, _} -> %{listen | metadata: %{}}
     end
   end
+
   def parse_metadata(listen), do: listen
 end

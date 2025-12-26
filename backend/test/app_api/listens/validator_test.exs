@@ -25,7 +25,8 @@ defmodule AppApi.Listens.ValidatorTest do
 
       assert result.is_valid == true
       assert result.is_skipped == false
-      assert result.required_duration == 240  # min(300, 240) = 240
+      # min(300, 240) = 240
+      assert result.required_duration == 240
     end
 
     test "track 10 min (600s) with only 200s is skipped" do
@@ -54,21 +55,23 @@ defmodule AppApi.Listens.ValidatorTest do
 
   describe "validate_from_map/1" do
     test "extracts duration from duration_ms" do
-      result = Validator.validate_from_map(%{
-        duration_ms: 180_000,
-        played_duration: 100
-      })
+      result =
+        Validator.validate_from_map(%{
+          duration_ms: 180_000,
+          played_duration: 100
+        })
 
       assert result.duration == 180
       assert result.is_valid == true
     end
 
     test "prefers duration over duration_ms" do
-      result = Validator.validate_from_map(%{
-        duration: 200,
-        duration_ms: 180_000,
-        played_duration: 100
-      })
+      result =
+        Validator.validate_from_map(%{
+          duration: 200,
+          duration_ms: 180_000,
+          played_duration: 100
+        })
 
       assert result.duration == 200
     end

@@ -24,30 +24,30 @@ defmodule AppApi.MixProject do
   defp elixirc_paths(_), do: ["lib"]
 
   defp deps do
-  [
-    {:phoenix, "~> 1.7.21"},
-    {:phoenix_ecto, "~> 4.7"},
-    {:ecto_sql, "~> 3.13"},
-    {:ecto_sqlite3, "~> 0.17"},
-    {:phoenix_html, "~> 4.3"},
-    {:phoenix_live_reload, "~> 1.5", only: :dev},
-    {:phoenix_live_view, "~> 1.1"},
-    {:phoenix_live_dashboard, "~> 0.8"},
-    {:swoosh, "~> 1.19"},
-    {:finch, "~> 0.20"},
-    {:telemetry_metrics, "~> 1.1"},
-    {:telemetry_poller, "~> 1.3"},
-    {:gettext, "~> 0.26"},
-    {:jason, "~> 1.4"},
-    {:dns_cluster, "~> 0.1"},
-    {:bandit, "~> 1.9"},
-    {:cors_plug, "~> 3.0"},
-    {:httpoison, "~> 2.3"},       # ← NUR DIESE EINE ZEILE
-    {:oban, "~> 2.17"},
-    {:quantum, "~> 3.5"}
-  ]
-end
-
+    [
+      {:phoenix, "~> 1.7.21"},
+      {:phoenix_ecto, "~> 4.7"},
+      {:ecto_sql, "~> 3.13"},
+      {:ecto_sqlite3, "~> 0.17"},
+      {:phoenix_html, "~> 4.3"},
+      {:phoenix_live_reload, "~> 1.5", only: :dev},
+      {:phoenix_live_view, "~> 1.1"},
+      {:phoenix_live_dashboard, "~> 0.8"},
+      {:swoosh, "~> 1.19"},
+      {:finch, "~> 0.20"},
+      {:telemetry_metrics, "~> 1.1"},
+      {:telemetry_poller, "~> 1.3"},
+      {:gettext, "~> 0.26"},
+      {:jason, "~> 1.4"},
+      {:dns_cluster, "~> 0.1"},
+      {:bandit, "~> 1.9"},
+      {:cors_plug, "~> 3.0"},
+      # ← NUR DIESE EINE ZEILE
+      {:httpoison, "~> 2.3"},
+      {:oban, "~> 2.17"},
+      {:quantum, "~> 3.5"}
+    ]
+  end
 
   defp aliases do
     [

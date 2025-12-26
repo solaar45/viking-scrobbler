@@ -353,13 +353,13 @@ defmodule AppApiWeb.ListenBrainzController do
         |> json(%{error: "Listen not found"})
 
       listen ->
-        validation = Validator.validate_listen(listen.duration, listen.played_duration)
+        validation = Validator.validate_listen(listen.duration_ms, listen.played_duration)
 
         json(conn, %{
           listen_id: listen.id,
           track_name: listen.track_name,
           artist_name: listen.artist_name,
-          duration: listen.duration,
+          duration: listen.duration_ms,
           played_duration: listen.played_duration,
           validation: %{
             is_valid: validation.is_valid,
@@ -384,17 +384,25 @@ defmodule AppApiWeb.ListenBrainzController do
 
     # Aggregierte Skip-Stats
     stats =
-      query
-      |> select([l], %{
-        total_listens: count(l.id),
-        skipped_count: sum(fragment("CASE WHEN ? THEN 1 ELSE 0 END", l.is_skipped)),
-        valid_count:
-          sum(
-            fragment("CASE WHEN NOT ? OR ? IS NULL THEN 1 ELSE 0 END", l.is_skipped, l.is_skipped)
-          ),
-        avg_completion: avg(l.scrobble_percentage)
-      })
-      |> Repo.one()
+  (query
+   |> select([l], %{
+     total_listens: count(l.id),
+     skipped_count: sum(fragment("CASE WHEN ? THEN 1 ELSE 0 END", l.is_skipped)),
+     valid_count:
+       sum(
+         fragment("CASE WHEN NOT ? OR ? IS NULL THEN 1 ELSE 0 END", l.is_skipped, l.is_skipped)
+       ),
+     # SQLite/Ecto: AVG kann sonst als "weird type" zurückkommen → explizit REAL casten
+     avg_completion:
+       fragment("COALESCE(CAST(AVG(?) AS REAL), 0.0)", l.scrobble_percentage)
+   })
+   |> Repo.one()) ||
+    %{
+      total_listens: 0,
+      skipped_count: 0,
+      valid_count: 0,
+      avg_completion: 0.0
+    }
 
     # Null-Safety
     total = stats.total_listens || 0
@@ -479,7 +487,28 @@ defmodule AppApiWeb.ListenBrainzController do
       Enum.map(payload, fn listen_data ->
         track_metadata = listen_data["track_metadata"] || %{}
 
-        %{
+      additional_info = track_metadata["additional_info"] || %{}
+
+      duration_ms =
+        cond do
+          is_integer(additional_info["duration_ms"]) ->
+            additional_info["duration_ms"]
+
+          is_integer(additional_info["duration"]) ->
+            additional_info["duration"] * 1000
+
+          true ->
+            nil
+        end
+
+      played_duration_ms =
+        case additional_info["played_duration"] do
+          nil -> nil
+          v when is_integer(v) and v < 1000 -> v * 1000
+          v when is_integer(v) -> v
+        end
+
+      %{
           listened_at: parse_timestamp(listen_data["listened_at"]),
           track_name: track_metadata["track_name"],
           artist_name: track_metadata["artist_name"],
@@ -487,7 +516,11 @@ defmodule AppApiWeb.ListenBrainzController do
           recording_mbid: get_in(track_metadata, ["additional_info", "recording_mbid"]),
           artist_mbid: get_in(track_metadata, ["additional_info", "artist_mbid"]),
           release_mbid: get_in(track_metadata, ["additional_info", "release_mbid"]),
-          additional_info: track_metadata["additional_info"] || %{},
+          additional_info: additional_info,
+
+      duration_ms: duration_ms,
+
+      played_duration: played_duration_ms,
           user_name: user_name,
           inserted_at: DateTime.utc_now() |> DateTime.truncate(:second)
         }
@@ -676,6 +709,7 @@ defmodule AppApiWeb.ListenBrainzController do
       |> Map.put_new("discnumber", discnumber)
       |> Map.put("genres", genres)
       |> Map.put("release_year", release_year)
+      |> Map.put("played_duration", listen.played_duration)
 
     %{
       listened_at: listen.listened_at,

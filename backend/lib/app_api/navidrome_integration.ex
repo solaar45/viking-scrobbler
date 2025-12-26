@@ -6,6 +6,7 @@ defmodule AppApi.NavidromeIntegration do
 
   require Logger
   alias AppApi.{Repo, Listen, NavidromeCredential}
+  alias AppApi.Listens.Validator
   import Ecto.Query
 
   # === PUBLIC API ===
@@ -15,13 +16,14 @@ defmodule AppApi.NavidromeIntegration do
   """
   def enrich_listen_from_navidrome(%Listen{} = listen) do
     with {:ok, navidrome_config} <- resolve_navidrome_config(listen),
-         {:ok, song_data} <- search_song(
-           navidrome_config.url,
-           navidrome_config.username,
-           navidrome_config.password,
-           listen.artist_name,
-           listen.track_name
-         ) do
+         {:ok, song_data} <-
+           search_song(
+             navidrome_config.url,
+             navidrome_config.username,
+             navidrome_config.password,
+             listen.artist_name,
+             listen.track_name
+           ) do
       update_listen_with_navidrome_data(listen, song_data)
     else
       {:error, reason} ->
@@ -39,16 +41,17 @@ defmodule AppApi.NavidromeIntegration do
       iex> AppApi.NavidromeIntegration.enrich_recent_listens("viking_user", 50)
       42
   """
-  def enrich_recent_listens(user_name, count \\ 50) when is_binary(user_name) and is_integer(count) do
+  def enrich_recent_listens(user_name, count \\ 50)
+      when is_binary(user_name) and is_integer(count) do
     Logger.info("🔄 Starting batch enrichment for #{user_name}, limit: #{count}")
 
     # Query für Listens ohne Genres
     query =
       from l in Listen,
-      where: l.user_name == ^user_name,
-      where: fragment("? NOT LIKE '%genres%'", l.metadata) or l.metadata == "{}",
-      order_by: [desc: l.listened_at],
-      limit: ^count
+        where: l.user_name == ^user_name,
+        where: fragment("? NOT LIKE '%genres%'", l.metadata) or l.metadata == "{}",
+        order_by: [desc: l.listened_at],
+        limit: ^count
 
     listens = Repo.all(query)
     total = length(listens)
@@ -64,11 +67,14 @@ defmodule AppApi.NavidromeIntegration do
         listens
         |> Enum.with_index(1)
         |> Enum.map(fn {listen, index} ->
-          Logger.info("Processing #{index}/#{total}: #{listen.artist_name} - #{listen.track_name}")
+          Logger.info(
+            "Processing #{index}/#{total}: #{listen.artist_name} - #{listen.track_name}"
+          )
 
           case enrich_listen_from_navidrome(listen) do
             {:ok, _} ->
-              :timer.sleep(200)  # Rate limiting (5 requests/sec)
+              # Rate limiting (5 requests/sec)
+              :timer.sleep(200)
               1
 
             {:error, reason} ->
@@ -175,11 +181,12 @@ defmodule AppApi.NavidromeIntegration do
         token = NavidromeCredential.decrypt_token(cred)
 
         if token do
-          {:ok, %{
-            url: cred.url,
-            username: cred.username,
-            password: token
-          }}
+          {:ok,
+           %{
+             url: cred.url,
+             username: cred.username,
+             password: token
+           }}
         else
           {:error, :decryption_failed}
         end
@@ -225,7 +232,7 @@ defmodule AppApi.NavidromeIntegration do
         test_credentials = [
           {username, username},
           {username, "navidrome"},
-          {"admin", "admin"},
+          {"admin", "admin"}
         ]
 
         Enum.find_value(test_credentials, {:error, :auth_failed}, fn {user, pass} ->
@@ -368,12 +375,11 @@ defmodule AppApi.NavidromeIntegration do
   defp parse_search_response(body, artist, track) do
     case Jason.decode(body) do
       {:ok, %{"subsonic-response" => %{"searchResult3" => %{"song" => songs}}}}
-        when is_list(songs) and length(songs) > 0 ->
-
+      when is_list(songs) and length(songs) > 0 ->
         matched_song =
           Enum.find(songs, fn song ->
             String.downcase(song["artist"] || "") == String.downcase(artist) and
-            String.downcase(song["title"] || "") == String.downcase(track)
+              String.downcase(song["title"] || "") == String.downcase(track)
           end) || List.first(songs)
 
         extract_metadata(matched_song)
@@ -406,6 +412,7 @@ defmodule AppApi.NavidromeIntegration do
   end
 
   defp parse_genres(nil), do: []
+
   defp parse_genres(genre_string) when is_binary(genre_string) do
     genre_string
     |> String.split(~r/[;,\/]/)
@@ -414,15 +421,20 @@ defmodule AppApi.NavidromeIntegration do
     |> Enum.take(5)
   end
 
+  # === 🆕 ENHANCED: UPDATE WITH SKIP VALIDATION ===
+
   defp update_listen_with_navidrome_data(listen, navidrome_data) do
-    genres = navidrome_data["genres"]
+    # NOTE: In Unraid/bridge setups, Navidrome may return duration but no genres;
+    # we must not block updates on genres presence.
 
-    if genres && length(genres) > 0 do
-      current_metadata = parse_metadata(listen.metadata)
+    genres = navidrome_data["genres"] || []
 
-      # Merge selected Navidrome fields into metadata (only when present)
-      extra = %{}
-      |> maybe_put(navidrome_data, "genres", genres)
+    current_metadata = parse_metadata(listen.metadata)
+
+    # Merge selected Navidrome fields into metadata (only when present)
+    extra =
+      %{}
+      |> maybe_put(navidrome_data, "genres", if(length(genres) > 0, do: genres, else: nil))
       |> maybe_put(navidrome_data, "year", navidrome_data["year"])
       |> maybe_put(navidrome_data, "album", navidrome_data["album"])
       |> maybe_put(navidrome_data, "duration_ms", navidrome_data["duration_ms"])
@@ -432,44 +444,74 @@ defmodule AppApi.NavidromeIntegration do
       |> maybe_put(navidrome_data, "path", navidrome_data["path"])
       |> Map.put("source", "navidrome_id3")
 
-      new_metadata = Map.merge(current_metadata, extra)
+    new_metadata = Map.merge(current_metadata, extra)
 
-      changeset =
-        listen
-        |> Ecto.Changeset.change(%{
-          metadata: Jason.encode!(new_metadata),
-          duration_ms: listen.duration_ms || navidrome_data["duration_ms"],
-          tracknumber: listen.tracknumber || navidrome_data["tracknumber"],
-          discnumber: listen.discnumber || navidrome_data["discnumber"]
-        })
+    # Extract duration from Navidrome (in seconds)
+    duration_seconds = div(navidrome_data["duration_ms"] || 0, 1000)
 
-      case Repo.update(changeset) do
-        {:ok, updated_listen} ->
-          Logger.info("✅ Enriched listen #{listen.id} from Navidrome ID3: #{inspect(genres)}")
-
-          # Notify connected clients that this listen was enriched
-          try do
-            AppApiWeb.Endpoint.broadcast!("scrobbles:#{listen.user_name}", "listen_enriched", %{
-              listen_id: updated_listen.id,
-              track_name: updated_listen.track_name,
-              artist_name: updated_listen.artist_name
-            })
-          rescue
-            _ -> Logger.debug("Navidrome broadcast failed or endpoint not available")
-          end
-
-          {:ok, updated_listen}
-
-        {:error, changeset} ->
-          Logger.error("Failed to update listen: #{inspect(changeset.errors)}")
-          {:error, :update_failed}
+    # Extract played_duration from additional_info if present
+    played_duration =
+      case listen.additional_info do
+        %{"played_duration" => pd} when is_integer(pd) -> pd
+        _ -> nil
       end
-    else
-      {:error, :no_genres}
+
+    # Run skip validation if we have duration
+    validation =
+      if duration_seconds > 0 do
+        Validator.validate_listen(duration_seconds, played_duration)
+      else
+        nil
+      end
+
+    changeset =
+      listen
+      |> Ecto.Changeset.change(%{
+        metadata: Jason.encode!(new_metadata),
+        duration_ms: listen.duration_ms || navidrome_data["duration_ms"],
+        tracknumber: listen.tracknumber || navidrome_data["tracknumber"],
+        discnumber: listen.discnumber || navidrome_data["discnumber"],
+        # NEW FIELDS (don't overwrite existing with nil/0)
+        duration: if(duration_seconds > 0, do: duration_seconds, else: listen.duration),
+        played_duration: played_duration || listen.played_duration,
+        is_skipped: validation && validation.is_skipped,
+        scrobble_percentage: validation && validation.scrobble_percentage,
+        skip_reason: validation && validation.skip_reason
+      })
+
+    case Repo.update(changeset) do
+      {:ok, updated_listen} ->
+        skip_status =
+          if validation && validation.is_skipped,
+            do: " [SKIPPED: #{validation.skip_reason}]",
+            else: ""
+
+        Logger.info(
+          "✅ Enriched listen #{listen.id} from Navidrome (genres=#{length(genres)})#{skip_status}"
+        )
+
+        # Notify connected clients that this listen was enriched
+        try do
+          AppApiWeb.Endpoint.broadcast!("scrobbles:#{listen.user_name}", "listen_enriched", %{
+            listen_id: updated_listen.id,
+            track_name: updated_listen.track_name,
+            artist_name: updated_listen.artist_name,
+            is_skipped: validation && validation.is_skipped
+          })
+        rescue
+          _ -> Logger.debug("Navidrome broadcast failed or endpoint not available")
+        end
+
+        {:ok, updated_listen}
+
+      {:error, changeset} ->
+        Logger.error("Failed to update listen: #{inspect(changeset.errors)}")
+        {:error, :update_failed}
     end
   end
 
   defp parse_metadata(nil), do: %{}
+
   defp parse_metadata(str) when is_binary(str) do
     case Jason.decode(str) do
       {:ok, map} -> map
