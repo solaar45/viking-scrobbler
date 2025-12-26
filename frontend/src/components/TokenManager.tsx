@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { VIKING_DESIGN, cn, getButtonClasses } from "@/lib/design-tokens";
 
 interface Token {
   id: number;
@@ -26,14 +27,11 @@ export function TokenManager() {
   useEffect(() => {
     loadTokens();
 
-    // 🎯 Listen for datetime format changes
     const handleFormatChange = () => {
-      // Force re-render by cloning tokens array
       setTokens((prev) => [...prev]);
     };
 
     window.addEventListener('datetime-format-changed', handleFormatChange);
-
     return () => {
       window.removeEventListener('datetime-format-changed', handleFormatChange);
     };
@@ -120,7 +118,6 @@ export function TokenManager() {
     }
   };
 
-  // 🎯 FORMAT HELPERS WITH CUSTOM FORMATS
   const getDateTimeFormats = (): DateTimeFormats => {
     const saved = localStorage.getItem("datetime_formats");
     if (saved) {
@@ -142,20 +139,18 @@ export function TokenManager() {
     const formats = getDateTimeFormats();
     const d = new Date(dateStr);
 
-    // Date formatting
     const day = String(d.getDate()).padStart(2, '0');
     const month = String(d.getMonth() + 1).padStart(2, '0');
     const year = d.getFullYear();
     const monthName = d.toLocaleString('en', { month: 'short' });
 
     const formattedDate = formats.dateFormat
-      .replace('MMM', monthName)  // FIRST: Dec
+      .replace('MMM', monthName)
       .replace('DD', day)
-      .replace('MM', month)       // THEN: 12
+      .replace('MM', month)
       .replace('YYYY', String(year))
       .replace('YY', String(year).slice(-2));
 
-    // Time formatting
     const hours24 = d.getHours();
     const hours12 = hours24 % 12 || 12;
     const minutes = String(d.getMinutes()).padStart(2, '0');
@@ -173,171 +168,229 @@ export function TokenManager() {
   };
 
   return (
-  <>
-    {/* HEADER – freischwebend, wie Overview */}
-    <div className="flex items-center justify-between">
-      <div className="flex items-center gap-3">
-        <h2 className="card-title-dense">API Token Management</h2>
-        <span className="text-viking-border-emphasis text-xl font-light">|</span>
-        <span className="text-xs font-semibold text-viking-text-tertiary uppercase tracking-wider">
-          Manage personal API tokens for external services
-        </span>
-      </div>
-    </div>
-
-    {/* CARD – gesamter Inhalt */}
-    <div className="card-dense">
-      {/* CONTENT */}
-      <div className="p-6 space-y-6">
-        {/* GENERATE NEW TOKEN */}
-        <div className="p-5 bg-viking-bg-tertiary rounded-lg border border-viking-border-default">
-          <h3 className="text-base font-semibold text-viking-text-primary mb-4">
-            Generate New Token
-          </h3>
-          <div className="flex gap-3">
-            <input
-              type="text"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Token description (e.g., Navidrome, Mobile App)"
-              className="flex-1 px-4 py-2.5 bg-viking-bg-secondary border border-viking-border-default rounded-lg text-sm text-viking-text-primary placeholder:text-viking-text-tertiary focus:outline-none focus:ring-2 focus:ring-viking-purple/50 focus:border-viking-purple transition-all"
-            />
-            <button
-              onClick={generateToken}
-              className="px-6 py-2.5 bg-gradient-to-r from-viking-purple to-viking-purple-dark hover:from-viking-purple-dark hover:to-viking-purple text-white rounded-lg text-sm font-semibold uppercase tracking-wide shadow-lg shadow-viking-purple/20 hover:shadow-xl hover:shadow-viking-purple/30 transition-all"
-            >
-              Generate Token
-            </button>
-          </div>
+    <>
+      {/* HEADER */}
+      <div className={VIKING_DESIGN.layouts.header.wrapper}>
+        <div className={VIKING_DESIGN.layouts.header.title}>
+          <h2 className={VIKING_DESIGN.typography.title.card}>API Token Management</h2>
+          <span className={VIKING_DESIGN.layouts.header.separator}>|</span>
+          <span className={VIKING_DESIGN.layouts.header.subtitle}>
+            Manage personal API tokens for external services
+          </span>
         </div>
+      </div>
 
-        {/* NEW TOKEN SUCCESS */}
-        {newToken && (
-          <div className="bg-viking-emerald/10 border border-viking-emerald/30 rounded-lg p-5">
-            <p className="text-viking-emerald font-semibold mb-2 text-sm flex items-center gap-2">
-              <span className="text-lg">✅</span> Token Generated Successfully!
-            </p>
-            <p className="text-sm text-viking-text-secondary mb-4">
-              Copy this token now. You won&apos;t be able to see it again.
-            </p>
-            <div className="flex gap-2">
-              <code className="flex-1 bg-viking-bg-secondary px-4 py-3 rounded-lg font-mono text-sm break-all select-all text-viking-text-primary border border-viking-border-default">
-                {newToken.token}
-              </code>
+      {/* CARD */}
+      <div className={VIKING_DESIGN.components.card}>
+        <div className={VIKING_DESIGN.components.cardContent}>
+          {/* GENERATE NEW TOKEN */}
+          <div className={VIKING_DESIGN.components.alert.info}>
+            <h3 className={cn(
+              "text-base font-semibold mb-4",
+              VIKING_DESIGN.colors.text.primary
+            )}>
+              Generate New Token
+            </h3>
+            <div className={cn("flex", VIKING_DESIGN.spacing.inlineGap.medium)}>
+              <input
+                type="text"
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="Token description (e.g., Navidrome, Mobile App)"
+                className={cn(VIKING_DESIGN.components.input.base, "flex-1")}
+              />
               <button
-                onClick={() => copyToken(newToken.token, newToken.id)}
-                className="px-5 py-3 bg-viking-emerald hover:bg-viking-emerald-dark text-white rounded-lg text-sm font-semibold transition-all shadow-lg shadow-viking-emerald/20"
+                onClick={generateToken}
+                className={getButtonClasses('primary')}
               >
-                {copiedId === newToken.id ? "✓ Copied!" : "Copy"}
+                Generate Token
               </button>
             </div>
-            <button
-              onClick={() => setNewToken(null)}
-              className="mt-3 text-sm text-viking-text-tertiary hover:text-viking-text-secondary transition-colors"
-            >
-              Dismiss
-            </button>
           </div>
-        )}
 
-        {/* ACTIVE TOKENS */}
-        <div>
-          <h3 className="text-base font-semibold text-viking-text-primary mb-4">
-            Active Tokens ({tokens.length})
-          </h3>
-
-          {loading ? (
-            <div className="text-center py-12 text-viking-text-tertiary text-sm">
-              Loading tokens...
-            </div>
-          ) : tokens.length === 0 ? (
-            <div className="text-center py-12 text-viking-text-tertiary text-sm">
-              No tokens yet. Generate one to connect services.
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {tokens.map((token) => (
-                <div
-                  key={token.id}
-                  className="bg-viking-bg-tertiary rounded-lg p-5 border border-viking-border-default hover:border-viking-border-emphasis transition-colors"
+          {/* NEW TOKEN SUCCESS */}
+          {newToken && (
+            <div className={VIKING_DESIGN.components.alert.success}>
+              <p className={cn(
+                "font-semibold mb-2 text-sm flex items-center",
+                VIKING_DESIGN.spacing.inlineGap.small,
+                VIKING_DESIGN.colors.status.success.text
+              )}>
+                <span className="text-lg">✅</span> Token Generated Successfully!
+              </p>
+              <p className={cn("text-sm mb-4", VIKING_DESIGN.colors.text.secondary)}>
+                Copy this token now. You won&apos;t be able to see it again.
+              </p>
+              <div className={cn("flex", VIKING_DESIGN.spacing.inlineGap.small)}>
+                <code className={cn(VIKING_DESIGN.components.code, "flex-1")}>
+                  {newToken.token}
+                </code>
+                <button
+                  onClick={() => copyToken(newToken.token, newToken.id)}
+                  className={cn(
+                    getButtonClasses('primary'),
+                    "whitespace-nowrap"
+                  )}
                 >
-                  <div className="flex items-start justify-between mb-4">
-                    <div className="flex-1 min-w-0">
-                      {editingId === token.id ? (
-                        <div className="flex gap-2 mb-3">
-                          <input
-                            type="text"
-                            value={editDescription}
-                            onChange={(e) =>
-                              setEditDescription(e.target.value)
-                            }
-                            className="flex-1 px-3 py-2 bg-viking-bg-secondary border border-viking-border-default rounded text-sm text-viking-text-primary focus:outline-none focus:ring-2 focus:ring-viking-purple/50"
-                            autoFocus
-                          />
-                          <button
-                            onClick={() => updateToken(token.id)}
-                            className="px-4 py-2 bg-viking-purple hover:bg-viking-purple-dark text-white rounded text-sm font-semibold transition-all"
-                          >
-                            Save
-                          </button>
-                          <button
-                            onClick={() => setEditingId(null)}
-                            className="px-4 py-2 border border-viking-border-emphasis rounded text-sm text-viking-text-secondary hover:bg-viking-bg-elevated transition-all"
-                          >
-                            Cancel
-                          </button>
-                        </div>
-                      ) : (
-                        <h4 className="font-semibold text-base text-viking-text-primary mb-3">
-                          {token.description}
-                        </h4>
-                      )}
-
-                      <div className="flex items-center gap-2 mb-3">
-                        <code className="flex-1 text-xs font-mono bg-viking-bg-secondary px-3 py-2.5 rounded border border-viking-border-default break-all select-all text-viking-text-secondary">
-                          {token.token}
-                        </code>
-                        <button
-                          onClick={() => copyToken(token.token, token.id)}
-                          className="px-4 py-2.5 text-xs bg-viking-purple hover:bg-viking-purple-dark text-white rounded font-semibold transition-all whitespace-nowrap"
-                        >
-                          {copiedId === token.id ? "✓ Copied!" : "Copy"}
-                        </button>
-                      </div>
-
-                      <div className="flex gap-4 text-xs text-viking-text-tertiary">
-                        <span>Created: {formatDate(token.created_at)}</span>
-                        <span>Last Used: {formatDate(token.last_used)}</span>
-                      </div>
-                    </div>
-
-                    <div className="flex gap-3 ml-4">
-                      {editingId !== token.id && (
-                        <button
-                          onClick={() => {
-                            setEditingId(token.id)
-                            setEditDescription(token.description)
-                          }}
-                          className="text-sm text-viking-text-secondary hover:text-viking-purple transition-colors font-medium"
-                        >
-                          Edit
-                        </button>
-                      )}
-                      <button
-                        onClick={() => deleteToken(token.id)}
-                        className="text-sm text-red-400 hover:text-red-300 transition-colors font-medium"
-                      >
-                        Delete
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              ))}
+                  {copiedId === newToken.id ? "✓ Copied!" : "Copy"}
+                </button>
+              </div>
+              <button
+                onClick={() => setNewToken(null)}
+                className={cn(
+                  "mt-3 text-sm",
+                  VIKING_DESIGN.colors.text.tertiary,
+                  "hover:text-viking-text-secondary",
+                  VIKING_DESIGN.effects.transition.base
+                )}
+              >
+                Dismiss
+              </button>
             </div>
           )}
+
+          {/* ACTIVE TOKENS */}
+          <div>
+            <h3 className={cn(
+              "text-base font-semibold mb-4",
+              VIKING_DESIGN.colors.text.primary
+            )}>
+              Active Tokens ({tokens.length})
+            </h3>
+
+            {loading ? (
+              <div className={cn(
+                "text-center py-12 text-sm",
+                VIKING_DESIGN.colors.text.tertiary
+              )}>
+                Loading tokens...
+              </div>
+            ) : tokens.length === 0 ? (
+              <div className={cn(
+                "text-center py-12 text-sm",
+                VIKING_DESIGN.colors.text.tertiary
+              )}>
+                No tokens yet. Generate one to connect services.
+              </div>
+            ) : (
+              <div className={VIKING_DESIGN.spacing.elementSpacing}>
+                {tokens.map((token) => (
+                  <div
+                    key={token.id}
+                    className={cn(
+                      VIKING_DESIGN.colors.card.tertiary,
+                      "rounded-lg p-5 border",
+                      VIKING_DESIGN.colors.border.default,
+                      "hover:border-viking-border-emphasis",
+                      VIKING_DESIGN.effects.transition.base
+                    )}
+                  >
+                    <div className={cn(
+                      "flex items-start justify-between mb-4"
+                    )}>
+                      <div className="flex-1 min-w-0">
+                        {editingId === token.id ? (
+                          <div className={cn(
+                            "flex mb-3",
+                            VIKING_DESIGN.spacing.inlineGap.small
+                          )}>
+                            <input
+                              type="text"
+                              value={editDescription}
+                              onChange={(e) => setEditDescription(e.target.value)}
+                              className={cn(
+                                VIKING_DESIGN.components.input.base,
+                                "flex-1"
+                              )}
+                              autoFocus
+                            />
+                            <button
+                              onClick={() => updateToken(token.id)}
+                              className={getButtonClasses('primary')}
+                            >
+                              Save
+                            </button>
+                            <button
+                              onClick={() => setEditingId(null)}
+                              className={getButtonClasses('secondary')}
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        ) : (
+                          <h4 className={cn(
+                            "font-semibold text-base mb-3",
+                            VIKING_DESIGN.colors.text.primary
+                          )}>
+                            {token.description}
+                          </h4>
+                        )}
+
+                        <div className={cn(
+                          "flex items-center mb-3",
+                          VIKING_DESIGN.spacing.inlineGap.small
+                        )}>
+                          <code className={cn(
+                            "flex-1 text-xs",
+                            VIKING_DESIGN.typography.code,
+                            VIKING_DESIGN.colors.card.base,
+                            "px-3 py-2.5 rounded break-all select-all",
+                            VIKING_DESIGN.colors.text.secondary
+                          )}>
+                            {token.token}
+                          </code>
+                          <button
+                            onClick={() => copyToken(token.token, token.id)}
+                            className={cn(
+                              getButtonClasses('primary'),
+                              "text-xs whitespace-nowrap"
+                            )}
+                          >
+                            {copiedId === token.id ? "✓ Copied!" : "Copy"}
+                          </button>
+                        </div>
+
+                        <div className={cn(
+                          "flex gap-4 text-xs",
+                          VIKING_DESIGN.colors.text.tertiary
+                        )}>
+                          <span>Created: {formatDate(token.created_at)}</span>
+                          <span>Last Used: {formatDate(token.last_used)}</span>
+                        </div>
+                      </div>
+
+                      <div className={cn("flex ml-4", VIKING_DESIGN.spacing.inlineGap.medium)}>
+                        {editingId !== token.id && (
+                          <button
+                            onClick={() => {
+                              setEditingId(token.id)
+                              setEditDescription(token.description)
+                            }}
+                            className={getButtonClasses('ghost')}
+                          >
+                            Edit
+                          </button>
+                        )}
+                        <button
+                          onClick={() => deleteToken(token.id)}
+                          className={cn(
+                            "text-sm font-medium",
+                            VIKING_DESIGN.colors.status.error.text,
+                            "hover:text-red-300",
+                            VIKING_DESIGN.effects.transition.base
+                          )}
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       </div>
-    </div>
-  </>
-);
+    </>
+  );
 }

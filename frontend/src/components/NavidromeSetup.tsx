@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Check, X, RefreshCw } from 'lucide-react'
+import { VIKING_DESIGN, cn, getButtonClasses, getBadgeClasses } from '@/lib/design-tokens'
 
 interface NavidromeStatus {
     connected: boolean
@@ -14,7 +15,6 @@ export function NavidromeSetup() {
     const [showSetup, setShowSetup] = useState(false)
     const [loading, setLoading] = useState(false)
 
-    // Form state
     const [url, setUrl] = useState('http://192.168.0.161:4533')
     const [username, setUsername] = useState('')
     const [password, setPassword] = useState('')
@@ -79,51 +79,69 @@ export function NavidromeSetup() {
     if (status.connected) {
         return (
             <>
-                {/* HEADER – mit Status Badge LINKS */}
-                <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                        <h3 className="card-title-dense">Connect Navidrome</h3>
-                        <span className="text-viking-border-emphasis text-xl font-light">|</span>
-                        <span className="text-xs font-semibold text-viking-text-tertiary uppercase tracking-wider">
+                {/* HEADER */}
+                <div className={VIKING_DESIGN.layouts.header.wrapper}>
+                    <div className={VIKING_DESIGN.layouts.header.title}>
+                        <h3 className={VIKING_DESIGN.typography.title.card}>Connect Navidrome</h3>
+                        <span className={VIKING_DESIGN.layouts.header.separator}>|</span>
+                        <span className={VIKING_DESIGN.layouts.header.subtitle}>
                             Optional – Enables ID3 genre tagging
                         </span>
-                        {/* ✅ Status Badge: Connected */}
-                        <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/30">
+                        {/* Status Badge: Connected */}
+                        <div className={getBadgeClasses('success')}>
                             <span className="h-2 w-2 rounded-full bg-emerald-400"></span>
-                            <span className="text-[10px] font-bold tracking-widest text-emerald-400 uppercase">
+                            <span className={cn(
+                                "text-[10px] font-bold tracking-widest uppercase",
+                                VIKING_DESIGN.colors.status.success.text
+                            )}>
                                 Connected
                             </span>
                         </div>
                     </div>
                 </div>
 
-                {/* CARD: Status-Details */}
-                <div className="card-dense">
-                    <div className="p-6 space-y-4">
-                        <div className="bg-viking-bg-elevated rounded-lg p-4 border border-viking-border-default">
+                {/* CARD */}
+                <div className={VIKING_DESIGN.components.card}>
+                    <div className={VIKING_DESIGN.components.cardContent}>
+                        <div className={cn(
+                            VIKING_DESIGN.colors.card.elevated,
+                            "rounded-lg p-4 border",
+                            VIKING_DESIGN.colors.border.default
+                        )}>
                             <div className="flex items-start justify-between">
                                 <div className="space-y-2">
-                                    <div className="flex items-center gap-2">
-                                        <span className="text-xs font-semibold text-viking-text-tertiary uppercase">
+                                    <div className={cn("flex items-center", VIKING_DESIGN.spacing.inlineGap.small)}>
+                                        <span className={VIKING_DESIGN.layouts.header.subtitle}>
                                             URL
                                         </span>
-                                        <span className="text-sm font-mono text-viking-text-primary">
+                                        <span className={cn(
+                                            "text-sm",
+                                            VIKING_DESIGN.typography.code,
+                                            VIKING_DESIGN.colors.text.primary
+                                        )}>
                                             {status.url}
                                         </span>
                                     </div>
-                                    <div className="flex items-center gap-2">
-                                        <span className="text-xs font-semibold text-viking-text-tertiary uppercase">
+                                    <div className={cn("flex items-center", VIKING_DESIGN.spacing.inlineGap.small)}>
+                                        <span className={VIKING_DESIGN.layouts.header.subtitle}>
                                             User
                                         </span>
-                                        <span className="text-sm font-mono text-viking-text-primary">
+                                        <span className={cn(
+                                            "text-sm",
+                                            VIKING_DESIGN.typography.code,
+                                            VIKING_DESIGN.colors.text.primary
+                                        )}>
                                             {status.username}
                                         </span>
                                     </div>
-                                    <div className="flex items-center gap-2">
-                                        <span className="text-xs font-semibold text-viking-text-tertiary uppercase">
+                                    <div className={cn("flex items-center", VIKING_DESIGN.spacing.inlineGap.small)}>
+                                        <span className={VIKING_DESIGN.layouts.header.subtitle}>
                                             Source
                                         </span>
-                                        <span className="text-sm font-semibold text-emerald-400">
+                                        <span className={cn(
+                                            "text-sm font-semibold",
+                                            VIKING_DESIGN.colors.status.success.text
+                                        )}>
                                             {status.source === "auto"
                                                 ? "🤖 Auto-Discovered"
                                                 : "✋ Manually Configured"}
@@ -134,14 +152,14 @@ export function NavidromeSetup() {
                                 <button
                                     onClick={handleDisconnect}
                                     disabled={loading}
-                                    className="px-4 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-lg text-xs font-bold uppercase transition-colors"
+                                    className={getButtonClasses('destructive', loading)}
                                 >
                                     {loading ? "Disconnecting..." : "Disconnect"}
                                 </button>
                             </div>
                         </div>
 
-                        <div className="text-xs text-viking-text-tertiary">
+                        <div className={VIKING_DESIGN.typography.helper}>
                             ✅ Genres are automatically fetched from your ID3 tags
                         </div>
                     </div>
@@ -150,39 +168,41 @@ export function NavidromeSetup() {
         )
     }
 
-
     if (!showSetup) {
         return (
             <>
-                {/* HEADER – mit Status Badge LINKS */}
-                <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                        <h3 className="card-title-dense">Connect Navidrome</h3>
-                        <span className="text-viking-border-emphasis text-xl font-light">|</span>
-                        <span className="text-xs font-semibold text-viking-text-tertiary uppercase tracking-wider">
+                {/* HEADER */}
+                <div className={VIKING_DESIGN.layouts.header.wrapper}>
+                    <div className={VIKING_DESIGN.layouts.header.title}>
+                        <h3 className={VIKING_DESIGN.typography.title.card}>Connect Navidrome</h3>
+                        <span className={VIKING_DESIGN.layouts.header.separator}>|</span>
+                        <span className={VIKING_DESIGN.layouts.header.subtitle}>
                             Optional – Enables ID3 genre tagging
                         </span>
-                        {/* ❌ Status Badge: Not Connected */}
-                        <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-red-500/10 border border-red-500/30">
+                        {/* Status Badge: Not Connected */}
+                        <div className={getBadgeClasses('error')}>
                             <span className="h-2 w-2 rounded-full bg-red-400"></span>
-                            <span className="text-[10px] font-bold tracking-widest text-red-400 uppercase">
+                            <span className={cn(
+                                "text-[10px] font-bold tracking-widest uppercase",
+                                VIKING_DESIGN.colors.status.error.text
+                            )}>
                                 Not Connected
                             </span>
                         </div>
                     </div>
                 </div>
 
-                {/* CARD: Kurzbeschreibung + Setup Button */}
-                <div className="card-dense">
-                    <div className="p-6">
-                        <p className="text-sm text-viking-text-secondary mb-4">
+                {/* CARD */}
+                <div className={VIKING_DESIGN.components.card}>
+                    <div className={VIKING_DESIGN.components.cardContent}>
+                        <p className={cn("text-sm mb-4", VIKING_DESIGN.colors.text.secondary)}>
                             Connect your Navidrome instance to automatically fetch genres from your music
                             library&apos;s ID3 tags.
                         </p>
 
                         <button
                             onClick={() => setShowSetup(true)}
-                            className="w-full px-6 py-3 bg-gradient-to-r from-viking-purple to-viking-purple-dark hover:from-viking-purple-dark hover:to-viking-purple text-white rounded-lg font-bold text-sm uppercase tracking-wider transition-all shadow-lg shadow-viking-purple/20"
+                            className={cn(getButtonClasses('primary'), "w-full")}
                         >
                             Setup Connection
                         </button>
@@ -192,66 +212,76 @@ export function NavidromeSetup() {
         )
     }
 
-
     return (
         <>
-            {/* HEADER – Setup Mode */}
-            <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                    <h3 className="card-title-dense">Connect Navidrome</h3>
-                    <span className="text-viking-border-emphasis text-xl font-light">|</span>
-                    <span className="text-xs font-semibold text-viking-text-tertiary uppercase tracking-wider">
+            {/* HEADER */}
+            <div className={VIKING_DESIGN.layouts.header.wrapper}>
+                <div className={VIKING_DESIGN.layouts.header.title}>
+                    <h3 className={VIKING_DESIGN.typography.title.card}>Connect Navidrome</h3>
+                    <span className={VIKING_DESIGN.layouts.header.separator}>|</span>
+                    <span className={VIKING_DESIGN.layouts.header.subtitle}>
                         Optional – Enables ID3 genre tagging
                     </span>
                 </div>
 
                 <button
                     onClick={() => setShowSetup(false)}
-                    className="text-viking-text-tertiary hover:text-viking-text-primary flex items-center gap-2 text-xs font-semibold uppercase tracking-wider"
+                    className={cn(
+                        VIKING_DESIGN.colors.text.tertiary,
+                        "hover:text-viking-text-primary flex items-center text-xs font-semibold uppercase tracking-wider",
+                        VIKING_DESIGN.spacing.inlineGap.small,
+                        VIKING_DESIGN.effects.transition.base
+                    )}
                 >
                     Cancel
                     <X className="w-4 h-4" />
                 </button>
             </div>
 
-            {/* CARD: Setup-Form */}
-            <div className="card-dense">
-                <div className="p-6 space-y-4">
-                    <div>
-                        <label className="block text-sm font-medium mb-2">Navidrome URL</label>
+            {/* CARD */}
+            <div className={VIKING_DESIGN.components.card}>
+                <div className={VIKING_DESIGN.components.cardContent}>
+                    <div className={VIKING_DESIGN.layouts.form.field}>
+                        <label className={VIKING_DESIGN.typography.label.base}>
+                            Navidrome URL
+                        </label>
                         <input
                             type="url"
                             value={url}
                             onChange={(e) => setUrl(e.target.value)}
-                            className="w-full px-4 py-2 bg-viking-bg-tertiary border border-viking-border-default rounded-lg text-viking-text-primary focus:border-viking-purple focus:outline-none"
+                            className={VIKING_DESIGN.components.input.base}
                             placeholder="http://192.168.0.161:4533"
                         />
-                        <p className="text-xs text-viking-text-tertiary mt-1">
+                        <p className={VIKING_DESIGN.typography.helper}>
                             The URL where your Navidrome instance is running
                         </p>
                     </div>
 
-                    <div>
-                        <label className="block text-sm font-medium mb-2">Username</label>
+                    <div className={VIKING_DESIGN.layouts.form.field}>
+                        <label className={VIKING_DESIGN.typography.label.base}>
+                            Username
+                        </label>
                         <input
                             type="text"
                             value={username}
                             onChange={(e) => setUsername(e.target.value)}
-                            className="w-full px-4 py-2 bg-viking-bg-tertiary border border-viking-border-default rounded-lg text-viking-text-primary focus:border-viking-purple focus:outline-none"
+                            className={VIKING_DESIGN.components.input.base}
                             placeholder="your_username"
                         />
                     </div>
 
-                    <div>
-                        <label className="block text-sm font-medium mb-2">Password</label>
+                    <div className={VIKING_DESIGN.layouts.form.field}>
+                        <label className={VIKING_DESIGN.typography.label.base}>
+                            Password
+                        </label>
                         <input
                             type="password"
                             value={password}
                             onChange={(e) => setPassword(e.target.value)}
-                            className="w-full px-4 py-2 bg-viking-bg-tertiary border border-viking-border-default rounded-lg text-viking-text-primary focus:border-viking-purple focus:outline-none"
+                            className={VIKING_DESIGN.components.input.base}
                             placeholder="••••••••"
                         />
-                        <p className="text-xs text-viking-text-tertiary mt-1">
+                        <p className={VIKING_DESIGN.typography.helper}>
                             🔒 Password is encrypted and stored securely
                         </p>
                     </div>
@@ -259,23 +289,35 @@ export function NavidromeSetup() {
                     <button
                         onClick={handleConnect}
                         disabled={testStatus === "testing" || !url || !username || !password}
-                        className="w-full px-6 py-3 bg-gradient-to-r from-viking-purple to-viking-purple-dark hover:from-viking-purple-dark hover:to-viking-purple text-white rounded-lg font-bold text-sm uppercase tracking-wider transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                        className={cn(
+                            getButtonClasses('primary', testStatus === "testing" || !url || !username || !password),
+                            "w-full flex items-center justify-center",
+                            VIKING_DESIGN.spacing.inlineGap.small
+                        )}
                     >
                         {testStatus === "testing" && (
-                            <RefreshCw className="w-4 h-4 animate-spin" />
+                            <RefreshCw className={cn("w-4 h-4", VIKING_DESIGN.effects.loading.spin)} />
                         )}
                         {testStatus === "testing" ? "Testing Connection..." : "Connect"}
                     </button>
 
                     {testStatus === "success" && (
-                        <div className="flex items-center gap-2 text-emerald-400 text-sm bg-emerald-400/10 rounded-lg p-3">
+                        <div className={cn(
+                            VIKING_DESIGN.components.alert.success,
+                            "flex items-center",
+                            VIKING_DESIGN.spacing.inlineGap.small
+                        )}>
                             <Check className="w-5 h-5" />
                             <span>✅ Connected! Genres will now be fetched from your ID3 tags.</span>
                         </div>
                     )}
 
                     {testStatus === "error" && (
-                        <div className="flex items-center gap-2 text-red-400 text-sm bg-red-400/10 rounded-lg p-3">
+                        <div className={cn(
+                            VIKING_DESIGN.components.alert.error,
+                            "flex items-center",
+                            VIKING_DESIGN.spacing.inlineGap.small
+                        )}>
                             <X className="w-5 h-5" />
                             <span>
                                 ❌ {errorMessage || "Connection failed. Check URL and credentials."}
@@ -286,5 +328,4 @@ export function NavidromeSetup() {
             </div>
         </>
     )
-
 }
