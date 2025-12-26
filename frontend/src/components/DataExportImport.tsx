@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Download, AlertCircle, RefreshCw } from 'lucide-react'
+import { VIKING_DESIGN, cn, getButtonClasses, getAlertClasses } from '@/lib/design-tokens'
 
 const API_BASE = window.location.origin
 
@@ -46,33 +47,33 @@ export function DataExportImport() {
   return (
     <>
       {/* HEADER */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <h3 className="card-title-dense">Data Export</h3>
-          <span className="text-viking-border-emphasis text-xl font-light">|</span>
-          <span className="text-xs font-semibold text-viking-text-tertiary uppercase tracking-wider">
+      <div className={VIKING_DESIGN.layouts.header.wrapper}>
+        <div className={VIKING_DESIGN.layouts.header.title}>
+          <h3 className={VIKING_DESIGN.typography.title.card}>Data Export</h3>
+          <span className={VIKING_DESIGN.layouts.header.separator}>|</span>
+          <span className={VIKING_DESIGN.layouts.header.subtitle}>
             Download your scrobbles as JSON or CSV
           </span>
         </div>
       </div>
 
       {/* CARD */}
-      <div className="card-dense">
-        <div className="p-6 space-y-6">
+      <div className={VIKING_DESIGN.components.card}>
+        <div className={VIKING_DESIGN.components.cardContent}>
           {/* Export Format */}
-          <div className="space-y-3">
-            <label className="block text-sm font-medium text-viking-text-primary mb-2">
+          <div className={VIKING_DESIGN.layouts.form.field}>
+            <label className={VIKING_DESIGN.typography.label.base}>
               Export Format
             </label>
             <select
               value={exportFormat}
               onChange={(e) => setExportFormat(e.target.value as 'json' | 'csv')}
-              className="w-full px-4 py-2.5 bg-viking-bg-tertiary border border-viking-border-default rounded-lg text-sm text-viking-text-primary focus:outline-none focus:ring-2 focus:ring-viking-purple/50 focus:border-viking-purple transition-all cursor-pointer"
+              className={VIKING_DESIGN.components.select.base}
             >
               <option value="json">JSON (Full Data)</option>
               <option value="csv">CSV (Spreadsheet)</option>
             </select>
-            <p className="text-xs text-viking-text-tertiary">
+            <p className={VIKING_DESIGN.typography.helper}>
               {exportFormat === 'json'
                 ? 'Complete data with all metadata fields'
                 : 'Flat format for Excel/Google Sheets'}
@@ -80,14 +81,14 @@ export function DataExportImport() {
           </div>
 
           {/* Time Range */}
-          <div className="space-y-3">
-            <label className="block text-sm font-medium text-viking-text-primary mb-2">
+          <div className={VIKING_DESIGN.layouts.form.field}>
+            <label className={VIKING_DESIGN.typography.label.base}>
               Time Range
             </label>
             <select
               value={timeRange}
               onChange={(e) => setTimeRange(e.target.value as 'week' | 'month' | 'year' | 'all_time')}
-              className="w-full px-4 py-2.5 bg-viking-bg-tertiary border border-viking-border-default rounded-lg text-sm text-viking-text-primary focus:outline-none focus:ring-2 focus:ring-viking-purple/50 focus:border-viking-purple transition-all cursor-pointer"
+              className={VIKING_DESIGN.components.select.base}
             >
               <option value="week">Last 7 Days</option>
               <option value="month">Last 30 Days</option>
@@ -98,12 +99,22 @@ export function DataExportImport() {
 
           {/* Error Alert */}
           {exportError && (
-            <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-5">
-              <div className="flex items-start gap-3">
-                <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
+            <div className={getAlertClasses('error')}>
+              <div className={cn("flex items-start", VIKING_DESIGN.spacing.inlineGap.medium)}>
+                <AlertCircle className={cn(
+                  "w-5 h-5 flex-shrink-0 mt-0.5",
+                  VIKING_DESIGN.colors.status.error.text
+                )} />
                 <div>
-                  <p className="text-red-400 font-semibold text-sm">Export Error</p>
-                  <p className="text-sm text-viking-text-secondary mt-1">{exportError}</p>
+                  <p className={cn(
+                    "text-sm font-semibold",
+                    VIKING_DESIGN.colors.status.error.text
+                  )}>
+                    Export Error
+                  </p>
+                  <p className={cn("text-sm mt-1", VIKING_DESIGN.colors.text.secondary)}>
+                    {exportError}
+                  </p>
                 </div>
               </div>
             </div>
@@ -113,11 +124,15 @@ export function DataExportImport() {
           <button
             onClick={handleExport}
             disabled={exportLoading}
-            className="w-full px-6 py-2.5 bg-gradient-to-r from-viking-purple to-viking-purple-dark hover:from-viking-purple-dark hover:to-viking-purple text-white rounded-lg text-sm font-semibold uppercase tracking-wide shadow-lg shadow-viking-purple/20 hover:shadow-xl hover:shadow-viking-purple/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            className={cn(
+              getButtonClasses('primary', exportLoading),
+              "w-full flex items-center justify-center",
+              VIKING_DESIGN.spacing.inlineGap.small
+            )}
           >
             {exportLoading ? (
               <>
-                <RefreshCw className="w-4 h-4 animate-spin" />
+                <RefreshCw className={cn("w-4 h-4", VIKING_DESIGN.effects.loading.spin)} />
                 Exporting...
               </>
             ) : (

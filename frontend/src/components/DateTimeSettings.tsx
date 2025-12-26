@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react"
 import { Calendar, Clock } from "lucide-react"
+import { VIKING_DESIGN, cn } from "@/lib/design-tokens"
 
 interface DateTimeFormats {
   dateFormat: string
@@ -95,29 +96,33 @@ export function DateTimeSettings() {
   return (
     <>
       {/* HEADER */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <h3 className="card-title-dense">Date & Time Format</h3>
-          <span className="text-viking-border-emphasis text-xl font-light">|</span>
-          <span className="text-xs font-semibold text-viking-text-tertiary uppercase tracking-wider">
+      <div className={VIKING_DESIGN.layouts.header.wrapper}>
+        <div className={VIKING_DESIGN.layouts.header.title}>
+          <h3 className={VIKING_DESIGN.typography.title.card}>Date & Time Format</h3>
+          <span className={VIKING_DESIGN.layouts.header.separator}>|</span>
+          <span className={VIKING_DESIGN.layouts.header.subtitle}>
             Customize how dates and times are displayed
           </span>
         </div>
       </div>
 
       {/* CARD */}
-      <div className="card-dense">
-        <div className="p-6 space-y-6">
+      <div className={VIKING_DESIGN.components.card}>
+        <div className={VIKING_DESIGN.components.cardContent}>
           {/* Date Format */}
-          <div className="space-y-3">
-            <label className="block text-sm font-medium text-viking-text-primary mb-2 flex items-center gap-2">
+          <div className={VIKING_DESIGN.layouts.form.field}>
+            <label className={cn(
+              VIKING_DESIGN.typography.label.base,
+              "flex items-center",
+              VIKING_DESIGN.spacing.inlineGap.small
+            )}>
               <Calendar className="w-4 h-4" />
               Date Format
             </label>
             <select
               value={dateFormat}
               onChange={(e) => handleDateFormatChange(e.target.value)}
-              className="w-full px-4 py-2.5 bg-viking-bg-tertiary border border-viking-border-default rounded-lg text-sm text-viking-text-primary focus:outline-none focus:ring-2 focus:ring-viking-purple/50 focus:border-viking-purple transition-all cursor-pointer"
+              className={VIKING_DESIGN.components.select.base}
             >
               {DATE_FORMATS.map((format) => (
                 <option key={format.id} value={format.id}>
@@ -128,15 +133,19 @@ export function DateTimeSettings() {
           </div>
 
           {/* Time Format */}
-          <div className="space-y-3">
-            <label className="block text-sm font-medium text-viking-text-primary mb-2 flex items-center gap-2">
+          <div className={VIKING_DESIGN.layouts.form.field}>
+            <label className={cn(
+              VIKING_DESIGN.typography.label.base,
+              "flex items-center",
+              VIKING_DESIGN.spacing.inlineGap.small
+            )}>
               <Clock className="w-4 h-4" />
               Time Format
             </label>
             <select
               value={timeFormat}
               onChange={(e) => handleTimeFormatChange(e.target.value)}
-              className="w-full px-4 py-2.5 bg-viking-bg-tertiary border border-viking-border-default rounded-lg text-sm text-viking-text-primary focus:outline-none focus:ring-2 focus:ring-viking-purple/50 focus:border-viking-purple transition-all cursor-pointer"
+              className={VIKING_DESIGN.components.select.base}
             >
               {TIME_FORMATS.map((format) => (
                 <option key={format.id} value={format.id}>
@@ -147,17 +156,26 @@ export function DateTimeSettings() {
           </div>
 
           {/* Live Preview */}
-          <div className="pt-4 border-t border-viking-border-default">
-            <label className="block text-sm font-medium text-viking-text-primary mb-3">
+          <div className={cn("pt-4", VIKING_DESIGN.colors.border.default, "border-t")}>
+            <label className={cn(VIKING_DESIGN.typography.label.base, "mb-3")}>
               Live Preview
             </label>
-            <div className="bg-viking-bg-elevated rounded-lg px-6 py-5 text-center border border-viking-purple/30">
-              <div className="text-2xl font-semibold font-mono text-viking-text-primary">
+            <div className={cn(
+              VIKING_DESIGN.colors.card.elevated,
+              "rounded-lg px-6 py-5 text-center",
+              VIKING_DESIGN.colors.border.purpleSubtle,
+              "border"
+            )}>
+              <div className={cn(
+                "text-2xl font-semibold",
+                VIKING_DESIGN.typography.code,
+                VIKING_DESIGN.colors.text.primary
+              )}>
                 {formatPreviewDate()}
-                <span className="text-viking-text-tertiary mx-2">•</span>
+                <span className={cn(VIKING_DESIGN.colors.text.tertiary, "mx-2")}>•</span>
                 {formatPreviewTime()}
               </div>
-              <p className="text-xs text-viking-text-tertiary mt-3">
+              <p className={cn(VIKING_DESIGN.typography.helper, "mt-3")}>
                 This format will be used across all tables and displays
               </p>
             </div>

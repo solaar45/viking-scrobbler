@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Sparkles, Search, RefreshCw, CheckCircle2, AlertCircle, Database } from 'lucide-react'
+import { VIKING_DESIGN, cn, getButtonClasses, getAlertClasses } from '@/lib/design-tokens'
 
 const API_BASE = window.location.origin
 
@@ -77,25 +78,29 @@ export function MetadataEnrichment() {
   return (
     <>
       {/* HEADER */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <h3 className="card-title-dense">Metadata Enrichment</h3>
-          <span className="text-viking-border-emphasis text-xl font-light">|</span>
-          <span className="text-xs font-semibold text-viking-text-tertiary uppercase tracking-wider">
+      <div className={VIKING_DESIGN.layouts.header.wrapper}>
+        <div className={VIKING_DESIGN.layouts.header.title}>
+          <h3 className={VIKING_DESIGN.typography.title.card}>Metadata Enrichment</h3>
+          <span className={VIKING_DESIGN.layouts.header.separator}>|</span>
+          <span className={VIKING_DESIGN.layouts.header.subtitle}>
             Automatically add missing genres and release years
           </span>
         </div>
       </div>
 
       {/* CARD */}
-      <div className="card-dense">
-        <div className="p-6 space-y-6">
+      <div className={VIKING_DESIGN.components.card}>
+        <div className={VIKING_DESIGN.components.cardContent}>
           {/* Info Box */}
-          <div className="bg-viking-bg-elevated rounded-lg p-4 border border-viking-border-default">
-            <p className="text-sm font-semibold text-viking-text-primary mb-2">
+          <div className={VIKING_DESIGN.components.alert.info}>
+            <p className={cn("text-sm font-semibold", VIKING_DESIGN.colors.text.primary, "mb-2")}>
               How it works:
             </p>
-            <ul className="text-xs text-viking-text-secondary space-y-1 list-disc list-inside">
+            <ul className={cn(
+              "text-xs",
+              VIKING_DESIGN.colors.text.secondary,
+              "space-y-1 list-disc list-inside"
+            )}>
               <li>Scans your listens for missing genres and release years</li>
               <li>Fetches metadata from Navidrome (primary) and MusicBrainz (fallback)</li>
               <li>Updates existing listens without creating duplicates</li>
@@ -104,15 +109,19 @@ export function MetadataEnrichment() {
           </div>
 
           {/* Scan Section */}
-          <div className="space-y-4">
+          <div className={VIKING_DESIGN.spacing.elementSpacing}>
             <button
               onClick={handleScan}
               disabled={scanning || enriching}
-              className="w-full px-6 py-2.5 bg-gradient-to-r from-viking-purple to-viking-purple-dark hover:from-viking-purple-dark hover:to-viking-purple text-white rounded-lg text-sm font-semibold uppercase tracking-wide shadow-lg shadow-viking-purple/20 hover:shadow-xl hover:shadow-viking-purple/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              className={cn(
+                getButtonClasses('primary', scanning || enriching),
+                "w-full flex items-center justify-center",
+                VIKING_DESIGN.spacing.inlineGap.small
+              )}
             >
               {scanning ? (
                 <>
-                  <RefreshCw className="w-4 h-4 animate-spin" />
+                  <RefreshCw className={cn("w-4 h-4", VIKING_DESIGN.effects.loading.spin)} />
                   Scanning Database...
                 </>
               ) : (
@@ -125,26 +134,30 @@ export function MetadataEnrichment() {
 
             {/* Scan Result */}
             {scanResult && (
-              <div className={`rounded-lg p-4 border ${
+              <div className={cn(
                 scanResult.missing_count > 0
-                  ? 'bg-yellow-500/10 border-yellow-500/30'
-                  : 'bg-viking-emerald/10 border-viking-emerald/30'
-              }`}>
-                <div className="flex items-start gap-3">
-                  <Database className={`w-5 h-5 flex-shrink-0 mt-0.5 ${
-                    scanResult.missing_count > 0 ? 'text-yellow-400' : 'text-viking-emerald'
-                  }`} />
-                  <div>
-                    <p className={`text-sm font-semibold ${
-                      scanResult.missing_count > 0 ? 'text-yellow-400' : 'text-viking-emerald'
-                    }`}>
-                      {scanResult.missing_count > 0 ? (
-                        <>Found {scanResult.missing_count} tracks without complete metadata</>
-                      ) : (
-                        <>All listens have metadata! No enrichment needed.</>
-                      )}
-                    </p>
-                  </div>
+                  ? getAlertClasses('warning')
+                  : getAlertClasses('success')
+              )}>
+                <div className={cn("flex items-start", VIKING_DESIGN.spacing.inlineGap.medium)}>
+                  <Database className={cn(
+                    "w-5 h-5 flex-shrink-0 mt-0.5",
+                    scanResult.missing_count > 0
+                      ? VIKING_DESIGN.colors.status.warning.text
+                      : VIKING_DESIGN.colors.status.success.text
+                  )} />
+                  <p className={cn(
+                    "text-sm font-semibold",
+                    scanResult.missing_count > 0
+                      ? VIKING_DESIGN.colors.status.warning.text
+                      : VIKING_DESIGN.colors.status.success.text
+                  )}>
+                    {scanResult.missing_count > 0 ? (
+                      <>Found {scanResult.missing_count} tracks without complete metadata</>
+                    ) : (
+                      <>All listens have metadata! No enrichment needed.</>
+                    )}
+                  </p>
                 </div>
               </div>
             )}
@@ -152,15 +165,19 @@ export function MetadataEnrichment() {
 
           {/* Enrichment Section */}
           {scanResult && scanResult.missing_count > 0 && (
-            <div className="space-y-4">
+            <div className={VIKING_DESIGN.spacing.elementSpacing}>
               <button
                 onClick={handleEnrich}
                 disabled={enriching}
-                className="w-full px-6 py-2.5 bg-gradient-to-r from-viking-purple to-viking-purple-dark hover:from-viking-purple-dark hover:to-viking-purple text-white rounded-lg text-sm font-semibold uppercase tracking-wide shadow-lg shadow-viking-purple/20 hover:shadow-xl hover:shadow-viking-purple/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                className={cn(
+                  getButtonClasses('primary', enriching),
+                  "w-full flex items-center justify-center",
+                  VIKING_DESIGN.spacing.inlineGap.small
+                )}
               >
                 {enriching ? (
                   <>
-                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    <RefreshCw className={cn("w-4 h-4", VIKING_DESIGN.effects.loading.spin)} />
                     Enriching Metadata...
                   </>
                 ) : (
@@ -173,10 +190,16 @@ export function MetadataEnrichment() {
 
               {enriching && (
                 <div className="space-y-2">
-                  <div className="h-2 bg-viking-bg-tertiary rounded-full overflow-hidden">
-                    <div className="h-full bg-gradient-to-r from-viking-purple to-viking-purple-dark animate-pulse w-1/2 rounded-full"></div>
+                  <div className={cn(
+                    "h-2 rounded-full overflow-hidden",
+                    VIKING_DESIGN.colors.card.tertiary
+                  )}>
+                    <div className={cn(
+                      "h-full bg-gradient-to-r from-viking-purple to-viking-purple-dark w-1/2 rounded-full",
+                      VIKING_DESIGN.effects.loading.pulse
+                    )}></div>
                   </div>
-                  <p className="text-xs text-viking-text-tertiary text-center">
+                  <p className={cn(VIKING_DESIGN.typography.helper, "text-center")}>
                     Processing tracks... This may take a few minutes.
                   </p>
                 </div>
@@ -186,20 +209,32 @@ export function MetadataEnrichment() {
 
           {/* Enrichment Result */}
           {enrichmentResult && (
-            <div className="bg-viking-emerald/10 border border-viking-emerald/30 rounded-lg p-5">
-              <div className="flex items-start gap-3 mb-3">
-                <CheckCircle2 className="w-5 h-5 text-viking-emerald flex-shrink-0 mt-0.5" />
-                <div>
-                  <p className="text-viking-emerald font-semibold text-sm">
-                    Enrichment complete!
-                  </p>
-                </div>
+            <div className={getAlertClasses('success')}>
+              <div className={cn(
+                "flex items-start mb-3",
+                VIKING_DESIGN.spacing.inlineGap.medium
+              )}>
+                <CheckCircle2 className={cn(
+                  "w-5 h-5 flex-shrink-0 mt-0.5",
+                  VIKING_DESIGN.colors.status.success.text
+                )} />
+                <p className={cn(
+                  "text-sm font-semibold",
+                  VIKING_DESIGN.colors.status.success.text
+                )}>
+                  Enrichment complete!
+                </p>
               </div>
-              <div className="text-sm text-viking-text-secondary space-y-1 ml-8">
+              <div className={cn(
+                "text-sm space-y-1 ml-8",
+                VIKING_DESIGN.colors.text.secondary
+              )}>
                 <div>✓ Processed: {enrichmentResult.processed} tracks</div>
                 <div>✓ Enriched: {enrichmentResult.enriched} tracks</div>
                 {enrichmentResult.failed > 0 && (
-                  <div className="text-yellow-400">⚠ Not found: {enrichmentResult.failed} tracks</div>
+                  <div className={VIKING_DESIGN.colors.status.warning.text}>
+                    ⚠ Not found: {enrichmentResult.failed} tracks
+                  </div>
                 )}
               </div>
             </div>
@@ -207,19 +242,29 @@ export function MetadataEnrichment() {
 
           {/* Error */}
           {error && (
-            <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-5">
-              <div className="flex items-start gap-3">
-                <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
+            <div className={getAlertClasses('error')}>
+              <div className={cn("flex items-start", VIKING_DESIGN.spacing.inlineGap.medium)}>
+                <AlertCircle className={cn(
+                  "w-5 h-5 flex-shrink-0 mt-0.5",
+                  VIKING_DESIGN.colors.status.error.text
+                )} />
                 <div>
-                  <p className="text-red-400 font-semibold text-sm">Error</p>
-                  <p className="text-sm text-viking-text-secondary mt-1">{error}</p>
+                  <p className={cn(
+                    "text-sm font-semibold",
+                    VIKING_DESIGN.colors.status.error.text
+                  )}>
+                    Error
+                  </p>
+                  <p className={cn("text-sm mt-1", VIKING_DESIGN.colors.text.secondary)}>
+                    {error}
+                  </p>
                 </div>
               </div>
             </div>
           )}
 
           {/* Tips */}
-          <div className="text-xs text-viking-text-tertiary space-y-1 pt-2">
+          <div className={cn(VIKING_DESIGN.typography.helper, "space-y-1 pt-2")}>
             <p><strong>💡 Tip:</strong> Run enrichment after importing data from other sources</p>
             <p><strong>⏱️ Note:</strong> Large libraries may take several minutes to process</p>
           </div>
