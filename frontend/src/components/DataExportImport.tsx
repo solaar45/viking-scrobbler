@@ -16,11 +16,13 @@ type MetadataSource = 'original' | 'navidrome' | 'musicbrainz'
 interface ImportResult {
     success: boolean
     imported: number
-    enriched: number      // ← Neu
-    duplicates_skipped: number  // ← Neu (umbenennen von 'skipped')
-    failed: number        // ← Neu
+    enriched: number
+    duplicates_skipped: number
+    failed: number
     errors: string[]
     total: number
+    updated?: number    // ← für Merge Mode
+    deleted?: number    // ← für Replace Mode
 }
 
 interface FileValidation {
@@ -317,8 +319,8 @@ export function DataExportImport() {
             const payload = {
                 listen_type: "import",
                 metadata_source: metadataSource,
-                import_mode: "skip",
-                deduplicate: true,
+                import_mode: importMode,  // ← FIX: Nutze gewählten Modus!
+                deduplicate: deduplicate,
                 payload: listensArray
             }
 
@@ -326,6 +328,8 @@ export function DataExportImport() {
                 url: `${API_BASE}/api/import/listens`,
                 payload_count: listensArray.length,
                 metadata_source: metadataSource,
+                import_mode: importMode,
+                deduplicate: deduplicate,
                 first_listen: listensArray[0]
             })
 
@@ -355,11 +359,13 @@ export function DataExportImport() {
             setImportResult({
                 success: true,
                 imported: result.stats.imported,
-                enriched: result.stats.enriched,
-                duplicates_skipped: result.stats.duplicates_skipped,
-                failed: result.stats.failed,
+                enriched: result.stats.enriched || 0,
+                duplicates_skipped: result.stats.duplicates_skipped || 0,
+                failed: result.stats.failed || 0,
                 errors: result.stats.errors || [],
-                total: result.stats.total
+                total: result.stats.total,
+                updated: result.stats.updated || 0,  // ← NEU für Merge Mode
+                deleted: result.stats.deleted || 0   // ← NEU für Replace Mode
             })
 
             setImportProgress(100)
@@ -748,19 +754,19 @@ export function DataExportImport() {
                                     <div className="flex items-center space-x-2">
                                         <RadioGroupItem value="skip" id="skip" />
                                         <Label htmlFor="skip" className="text-gray-400 font-normal cursor-pointer">
-                                            Skip Duplicates <span className="text-xs text-gray-500">(Recommended)</span>
+                                            Skip Duplicates <span className="text-xs text-gray-500">(Default - Only add new scrobbles)</span>
                                         </Label>
                                     </div>
                                     <div className="flex items-center space-x-2">
                                         <RadioGroupItem value="merge" id="merge" />
                                         <Label htmlFor="merge" className="text-gray-400 font-normal cursor-pointer">
-                                            Merge & Update <span className="text-xs text-gray-500">(Update metadata)</span>
+                                            Merge & Enrich <span className="text-xs text-blue-400">(Add metadata to existing scrobbles)</span>
                                         </Label>
                                     </div>
                                     <div className="flex items-center space-x-2">
                                         <RadioGroupItem value="replace" id="replace" />
                                         <Label htmlFor="replace" className="text-gray-400 font-normal cursor-pointer">
-                                            Replace All <span className="text-xs text-red-400">(⚠️ Deletes existing data!)</span>
+                                            Replace All <span className="text-xs text-red-400">(⚠️ Deletes all data + fresh import!)</span>
                                         </Label>
                                     </div>
                                 </RadioGroup>
@@ -779,12 +785,31 @@ export function DataExportImport() {
                                     <AlertDescription className="text-green-300">
                                         <strong>Import complete!</strong>
                                         <div className="mt-2 text-sm space-y-1">
-                                            <div>✓ Imported: {importResult.imported} listens</div>
-                                            <div className="text-purple-300">✨ Enriched: {importResult.enriched} with {metadataSource} metadata</div>
-                                            <div>⊘ Duplicates: {importResult.duplicates_skipped} skipped</div>
+                                            {/* Show appropriate stats based on mode */}
+                                            {importMode === 'replace' && importResult.deleted != null && importResult.deleted > 0 && (
+                                                <div className="text-red-400">🗑️ Deleted: {importResult.deleted} old listens</div>
+                                            )}
+
+                                            {importResult.imported > 0 && (
+                                                <div>✓ Imported: {importResult.imported} new listens</div>
+                                            )}
+
+                                            {importResult.updated != null && importResult.updated > 0 && (
+                                                <div className="text-blue-300">🔄 Updated: {importResult.updated} with metadata</div>
+                                            )}
+
+                                            {importResult.enriched > 0 && (
+                                                <div className="text-purple-300">✨ Enriched: {importResult.enriched} with {metadataSource} metadata</div>
+                                            )}
+
+                                            {importResult.duplicates_skipped > 0 && (
+                                                <div>⊘ Duplicates: {importResult.duplicates_skipped} skipped</div>
+                                            )}
+
                                             {importResult.failed > 0 && (
                                                 <div className="text-yellow-400">⚠ Failed: {importResult.failed}</div>
                                             )}
+
                                             {importResult.errors.length > 0 && (
                                                 <div className="text-red-400">❌ Errors: {importResult.errors.length}</div>
                                             )}
