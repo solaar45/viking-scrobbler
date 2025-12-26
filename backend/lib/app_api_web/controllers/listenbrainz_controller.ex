@@ -27,7 +27,9 @@ defmodule AppApiWeb.ListenBrainzController do
             json(conn, %{status: "ok", message: "playing_now received"})
 
           "import" ->
-            process_listens(conn, payload, user_name)
+            # Unterstütze metadata_source Parameter
+            metadata_source = params["metadata_source"] || "original"
+            process_listens_with_enrichment(conn, payload, user_name, metadata_source)
 
           _ ->
             conn
@@ -41,6 +43,37 @@ defmodule AppApiWeb.ListenBrainzController do
         |> json(%{code: 401, error: "Invalid token"})
     end
   end
+
+  # POST /api/import (Frontend-only, kein Token erforderlich)
+  def import_listens(conn, params) do
+  Logger.info("📥 IMPORT REQUEST: #{inspect(params, pretty: true)}")
+
+  user_name = "viking_user"
+  listen_type = params["listen_type"] || "import"
+  metadata_source = params["metadata_source"] || "original"
+  payload = params["payload"] || []
+
+  # ✅ Validate payload nicht leer
+  cond do
+    listen_type != "import" ->
+      conn
+      |> put_status(:bad_request)
+      |> json(%{code: 400, error: "Invalid listen_type, expected 'import'"})
+
+    payload == [] or not is_list(payload) ->
+      Logger.warning("⚠️ Empty or invalid payload received")
+      conn
+      |> put_status(:bad_request)
+      |> json(%{
+        code: 400,
+        error: "Empty payload. Please provide listens to import.",
+        received_count: length(payload)
+      })
+
+    true ->
+      process_listens_with_enrichment(conn, payload, user_name, metadata_source)
+  end
+end
 
   # GET /1/user/:user_name/listens
   def get_listens(conn, %{"user_name" => user_name} = params) do
@@ -411,6 +444,103 @@ defmodule AppApiWeb.ListenBrainzController do
         |> json(%{status: "error", message: "Failed to insert listens"})
     end
   end
+
+  # 🆕 NEU: Import mit konfigurierbarer Metadata-Source
+  defp process_listens_with_enrichment(conn, payload, user_name, metadata_source)
+       when is_list(payload) do
+    listens =
+      Enum.map(payload, fn listen_data ->
+        track_metadata = listen_data["track_metadata"] || %{}
+
+        %{
+          listened_at: parse_timestamp(listen_data["listened_at"]),
+          track_name: track_metadata["track_name"],
+          artist_name: track_metadata["artist_name"],
+          release_name: track_metadata["release_name"],
+          recording_mbid: get_in(track_metadata, ["additional_info", "recording_mbid"]),
+          artist_mbid: get_in(track_metadata, ["additional_info", "artist_mbid"]),
+          release_mbid: get_in(track_metadata, ["additional_info", "release_mbid"]),
+          additional_info: track_metadata["additional_info"] || %{},
+          user_name: user_name,
+          inserted_at: DateTime.utc_now() |> DateTime.truncate(:second)
+        }
+      end)
+      |> Enum.reject(&is_nil(&1.track_name))
+
+    case Repo.insert_all(Listen, listens) do
+      {count, _} when count > 0 ->
+        Logger.info(
+          "📥 Imported #{count} listens for #{user_name} (metadata_source: #{metadata_source})"
+        )
+
+        # ✅ Enrichment basierend auf gewählter Source
+        if metadata_source != "original" do
+          listens_to_enrich =
+            Listen
+            |> where([l], l.user_name == ^user_name)
+            |> order_by([l], desc: l.listened_at)
+            |> limit(^count)
+            |> Repo.all()
+
+          Task.start(fn ->
+            enrich_imported_listens(listens_to_enrich, metadata_source)
+          end)
+        end
+
+        # Broadcast Import Complete
+        AppApiWeb.Endpoint.broadcast!(
+          "scrobbles:#{user_name}",
+          "import_complete",
+          %{count: count, user: user_name, metadata_source: metadata_source}
+        )
+
+        json(conn, %{
+          status: "ok",
+          message: "#{count} listen(s) imported",
+          enrichment: if(metadata_source == "original", do: "none", else: "processing")
+        })
+
+      _ ->
+        Logger.error("Failed to import listens")
+
+        conn
+        |> put_status(:internal_server_error)
+        |> json(%{status: "error", message: "Import failed"})
+    end
+  end
+
+  # Enrichment Helper
+  defp enrich_imported_listens(listens, "navidrome") do
+    Enum.each(listens, fn listen ->
+      case AppApi.NavidromeIntegration.enrich_listen_from_navidrome(listen) do
+        {:ok, _} ->
+          Logger.debug("✅ Enriched from Navidrome: #{listen.track_name}")
+
+        {:error, _} ->
+          Logger.debug("⚠️ Navidrome enrichment failed: #{listen.track_name}")
+      end
+
+      # Rate limiting
+      :timer.sleep(200)
+    end)
+  end
+
+  defp enrich_imported_listens(listens, "musicbrainz") do
+    Enum.each(listens, fn listen ->
+      case AppApi.GenreEnrichment.enrich_listen(listen) do
+        {:ok, _} ->
+          Logger.debug("✅ Enriched from MusicBrainz: #{listen.track_name}")
+
+        {:error, _} ->
+          Logger.debug("⚠️ MusicBrainz enrichment failed: #{listen.track_name}")
+      end
+
+      # Rate limiting
+      :timer.sleep(300)
+    end)
+  end
+
+  defp enrich_imported_listens(_listens, _source), do: :ok
 
   defp format_listen(listen) do
     # Parse metadata JSON

@@ -28,6 +28,27 @@ defmodule AppApi.GenreEnrichment do
   end
 
   @doc """
+  Enriches a listen and returns the enriched metadata map.
+  Used by manual enrichment process.
+  """
+  def enrich_listen_metadata(%Listen{} = listen) do
+    case enrich_listen(listen) do
+      {:ok, updated_listen} ->
+        metadata = parse_metadata(updated_listen.metadata)
+
+        enriched_data = %{
+          "genres" => metadata["genres"],
+          "release_year" => metadata["mb_release_year"] || metadata["release_year"]
+        }
+
+        {:ok, enriched_data}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  @doc """
   Background task: Enrich all listens without genres
   """
   def enrich_missing_genres(limit \\ 50) do
@@ -42,22 +63,30 @@ defmodule AppApi.GenreEnrichment do
   # === PRIVATE ===
 
   defp fetch_and_update_genres(listen) do
-    Logger.info("🎵 Fallback: Fetching genres from MusicBrainz for #{listen.track_name}")
+  Logger.info("🎵 MusicBrainz Fallback: Searching for #{listen.track_name}")
 
-    cond do
-      listen.recording_mbid && listen.recording_mbid != "" ->
-        fetch_genres_by_recording(listen)
+  # ✅ Prüfe MBIDs - nur nutzen wenn vorhanden und nicht leer
+  cond do
+    not is_nil(listen.recording_mbid) and listen.recording_mbid != "" ->
+      Logger.debug("Using recording MBID: #{listen.recording_mbid}")
+      fetch_genres_by_recording(listen)
 
-      listen.release_mbid && listen.release_mbid != "" ->
-        fetch_genres_by_release(listen)
+    not is_nil(listen.release_mbid) and listen.release_mbid != "" ->
+      Logger.debug("Using release MBID: #{listen.release_mbid}")
+      fetch_genres_by_release(listen)
 
-      listen.artist_mbid && listen.artist_mbid != "" ->
-        fetch_genres_by_artist(listen)
+    not is_nil(listen.artist_mbid) and listen.artist_mbid != "" ->
+      Logger.debug("Using artist MBID: #{listen.artist_mbid}")
+      fetch_genres_by_artist(listen)
 
-      true ->
-        search_and_fetch_genres(listen)
-    end
+    true ->
+      # ✅ Keine MBIDs → Direkt zur Textsuche
+      Logger.debug("No MBIDs found, using text search")
+      search_and_fetch_genres(listen)
   end
+end
+
+
 
   # --- RECORDING ---
 
@@ -104,18 +133,24 @@ defmodule AppApi.GenreEnrichment do
   # --- ARTIST ---
 
   defp fetch_genres_by_artist(listen) do
+  # ✅ Zusätzliche Sicherheitsprüfung
+  if is_nil(listen.artist_mbid) or listen.artist_mbid == "" do
+    Logger.warning("⚠️ Artist MBID is empty despite check, skipping")
+    {:error, :no_mbid}
+  else
     url = "#{@musicbrainz_api}/artist/#{listen.artist_mbid}?inc=genres+tags&fmt=json"
 
     case http_get(url) do
       {:ok, data} ->
         genres = extract_genres_and_tags(data)
-        # Für Artist-Ebene gibt es kein klares Releasejahr → nil
         update_listen_metadata(listen, genres, nil, "musicbrainz_artist")
 
       _ ->
         {:error, :no_genres_found}
     end
   end
+end
+
 
   # --- SEARCH FALLBACK ---
 
@@ -193,11 +228,6 @@ defmodule AppApi.GenreEnrichment do
       {:error, _} ->
         {:error, :update_failed}
     end
-  end
-
-  # Rückwärtskompatibilität für alte Aufrufe ohne Jahr
-  defp update_listen_metadata(listen, genres, source) do
-    update_listen_metadata(listen, genres, nil, source)
   end
 
   defp maybe_put_mb_year(metadata, nil), do: metadata
