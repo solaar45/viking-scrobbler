@@ -135,26 +135,26 @@ defmodule AppApiWeb.StatsController do
       end
 
     stats =
-      artists
-      |> Enum.with_index(1)
-      |> Enum.map(fn {artist, rank} ->
-        unique_tracks = Map.get(tracks_by_artist, artist.name, 0)
+  artists
+  |> Enum.with_index(1)
+  |> Enum.map(fn {artist, rank} ->
+    unique_tracks = Map.get(tracks_by_artist, artist.name, 0)
 
-        percentage =
-          if total_plays > 0 do
-            Float.round(artist.plays / total_plays * 100, 1)
-          else
-            0.0
-          end
+    percentage =
+      if total_plays > 0 do
+        Float.round(artist.plays / total_plays * 100, 1)
+      else
+        0.0
+      end
 
-        artist
-        |> Map.put(:rank, rank)
-        |> Map.put(:percentage, percentage)
-        |> Map.put(:unique_tracks, unique_tracks)
-        |> Map.put(:last_played_relative, format_relative_time(artist.last_played))
-        |> Map.put(:cover_url, nil)
-        |> Map.put(:listen_id, artist.sample_listen_id)
-      end)
+    artist
+    |> Map.put(:rank, rank)
+    |> Map.put(:percentage, percentage)
+    |> Map.put(:unique_tracks, unique_tracks)
+    |> Map.put(:last_played_relative, format_relative_time(artist.last_played))
+    |> Map.put(:cover_url, get_artist_cover_from_id3(artist.name))
+    |> Map.put(:listen_id, artist.sample_listen_id)
+  end)
 
     json(conn, %{
       data: stats,
@@ -194,23 +194,24 @@ defmodule AppApiWeb.StatsController do
       |> limit(^limit)
 
     stats =
-      Repo.all(stats_query)
-      |> Enum.with_index(1)
-      |> Enum.map(fn {stat, rank} ->
-        percentage =
-          if total_plays > 0 do
-            Float.round(stat.plays / total_plays * 100, 1)
-          else
-            0.0
-          end
+  Repo.all(stats_query)
+  |> Enum.with_index(1)
+  |> Enum.map(fn {stat, rank} ->
+    percentage =
+      if total_plays > 0 do
+        Float.round(stat.plays / total_plays * 100, 1)
+      else
+        0.0
+      end
 
-        stat
-        |> Map.put(:rank, rank)
-        |> Map.put(:percentage, percentage)
-        |> Map.put(:last_played_relative, format_relative_time(stat.last_played))
-        |> Map.put(:cover_url, nil)
-        |> Map.put(:listen_id, stat.sample_listen_id)
-      end)
+    stat
+    |> Map.put(:rank, rank)
+    |> Map.put(:percentage, percentage)
+    |> Map.put(:last_played_relative, format_relative_time(stat.last_played))
+    |> Map.put(:cover_url, get_album_cover_from_id3(stat.album, stat.artist))
+    |> Map.put(:listen_id, stat.sample_listen_id)
+  end)
+
 
     json(conn, %{data: stats, meta: get_meta_info(params)})
   end
@@ -241,24 +242,25 @@ defmodule AppApiWeb.StatsController do
       |> limit(^limit)
 
     stats =
-      Repo.all(stats_query)
-      |> Enum.with_index(1)
-      |> Enum.map(fn {stat, rank} ->
-        percentage =
-          if total_plays > 0 do
-            Float.round(stat.plays / total_plays * 100, 1)
-          else
-            0.0
-          end
+  Repo.all(stats_query)
+  |> Enum.with_index(1)
+  |> Enum.map(fn {stat, rank} ->
+    percentage =
+      if total_plays > 0 do
+        Float.round(stat.plays / total_plays * 100, 1)
+      else
+        0.0
+      end
 
-        stat
-        |> Map.put(:rank, rank)
-        |> Map.put(:percentage, percentage)
-        |> Map.put(:completion_rate, 85)
-        |> Map.put(:last_played_relative, format_relative_time(stat.last_played))
-        |> Map.put(:cover_url, nil)
-        |> Map.put(:listen_id, stat.sample_listen_id)
-      end)
+    stat
+    |> Map.put(:rank, rank)
+    |> Map.put(:percentage, percentage)
+    |> Map.put(:completion_rate, 85)
+    |> Map.put(:last_played_relative, format_relative_time(stat.last_played))
+    |> Map.put(:cover_url, get_album_cover_from_id3(stat.album, stat.artist))
+    |> Map.put(:listen_id, stat.sample_listen_id)
+  end)
+
 
     json(conn, %{data: stats, meta: get_meta_info(params)})
   end
