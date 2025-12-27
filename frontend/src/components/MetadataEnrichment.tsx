@@ -237,6 +237,7 @@ export function MetadataEnrichment() {
                   {(['all', 'genres', 'year', 'navidrome_id'] as EnrichmentField[]).map((field) => {
                     const count = getFieldCount(field)
                     const isDisabled = count === 0 && field !== 'all'
+                    const isSelected = selectedField === field
                     
                     return (
                       <button
@@ -246,18 +247,9 @@ export function MetadataEnrichment() {
                         className={cn(
                           "px-3 py-2 rounded-lg text-sm font-medium transition-all",
                           "border flex items-center justify-between gap-2",
-                          selectedField === field
-                            ? cn(
-                                VIKING_DESIGN.colors.interactive.hover.bg,
-                                VIKING_DESIGN.colors.card.border,
-                                VIKING_DESIGN.colors.text.primary
-                              )
-                            : cn(
-                                VIKING_DESIGN.colors.card.secondary,
-                                "border-transparent",
-                                VIKING_DESIGN.colors.text.secondary,
-                                !isDisabled && "hover:" + VIKING_DESIGN.colors.card.tertiary
-                              ),
+                          isSelected
+                            ? "bg-viking-bg-elevated border-viking-border-emphasis text-viking-text-primary"
+                            : "bg-viking-bg-tertiary border-transparent text-viking-text-secondary hover:bg-viking-bg-elevated",
                           isDisabled && "opacity-40 cursor-not-allowed"
                         )}
                       >
@@ -265,10 +257,7 @@ export function MetadataEnrichment() {
                           {getFieldIcon(field)}
                           {getFieldLabel(field)}
                         </span>
-                        <span className={cn(
-                          "text-xs px-1.5 py-0.5 rounded",
-                          VIKING_DESIGN.colors.card.tertiary
-                        )}>
+                        <span className="text-xs px-1.5 py-0.5 rounded bg-viking-bg-tertiary">
                           {count}
                         </span>
                       </button>
@@ -301,10 +290,7 @@ export function MetadataEnrichment() {
 
               {enriching && (
                 <div className="space-y-2 mt-3">
-                  <div className={cn(
-                    "h-2 rounded-full overflow-hidden",
-                    VIKING_DESIGN.colors.card.tertiary
-                  )}>
+                  <div className="h-2 rounded-full overflow-hidden bg-viking-bg-tertiary">
                     <div className={cn(
                       "h-full bg-gradient-to-r from-viking-purple to-viking-purple-dark w-1/2 rounded-full",
                       VIKING_DESIGN.effects.loading.pulse
