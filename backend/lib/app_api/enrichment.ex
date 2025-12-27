@@ -90,11 +90,15 @@ defmodule AppApi.Enrichment do
     if Enum.empty?(listens) do
       {:ok, %{processed: 0, enriched: 0, failed: 0, skipped: 0}}
     else
+      total_count = length(listens)
+      Logger.info("🚀 Starting enrichment: #{total_count} tracks to process")
+
       results =
         listens
+        |> Enum.with_index(1)
         |> Enum.chunk_every(batch_size)
         |> Enum.reduce(%{processed: 0, enriched: 0, failed: 0, skipped: 0}, fn batch, acc ->
-          batch_result = process_batch(batch, field)
+          batch_result = process_batch(batch, field, total_count)
           Process.sleep(1000)
 
           %{
@@ -104,6 +108,10 @@ defmodule AppApi.Enrichment do
             skipped: acc.skipped + batch_result.skipped
           }
         end)
+
+      Logger.info(
+        "✅ Enrichment complete! Enriched: #{results.enriched}, Failed: #{results.failed}, Skipped: #{results.skipped}"
+      )
 
       {:ok, results}
     end
@@ -253,9 +261,9 @@ defmodule AppApi.Enrichment do
 
   # === PRIVATE: BATCH PROCESSING ===
 
-  defp process_batch(listens, field) do
-    Enum.reduce(listens, %{processed: 0, enriched: 0, failed: 0, skipped: 0}, fn listen, acc ->
-      case enrich_single_listen(listen, field) do
+  defp process_batch(listens_with_index, field, total_count) do
+    Enum.reduce(listens_with_index, %{processed: 0, enriched: 0, failed: 0, skipped: 0}, fn {listen, index}, acc ->
+      case enrich_single_listen(listen, field, index, total_count) do
         {:ok, :enriched} ->
           %{acc | processed: acc.processed + 1, enriched: acc.enriched + 1}
 
@@ -271,7 +279,7 @@ defmodule AppApi.Enrichment do
     end)
   end
 
-  defp enrich_single_listen(listen, field) do
+  defp enrich_single_listen(listen, field, index, total_count) do
     current_metadata = parse_metadata(listen.metadata)
 
     needs_enrichment =
@@ -294,30 +302,54 @@ defmodule AppApi.Enrichment do
       missing_fields = get_missing_fields(current_metadata)
 
       Logger.info(
-        "🔍 Enriching #{listen.track_name} by #{listen.artist_name} (missing: #{Enum.join(missing_fields, ", ")})"
+        "[#{index}/#{total_count}] 🔍 #{listen.track_name} by #{listen.artist_name}\n" <>
+          "   Missing: #{Enum.join(missing_fields, ", ")}"
       )
 
       # Try Navidrome first (provides all fields)
       case NavidromeIntegration.enrich_listen_from_navidrome(listen) do
-        {:ok, _updated_listen} ->
-          Logger.info("✅ Enriched from Navidrome")
+        {:ok, updated_listen} ->
+          updated_metadata = parse_metadata(updated_listen.metadata)
+          added_fields = format_added_fields(current_metadata, updated_metadata)
+
+          Logger.info(
+            "   ✅ Enriched from Navidrome\n" <>
+              "   Added: #{added_fields}"
+          )
+
           {:ok, :enriched}
 
         {:error, reason} ->
-          Logger.info("⚠️ Navidrome failed: #{inspect(reason)}, trying MusicBrainz...")
+          Logger.info("   ⚠️ Navidrome lookup failed: #{format_error(reason)}")
 
           # Fallback to MusicBrainz (only genres + year)
           case GenreEnrichment.enrich_listen(listen) do
-            {:ok, _updated_listen} ->
-              Logger.info("✅ Enriched from MusicBrainz")
+            {:ok, updated_listen} ->
+              updated_metadata = parse_metadata(updated_listen.metadata)
+              added_fields = format_added_fields(current_metadata, updated_metadata)
+
+              Logger.info(
+                "   ✅ Enriched from MusicBrainz\n" <>
+                  "   Added: #{added_fields}"
+              )
+
               {:ok, :enriched}
 
-            {:error, reason} ->
-              Logger.warning("⚠️ No metadata found: #{inspect(reason)}")
+            {:error, mb_reason} ->
+              Logger.warning(
+                "   ❌ Not found in any source\n" <>
+                  "   Navidrome: #{format_error(reason)}\n" <>
+                  "   MusicBrainz: #{format_error(mb_reason)}"
+              )
+
               {:ok, :not_found}
           end
       end
     else
+      Logger.info(
+        "[#{index}/#{total_count}] ⊘ #{listen.track_name} by #{listen.artist_name} (already complete)"
+      )
+
       {:ok, :skipped}
     end
   end
@@ -344,6 +376,44 @@ defmodule AppApi.Enrichment do
     |> then(&if has_navidrome_id?(metadata), do: &1, else: ["navidrome_id" | &1])
     |> Enum.reverse()
   end
+
+  # === PRIVATE: FORMATTING HELPERS ===
+
+  defp format_added_fields(old_metadata, new_metadata) do
+    fields = []
+
+    fields =
+      if !has_genres?(old_metadata) && has_genres?(new_metadata) do
+        genres = new_metadata["genres"] || [new_metadata["genre"]]
+        ["genres=#{inspect(genres)}" | fields]
+      else
+        fields
+      end
+
+    fields =
+      if !has_year?(old_metadata) && has_year?(new_metadata) do
+        year = new_metadata["year"] || new_metadata["release_year"]
+        ["year=#{year}" | fields]
+      else
+        fields
+      end
+
+    fields =
+      if !has_navidrome_id?(old_metadata) && has_navidrome_id?(new_metadata) do
+        ["navidrome_id=#{new_metadata["navidrome_id"]}" | fields]
+      else
+        fields
+      end
+
+    if Enum.empty?(fields) do
+      "none (metadata unchanged)"
+    else
+      Enum.join(Enum.reverse(fields), ", ")
+    end
+  end
+
+  defp format_error(reason) when is_binary(reason), do: reason
+  defp format_error(reason), do: inspect(reason)
 
   # === METADATA PARSING ===
 
