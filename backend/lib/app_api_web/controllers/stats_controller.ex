@@ -151,7 +151,7 @@ defmodule AppApiWeb.StatsController do
         |> Map.put(:percentage, percentage)
         |> Map.put(:unique_tracks, unique_tracks)
         |> Map.put(:last_played_relative, format_relative_time(artist.last_played))
-        |> Map.put(:cover_url, get_artist_cover(artist.name))
+        |> Map.put(:cover_url, get_artist_cover_from_id3(artist.name))
       end)
 
     json(conn, %{
@@ -205,7 +205,7 @@ defmodule AppApiWeb.StatsController do
         |> Map.put(:rank, rank)
         |> Map.put(:percentage, percentage)
         |> Map.put(:last_played_relative, format_relative_time(stat.last_played))
-        |> Map.put(:cover_url, get_album_cover(stat.album, stat.artist))
+        |> Map.put(:cover_url, get_album_cover_from_id3(stat.album, stat.artist))
       end)
 
     json(conn, %{data: stats, meta: get_meta_info(params)})
@@ -251,7 +251,7 @@ defmodule AppApiWeb.StatsController do
         |> Map.put(:percentage, percentage)
         |> Map.put(:completion_rate, 85)
         |> Map.put(:last_played_relative, format_relative_time(stat.last_played))
-        |> Map.put(:cover_url, get_album_cover(stat.album, stat.artist))
+        |> Map.put(:cover_url, get_album_cover_from_id3(stat.album, stat.artist))
       end)
 
     json(conn, %{data: stats, meta: get_meta_info(params)})
@@ -619,27 +619,6 @@ defmodule AppApiWeb.StatsController do
     end
   end
 
-  defp day_name("0"), do: "Sun"
-  defp day_name("1"), do: "Mon"
-  defp day_name("2"), do: "Tue"
-  defp day_name("3"), do: "Wed"
-  defp day_name("4"), do: "Thu"
-  defp day_name("5"), do: "Fri"
-  defp day_name("6"), do: "Sat"
-  defp day_name(_), do: "N/A"
-
-  defp avg_duration(durations) do
-    valid_durations = Enum.filter(durations, fn d -> d != nil && d > 0 end)
-
-    if length(valid_durations) > 0 do
-      avg_ms = Enum.sum(valid_durations) / length(valid_durations)
-      seconds = round(avg_ms / 1000)
-      "#{div(seconds, 60)}:#{String.pad_leading(to_string(rem(seconds, 60)), 2, "0")}"
-    else
-      "N/A"
-    end
-  end
-
   defp format_duration(ms) when is_integer(ms) and ms > 0 do
     hours = div(ms, 3_600_000)
     minutes = div(rem(ms, 3_600_000), 60_000)
@@ -649,142 +628,75 @@ defmodule AppApiWeb.StatsController do
   defp format_duration(_), do: "0h 00m"
 
   # ═══════════════════════════════════════════════════════════
-  # NAVIDROME COVERART INTEGRATION
+  # ID3 TAG COVERART (aus metadata JSONB)
   # ═══════════════════════════════════════════════════════════
 
-  defp get_artist_cover(artist_name) do
-    case fetch_navidrome_artist_id(artist_name) do
-      {:ok, artist_id} ->
-        build_coverart_url(artist_id)
+  defp get_artist_cover_from_id3(artist_name) do
+    # Hole den neuesten Listen-Eintrag für diesen Artist
+    listen = Repo.one(
+      from(l in Listen,
+        where: l.artist_name == ^artist_name,
+        where: not is_nil(l.metadata),
+        order_by: [desc: l.listened_at],
+        limit: 1
+      )
+    )
 
-      {:error, _} ->
-        nil
-    end
+    extract_cover_from_metadata(listen)
   end
 
-  defp get_album_cover(album_name, artist_name) do
-    case fetch_navidrome_album_id(album_name, artist_name) do
-      {:ok, album_id} ->
-        build_coverart_url(album_id)
+  defp get_album_cover_from_id3(album_name, artist_name) do
+    # Hole den neuesten Listen-Eintrag für Album + Artist
+    listen = Repo.one(
+      from(l in Listen,
+        where: l.release_name == ^album_name,
+        where: l.artist_name == ^artist_name,
+        where: not is_nil(l.metadata),
+        order_by: [desc: l.listened_at],
+        limit: 1
+      )
+    )
 
-      {:error, _} ->
-        nil
-    end
+    extract_cover_from_metadata(listen)
   end
 
-  defp fetch_navidrome_artist_id(artist_name) do
-    with {:ok, base_url} <- get_navidrome_base_url(),
-         {:ok, credentials} <- get_navidrome_credentials(),
-         {:ok, response} <- search_navidrome("artist", artist_name, credentials, base_url),
-         {:ok, artist_id} <- extract_artist_id(response) do
-      {:ok, artist_id}
-    else
-      {:error, reason} ->
-        {:error, reason}
+  defp extract_cover_from_metadata(nil), do: nil
+  defp extract_cover_from_metadata(%{metadata: metadata}) when is_binary(metadata) do
+    case Jason.decode(metadata) do
+      {:ok, meta_map} -> extract_cover_url(meta_map)
+      {:error, _} -> nil
     end
   end
+  defp extract_cover_from_metadata(_), do: nil
 
-  defp fetch_navidrome_album_id(album_name, artist_name) do
-    with {:ok, base_url} <- get_navidrome_base_url(),
-         {:ok, credentials} <- get_navidrome_credentials(),
-         {:ok, response} <- search_navidrome("album", "#{artist_name} #{album_name}", credentials, base_url),
-         {:ok, album_id} <- extract_album_id(response) do
-      {:ok, album_id}
-    else
-      {:error, reason} ->
-        {:error, reason}
-    end
-  end
-
-  defp search_navidrome(entity_type, query, {username, password, salt}, base_url) do
-    token = :crypto.hash(:md5, password <> salt) |> Base.encode16(case: :lower)
-
-    search_url =
-      "#{base_url}/rest/search3.view?query=#{URI.encode(query)}&u=#{username}&t=#{token}&s=#{salt}&v=1.16.1&c=viking&f=json"
-
-    case HTTPoison.get(search_url, [], recv_timeout: 5000, timeout: 5000) do
-      {:ok, %HTTPoison.Response{status_code: 200, body: body}} ->
-        {:ok, Jason.decode!(body)}
-
-      {:ok, %HTTPoison.Response{status_code: status}} ->
-        {:error, {:http_error, status}}
-
-      {:error, %HTTPoison.Error{reason: reason}} ->
-        {:error, {:request_failed, reason}}
-    end
-  rescue
-    e -> {:error, {:exception, e}}
-  end
-
-  defp extract_artist_id(response) do
-    case get_in(response, ["subsonic-response", "searchResult3", "artist"]) do
-      [first_artist | _] ->
-        case Map.get(first_artist, "id") do
-          nil -> {:error, :no_id}
-          id -> {:ok, id}
-        end
-
-      _ ->
-        {:error, :no_results}
-    end
-  end
-
-  defp extract_album_id(response) do
-    case get_in(response, ["subsonic-response", "searchResult3", "album"]) do
-      [first_album | _] ->
-        case Map.get(first_album, "id") do
-          nil -> {:error, :no_id}
-          id -> {:ok, id}
-        end
-
-      _ ->
-        {:error, :no_results}
-    end
-  end
-
-  defp build_coverart_url(entity_id) do
-    case get_navidrome_base_url() do
-      {:ok, base_url} ->
-        case get_navidrome_credentials() do
-          {:ok, {username, password, salt}} ->
-            token = :crypto.hash(:md5, password <> salt) |> Base.encode16(case: :lower)
-            "#{base_url}/rest/getCoverArt.view?id=#{entity_id}&size=200&u=#{username}&t=#{token}&s=#{salt}&v=1.16.1&c=viking"
-
-          {:error, _} ->
-            nil
-        end
-
-      {:error, _} ->
-        nil
-    end
-  end
-
-  defp get_navidrome_base_url do
-    case Application.get_env(:app_api, :navidrome_url) do
-      nil -> {:error, :not_configured}
-      url when is_binary(url) -> {:ok, String.trim_trailing(url, "/")}
-      _ -> {:error, :invalid_config}
-    end
-  end
-
-  defp get_navidrome_credentials do
-    username = Application.get_env(:app_api, :navidrome_username)
-    password = Application.get_env(:app_api, :navidrome_password)
-
+  defp extract_cover_url(meta_map) when is_map(meta_map) do
+    # Verschiedene mögliche Keys für CoverArt in ID3 Tags
     cond do
-      is_nil(username) or is_nil(password) ->
-        {:error, :credentials_not_configured}
+      # Navidrome: coverArt ID
+      Map.has_key?(meta_map, "coverArt") ->
+        build_navidrome_cover_url(meta_map["coverArt"])
 
-      username == "" or password == "" ->
-        {:error, :empty_credentials}
+      # Direkte URL (z.B. von ListenBrainz)
+      Map.has_key?(meta_map, "cover_url") ->
+        meta_map["cover_url"]
+
+      # MusicBrainz Release ID
+      Map.has_key?(meta_map, "release_mbid") ->
+        "https://coverartarchive.org/release/#{meta_map["release_mbid"]}/front-250"
+
+      # Fallback: Album Art URL
+      Map.has_key?(meta_map, "album_art_url") ->
+        meta_map["album_art_url"]
 
       true ->
-        salt = generate_salt()
-        {:ok, {username, password, salt}}
+        nil
     end
   end
+  defp extract_cover_url(_), do: nil
 
-  defp generate_salt do
-    :crypto.strong_rand_bytes(16) |> Base.encode16(case: :lower)
+  defp build_navidrome_cover_url(cover_art_id) when is_binary(cover_art_id) do
+    navidrome_url = Application.get_env(:app_api, :navidrome_url, "http://localhost:4533")
+    "#{navidrome_url}/rest/getCoverArt.view?id=#{cover_art_id}&size=200"
   end
+  defp build_navidrome_cover_url(_), do: nil
 end

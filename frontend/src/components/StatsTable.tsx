@@ -78,6 +78,16 @@ export function StatsTable({ type, timeRange }: StatsTableProps) {
     </div>
   )
 
+  // FIX: Guard gegen undefined type
+  const columns = getColumns(type)
+  if (!columns || columns.length === 0) {
+    return (
+      <div className="flex items-center justify-center p-8">
+        <p className="text-viking-text-tertiary">Invalid stat type</p>
+      </div>
+    )
+  }
+
   return (
     <div className="flex flex-col gap-4">
       {/* HEADER */}
@@ -149,15 +159,15 @@ export function StatsTable({ type, timeRange }: StatsTableProps) {
               <table className="table-dense">
                 <thead className="sticky top-0 z-10 backdrop-blur-sm">
                   <tr>
-                    {getColumns(type).map((col) => (
+                    {columns.map((col) => (
                       <th
                         key={col.key}
                         className={cn(
                           "table-head-dense",
                           col.width,
                           col.align === 'right' ? 'text-right' : col.align === 'center' ? 'text-center' : 'text-left',
-                          col.key === getColumns(type)[0].key && 'pl-6',
-                          col.key === getColumns(type)[getColumns(type).length - 1].key && 'pr-6'
+                          col.key === columns[0]?.key && 'pl-6',
+                          col.key === columns[columns.length - 1]?.key && 'pr-6'
                         )}
                       >
                         {col.label}
@@ -168,14 +178,14 @@ export function StatsTable({ type, timeRange }: StatsTableProps) {
                 <tbody className="divide-y divide-viking-border-subtle">
                   {visibleData.map((row, i) => (
                     <tr key={i} className="table-row-dense">
-                      {getColumns(type).map((col, idx) => (
+                      {columns.map((col, idx) => (
                         <td
                           key={col.key}
                           className={cn(
                             "table-cell-dense",
                             col.width,
                             idx === 0 ? "table-cell-primary pl-6" : "table-cell-secondary",
-                            idx === getColumns(type).length - 1 && "pr-6",
+                            idx === columns.length - 1 && "pr-6",
                             col.align === 'right' && 'text-right',
                             col.align === 'center' && 'text-center'
                           )}
@@ -264,7 +274,7 @@ function getColumns(type: StatType): Column[] {
         align: 'right',
         render: (row) => (
           <span className="font-mono font-semibold">
-            {row.plays.toLocaleString()}
+            {row.plays?.toLocaleString() || 0}
           </span>
         )
       },
@@ -272,7 +282,7 @@ function getColumns(type: StatType): Column[] {
         key: 'percentage', 
         label: '%',
         width: 'w-[22%]',
-        render: (row, renderPercentageBar) => renderPercentageBar!(row.percentage)
+        render: (row, renderPercentageBar) => renderPercentageBar!(row.percentage || 0)
       },
       { key: 'unique_tracks', label: 'Tracks', width: 'w-[10%]', align: 'right' },
       { key: 'avg_per_day', label: 'Avg/Day', width: 'w-[10%]', align: 'right' },
@@ -295,7 +305,7 @@ function getColumns(type: StatType): Column[] {
         align: 'right',
         render: (row) => (
           <span className="font-mono font-semibold">
-            {row.plays.toLocaleString()}
+            {row.plays?.toLocaleString() || 0}
           </span>
         )
       },
@@ -303,7 +313,7 @@ function getColumns(type: StatType): Column[] {
         key: 'percentage', 
         label: '%',
         width: 'w-[22%]',
-        render: (row, renderPercentageBar) => renderPercentageBar!(row.percentage)
+        render: (row, renderPercentageBar) => renderPercentageBar!(row.percentage || 0)
       },
       { key: 'last_played_relative', label: 'Last Played', width: 'w-[15%]', align: 'right' }
     ],
@@ -324,7 +334,7 @@ function getColumns(type: StatType): Column[] {
         align: 'right',
         render: (row) => (
           <span className="font-mono font-semibold">
-            {row.plays.toLocaleString()}
+            {row.plays?.toLocaleString() || 0}
           </span>
         )
       },
@@ -332,14 +342,14 @@ function getColumns(type: StatType): Column[] {
         key: 'percentage', 
         label: '%',
         width: 'w-[18%]',
-        render: (row, renderPercentageBar) => renderPercentageBar!(row.percentage)
+        render: (row, renderPercentageBar) => renderPercentageBar!(row.percentage || 0)
       },
       { 
         key: 'completion_rate', 
         label: 'Completion',
         width: 'w-[10%]',
         align: 'right',
-        render: (row) => `${row.completion_rate}%`
+        render: (row) => `${row.completion_rate || 0}%`
       },
       { key: 'last_played_relative', label: 'Last Played', width: 'w-[13%]', align: 'right' }
     ],
@@ -352,7 +362,7 @@ function getColumns(type: StatType): Column[] {
         align: 'right',
         render: (row) => (
           <span className="font-mono font-semibold">
-            {row.plays.toLocaleString()}
+            {row.plays?.toLocaleString() || 0}
           </span>
         )
       },
@@ -361,7 +371,7 @@ function getColumns(type: StatType): Column[] {
         key: 'percentage', 
         label: '%',
         width: 'w-[23%]',
-        render: (row, renderPercentageBar) => renderPercentageBar!(row.percentage)
+        render: (row, renderPercentageBar) => renderPercentageBar!(row.percentage || 0)
       },
       { key: 'artists', label: 'Artists', width: 'w-[12%]', align: 'right' },
       { key: 'last_played_relative', label: 'Last Played', width: 'w-[18%]', align: 'right' }
@@ -380,7 +390,7 @@ function getColumns(type: StatType): Column[] {
         align: 'right',
         render: (row) => (
           <span className="font-mono font-semibold">
-            {row.plays.toLocaleString()}
+            {row.plays?.toLocaleString() || 0}
           </span>
         )
       },
@@ -399,7 +409,7 @@ function getColumns(type: StatType): Column[] {
         align: 'right',
         render: (row) => (
           <span className="font-mono font-semibold">
-            {row.plays.toLocaleString()}
+            {row.plays?.toLocaleString() || 0}
           </span>
         )
       },
@@ -408,7 +418,7 @@ function getColumns(type: StatType): Column[] {
         label: '%',
         width: 'w-[35%]',
         align: 'right',
-        render: (row) => `${row.percentage.toFixed(1)}%`
+        render: (row) => `${(row.percentage || 0).toFixed(1)}%`
       },
       { key: 'day', label: 'Day #', width: 'w-[15%]', align: 'right' }
     ],
@@ -421,7 +431,7 @@ function getColumns(type: StatType): Column[] {
         align: 'right',
         render: (row) => (
           <span className="font-mono font-semibold">
-            {row.plays.toLocaleString()}
+            {row.plays?.toLocaleString() || 0}
           </span>
         )
       },
@@ -431,7 +441,7 @@ function getColumns(type: StatType): Column[] {
         label: '%',
         width: 'w-[30%]',
         align: 'right',
-        render: (row) => `${row.percentage.toFixed(1)}%`
+        render: (row) => `${(row.percentage || 0).toFixed(1)}%`
       },
       { key: 'hour', label: 'Hour', width: 'w-[15%]', align: 'right' }
     ],
@@ -444,7 +454,7 @@ function getColumns(type: StatType): Column[] {
         align: 'right',
         render: (row) => (
           <span className="font-mono font-semibold">
-            {row.plays.toLocaleString()}
+            {row.plays?.toLocaleString() || 0}
           </span>
         )
       },
