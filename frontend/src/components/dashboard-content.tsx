@@ -4,6 +4,7 @@ import { useEffect, useState, useMemo, useRef } from "react"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { Activity, RefreshCw, ChevronDown, TrendingUp, TrendingDown } from "lucide-react"
 import { DashboardSkeleton } from "./DashboardSkeleton"
+import { ListenRow } from './ListenRow'
 
 // --- TYPES ---
 export interface PeriodStats {
@@ -548,6 +549,9 @@ export default function DashboardContent() {
                   <table className="table-dense">
                     <thead className="sticky top-0 z-10 backdrop-blur-sm">
                       <tr>
+                        <th className="table-head-dense pl-6 text-left w-[50px]">
+                          {/* Cover */}
+                        </th>
                         <th className="table-head-dense pl-6 text-left w-[22%]">
                           Track
                         </th>
@@ -576,32 +580,13 @@ export default function DashboardContent() {
                     </thead>
                     <tbody className="divide-y divide-viking-border-subtle">
                       {visibleRecent.map((item) => (
-                        <tr key={item.id} className="table-row-dense">
-                          <td className="table-cell-dense table-cell-primary pl-6 truncate max-w-[200px]">
-                            {item.track}
-                          </td>
-                          <td className="table-cell-dense table-cell-secondary truncate max-w-[150px]">
-                            {item.artist}
-                          </td>
-                          <td className="table-cell-dense table-cell-secondary truncate max-w-[150px]">
-                            {item.album}
-                          </td>
-                          <td className="table-cell-dense table-cell-secondary truncate max-w-[80px]">
-                            {item.releaseYear ?? "—"}
-                          </td>
-                          <td className="table-cell-dense table-cell-secondary truncate max-w-[140px] font-medium text-emerald-400">
-                            {item.genres}
-                          </td>
-                          <td className="table-cell-dense table-cell-secondary text-right truncate max-w-[150px]">
-                            {formatDate(item.playedAt)}
-                          </td>
-                          <td className="table-cell-dense table-cell-secondary text-right truncate max-w-[150px]">
-                            {formatTime(item.playedAt)}
-                          </td>
-                          <td className="table-cell-dense table-cell-secondary text-right pr-6 truncate max-w-[150px]">
-                            {formatDuration(item.duration)}
-                          </td>
-                        </tr>
+                        <ListenRow
+                          key={item.id}
+                          listen={item}
+                          formatDate={formatDate}
+                          formatTime={formatTime}
+                          formatDuration={formatDuration}
+                        />
                       ))}
                     </tbody>
                   </table>
