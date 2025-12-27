@@ -231,22 +231,27 @@ export function StatsTable({ type, timeRange }: StatsTableProps) {
   )
 }
 
-// Helper: construct URL for embedded cover images only
-function embeddedCoverUrl(kind: 'artists' | 'tracks' | 'albums', row: any): string | null {
-  // Prefer a server endpoint that serves only embedded covers by id
-  const id = row.listen_id ?? row.id ?? row.track_id ?? row.album_id ?? row.artist_id
-  if (id) {
-    return `/api/embedded-cover/${kind}/${id}`
+/**
+ * Get cover URL from Navidrome ID3 tags only.
+ * 
+ * SOURCES:
+ * ✅ Navidrome ID (from metadata)
+ * ❌ NO external URLs
+ * ❌ NO MusicBrainz
+ * 
+ * @param row Stat row with navidrome_id
+ * @returns Cover URL or undefined (gradient fallback)
+ */
+function getCoverUrlFromNavidrome(row: any): string | undefined {
+  // Check for navidrome_id in various possible locations
+  const navidromeId = row.navidrome_id || row.coverArtId || row.cover_id
+  
+  if (!navidromeId) {
+    return undefined  // No cover available -> StatsCover shows gradient
   }
-
-  // Allow data URIs (already embedded) or same-origin paths only
-  const url = row.cover_url
-  if (typeof url === 'string') {
-    if (url.startsWith('data:')) return url
-    if (url.startsWith('/')) return url
-  }
-
-  return null
+  
+  // Use our backend proxy endpoint
+  return `/api/covers/${navidromeId}?size=80`
 }
 
 // ===== COLUMN DEFINITIONS =====
@@ -283,7 +288,13 @@ function getColumns(type: StatType): Column[] {
         label: '', 
         width: 'w-[5%]', 
         align: 'center',
-        render: (row) => <StatsCover coverUrl={embeddedCoverUrl('artists', row)} name={row.name} />
+        render: (row) => (
+          <StatsCover 
+            coverUrl={getCoverUrlFromNavidrome(row)} 
+            name={row.name} 
+            size="sm"
+          />
+        )
       },
       { 
         key: 'artist', 
@@ -318,7 +329,13 @@ function getColumns(type: StatType): Column[] {
         label: '', 
         width: 'w-[5%]', 
         align: 'center',
-        render: (row) => <StatsCover coverUrl={embeddedCoverUrl('tracks', row)} name={row.track} />
+        render: (row) => (
+          <StatsCover 
+            coverUrl={getCoverUrlFromNavidrome(row)} 
+            name={row.track} 
+            size="sm"
+          />
+        )
       },
       { key: 'track', label: 'Track', width: 'w-[18%]' },
       { key: 'artist', label: 'Artist', width: 'w-[15%]' },
@@ -347,7 +364,13 @@ function getColumns(type: StatType): Column[] {
         label: '', 
         width: 'w-[5%]', 
         align: 'center',
-        render: (row) => <StatsCover coverUrl={embeddedCoverUrl('albums', row)} name={row.album} />
+        render: (row) => (
+          <StatsCover 
+            coverUrl={getCoverUrlFromNavidrome(row)} 
+            name={row.album} 
+            size="sm"
+          />
+        )
       },
       { key: 'album', label: 'Album', width: 'w-[18%]' },
       { key: 'artist', label: 'Artist', width: 'w-[13%]' },
