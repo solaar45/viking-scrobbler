@@ -78,15 +78,21 @@ export function StatsTable({ type, timeRange }: StatsTableProps) {
     </div>
   )
 
-  // FIX: Guard gegen undefined type
-  const columns = getColumns(type)
-  if (!columns || columns.length === 0) {
+  // FIX: Safe column extraction
+  const columnsResult = getColumns(type)
+  const columns = columnsResult || []
+  
+  if (columns.length === 0) {
     return (
       <div className="flex items-center justify-center p-8">
-        <p className="text-viking-text-tertiary">Invalid stat type</p>
+        <p className="text-viking-text-tertiary">Invalid stat type: {type}</p>
       </div>
     )
   }
+
+  // Safe access to first/last column keys
+  const firstColKey = columns[0]?.key || ''
+  const lastColKey = columns[columns.length - 1]?.key || ''
 
   return (
     <div className="flex flex-col gap-4">
@@ -166,8 +172,8 @@ export function StatsTable({ type, timeRange }: StatsTableProps) {
                           "table-head-dense",
                           col.width,
                           col.align === 'right' ? 'text-right' : col.align === 'center' ? 'text-center' : 'text-left',
-                          col.key === columns[0]?.key && 'pl-6',
-                          col.key === columns[columns.length - 1]?.key && 'pr-6'
+                          col.key === firstColKey && 'pl-6',
+                          col.key === lastColKey && 'pr-6'
                         )}
                       >
                         {col.label}
