@@ -390,21 +390,23 @@ defmodule AppApi.NavidromeIntegration do
   end
 
   defp extract_metadata(song) do
-    metadata = %{
-      "genre" => song["genre"],
-      "genres" => parse_genres(song["genre"]),
-      "album" => song["album"],
-      "year" => song["year"],
-      "duration_ms" => (song["duration"] || 0) * 1000,
-      "tracknumber" => song["track"],
-      "discnumber" => song["discNumber"],
-      "bitrate" => song["bitRate"],
-      "path" => song["path"],
-      "navidrome_id" => song["id"]
-    }
+  metadata = %{
+    "genre" => song["genre"],
+    "genres" => parse_genres(song["genre"]),
+    "album" => song["album"],
+    "year" => song["year"],
+    "duration_ms" => (song["duration"] || 0) * 1000,
+    "tracknumber" => song["track"],
+    "discnumber" => song["discNumber"],
+    "bitrate" => song["bitRate"],
+    "path" => song["path"],
+    "navidrome_id" => song["id"],
+    "coverArt" => song["coverArt"]
+  }
 
-    {:ok, metadata}
-  end
+  {:ok, metadata}
+end
+
 
   defp parse_genres(nil), do: []
   defp parse_genres(genre_string) when is_binary(genre_string) do
