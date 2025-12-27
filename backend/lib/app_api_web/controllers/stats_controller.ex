@@ -627,6 +627,27 @@ defmodule AppApiWeb.StatsController do
 
   defp format_duration(_), do: "0h 00m"
 
+  defp avg_duration(durations) do
+    valid_durations = Enum.filter(durations, fn d -> d != nil && d > 0 end)
+
+    if length(valid_durations) > 0 do
+      avg_ms = Enum.sum(valid_durations) / length(valid_durations)
+      seconds = round(avg_ms / 1000)
+      "#{div(seconds, 60)}:#{String.pad_leading(to_string(rem(seconds, 60)), 2, "0")}"
+    else
+      "N/A"
+    end
+  end
+
+  defp day_name("0"), do: "Sun"
+  defp day_name("1"), do: "Mon"
+  defp day_name("2"), do: "Tue"
+  defp day_name("3"), do: "Wed"
+  defp day_name("4"), do: "Thu"
+  defp day_name("5"), do: "Fri"
+  defp day_name("6"), do: "Sat"
+  defp day_name(_), do: "N/A"
+
   # ═══════════════════════════════════════════════════════════
   # ID3 TAG COVERART (aus metadata JSONB)
   # ═══════════════════════════════════════════════════════════
