@@ -273,6 +273,8 @@ export default function DashboardContent() {
           ),
           releaseYear: listen.additional_info?.release_year ?? undefined,
           genres: listen.additional_info?.genres || "–",
+          // ✅ FIX: Übergib additional_info komplett!
+          additional_info: listen.additional_info || {},
         })
       )
 
