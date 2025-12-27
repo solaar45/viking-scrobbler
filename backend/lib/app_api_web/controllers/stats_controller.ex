@@ -3,9 +3,9 @@ defmodule AppApiWeb.StatsController do
   alias AppApi.{Listen, Repo}
   import Ecto.Query
 
-  # ═══════════════════════════════════════════════════════════
+  # ═══════════════════════════════════════════════════════════════
   # OVERVIEW ENDPOINT
-  # ═══════════════════════════════════════════════════════════
+  # ═══════════════════════════════════════════════════════════════
 
   # GET /api/stats/overview
   def overview(conn, params) do
@@ -89,9 +89,9 @@ defmodule AppApiWeb.StatsController do
     })
   end
 
-  # ═══════════════════════════════════════════════════════════
+  # ═══════════════════════════════════════════════════════════════
   # TOP ARTISTS
-  # ═══════════════════════════════════════════════════════════
+  # ═══════════════════════════════════════════════════════════════
 
   # GET /api/stats/top-artists
   def top_artists(conn, params) do
@@ -134,6 +134,10 @@ defmodule AppApiWeb.StatsController do
         %{}
       end
 
+    # Get navidrome_id from sample listen for each artist
+    sample_listen_ids = Enum.map(artists, & &1.sample_listen_id)
+    navidrome_ids = get_navidrome_ids_batch(sample_listen_ids)
+
     stats =
       artists
       |> Enum.with_index(1)
@@ -147,13 +151,15 @@ defmodule AppApiWeb.StatsController do
             0.0
           end
 
+        navidrome_id = Map.get(navidrome_ids, artist.sample_listen_id)
+
         artist
         |> Map.put(:rank, rank)
         |> Map.put(:percentage, percentage)
         |> Map.put(:unique_tracks, unique_tracks)
         |> Map.put(:last_played_relative, format_relative_time(artist.last_played))
-        |> Map.put(:cover_url, build_embedded_cover_url(artist.sample_listen_id))
-        |> Map.put(:listen_id, artist.sample_listen_id)
+        |> Map.put(:navidrome_id, navidrome_id)
+        |> Map.delete(:sample_listen_id)
       end)
 
     json(conn, %{
@@ -167,9 +173,9 @@ defmodule AppApiWeb.StatsController do
     })
   end
 
-  # ═══════════════════════════════════════════════════════════
+  # ═══════════════════════════════════════════════════════════════
   # TOP TRACKS
-  # ═══════════════════════════════════════════════════════════
+  # ═══════════════════════════════════════════════════════════════
 
   # GET /api/stats/top-tracks
   def top_tracks(conn, params) do
@@ -193,8 +199,14 @@ defmodule AppApiWeb.StatsController do
       |> order_by([l], desc: count(l.id))
       |> limit(^limit)
 
+    tracks = Repo.all(stats_query)
+
+    # Get navidrome_id from sample listen for each track
+    sample_listen_ids = Enum.map(tracks, & &1.sample_listen_id)
+    navidrome_ids = get_navidrome_ids_batch(sample_listen_ids)
+
     stats =
-      Repo.all(stats_query)
+      tracks
       |> Enum.with_index(1)
       |> Enum.map(fn {stat, rank} ->
         percentage =
@@ -204,20 +216,22 @@ defmodule AppApiWeb.StatsController do
             0.0
           end
 
+        navidrome_id = Map.get(navidrome_ids, stat.sample_listen_id)
+
         stat
         |> Map.put(:rank, rank)
         |> Map.put(:percentage, percentage)
         |> Map.put(:last_played_relative, format_relative_time(stat.last_played))
-        |> Map.put(:cover_url, build_embedded_cover_url(stat.sample_listen_id))
-        |> Map.put(:listen_id, stat.sample_listen_id)
+        |> Map.put(:navidrome_id, navidrome_id)
+        |> Map.delete(:sample_listen_id)
       end)
 
     json(conn, %{data: stats, meta: get_meta_info(params)})
   end
 
-  # ═══════════════════════════════════════════════════════════
+  # ═══════════════════════════════════════════════════════════════
   # TOP ALBUMS
-  # ═══════════════════════════════════════════════════════════
+  # ═══════════════════════════════════════════════════════════════
 
   # GET /api/stats/top-albums
   def top_albums(conn, params) do
@@ -240,8 +254,14 @@ defmodule AppApiWeb.StatsController do
       |> order_by([l], desc: count(l.id))
       |> limit(^limit)
 
+    albums = Repo.all(stats_query)
+
+    # Get navidrome_id from sample listen for each album
+    sample_listen_ids = Enum.map(albums, & &1.sample_listen_id)
+    navidrome_ids = get_navidrome_ids_batch(sample_listen_ids)
+
     stats =
-      Repo.all(stats_query)
+      albums
       |> Enum.with_index(1)
       |> Enum.map(fn {stat, rank} ->
         percentage =
@@ -251,21 +271,23 @@ defmodule AppApiWeb.StatsController do
             0.0
           end
 
+        navidrome_id = Map.get(navidrome_ids, stat.sample_listen_id)
+
         stat
         |> Map.put(:rank, rank)
         |> Map.put(:percentage, percentage)
         |> Map.put(:completion_rate, 85)
         |> Map.put(:last_played_relative, format_relative_time(stat.last_played))
-        |> Map.put(:cover_url, build_embedded_cover_url(stat.sample_listen_id))
-        |> Map.put(:listen_id, stat.sample_listen_id)
+        |> Map.put(:navidrome_id, navidrome_id)
+        |> Map.delete(:sample_listen_id)
       end)
 
     json(conn, %{data: stats, meta: get_meta_info(params)})
   end
 
-  # ═══════════════════════════════════════════════════════════
+  # ═══════════════════════════════════════════════════════════════
   # TOP GENRES
-  # ═══════════════════════════════════════════════════════════
+  # ═══════════════════════════════════════════════════════════════
 
   # GET /api/stats/top-genres
   def top_genres(conn, params) do
@@ -338,9 +360,9 @@ defmodule AppApiWeb.StatsController do
     json(conn, %{data: genre_stats, meta: get_meta_info(params)})
   end
 
-  # ═══════════════════════════════════════════════════════════
+  # ═══════════════════════════════════════════════════════════════
   # TOP YEARS
-  # ═══════════════════════════════════════════════════════════
+  # ═══════════════════════════════════════════════════════════════
 
   # GET /api/stats/top-years
   def top_years(conn, params) do
@@ -419,9 +441,9 @@ defmodule AppApiWeb.StatsController do
     json(conn, %{data: year_stats, meta: get_meta_info(params)})
   end
 
-  # ═══════════════════════════════════════════════════════════
+  # ═══════════════════════════════════════════════════════════════
   # TOP DATES
-  # ═══════════════════════════════════════════════════════════
+  # ═══════════════════════════════════════════════════════════════
 
   # GET /api/stats/top-dates
   def top_dates(conn, params) do
@@ -462,9 +484,9 @@ defmodule AppApiWeb.StatsController do
     json(conn, %{data: stats, meta: get_meta_info(params)})
   end
 
-  # ═══════════════════════════════════════════════════════════
+  # ═══════════════════════════════════════════════════════════════
   # TOP TIMES
-  # ═══════════════════════════════════════════════════════════
+  # ═══════════════════════════════════════════════════════════════
 
   # GET /api/stats/top-times
   def top_times(conn, params) do
@@ -508,9 +530,9 @@ defmodule AppApiWeb.StatsController do
     json(conn, %{data: stats, meta: get_meta_info(params)})
   end
 
-  # ═══════════════════════════════════════════════════════════
+  # ═══════════════════════════════════════════════════════════════
   # TOP DURATIONS
-  # ═══════════════════════════════════════════════════════════
+  # ═══════════════════════════════════════════════════════════════
 
   # GET /api/stats/top-durations
   def top_durations(conn, params) do
@@ -577,9 +599,9 @@ defmodule AppApiWeb.StatsController do
     json(conn, %{data: duration_stats, meta: get_meta_info(params)})
   end
 
-  # ═══════════════════════════════════════════════════════════
+  # ═══════════════════════════════════════════════════════════════
   # HELPER FUNCTIONS
-  # ═══════════════════════════════════════════════════════════
+  # ═══════════════════════════════════════════════════════════════
 
   defp apply_time_filter(query, "week") do
     ts = DateTime.utc_now() |> DateTime.add(-7, :day) |> DateTime.to_unix()
@@ -654,13 +676,51 @@ defmodule AppApiWeb.StatsController do
   defp day_name("6"), do: "Sat"
   defp day_name(_), do: "N/A"
 
-  # ═══════════════════════════════════════════════════════════
-  # COVER URL BUILDER (nur embedded covers)
-  # ═══════════════════════════════════════════════════════════
+  # ═══════════════════════════════════════════════════════════════
+  # NAVIDROME ID EXTRACTION (ID3 ONLY)
+  # ═══════════════════════════════════════════════════════════════
 
-  defp build_embedded_cover_url(listen_id) when is_integer(listen_id) do
-    "/api/embedded-cover/listen/#{listen_id}"
+  @doc """
+  Batch fetch navidrome_id from Listen records.
+  Returns map of listen_id -> navidrome_id.
+  
+  Only returns IDs from metadata (Navidrome ID3 tags).
+  No external sources.
+  """
+  defp get_navidrome_ids_batch(listen_ids) when is_list(listen_ids) do
+    if length(listen_ids) == 0 do
+      %{}
+    else
+      Repo.all(
+        from(l in Listen,
+          where: l.id in ^listen_ids,
+          select: %{id: l.id, metadata: l.metadata}
+        )
+      )
+      |> Enum.map(fn listen ->
+        navidrome_id = extract_navidrome_id(listen.metadata)
+        {listen.id, navidrome_id}
+      end)
+      |> Enum.filter(fn {_id, nav_id} -> nav_id != nil end)
+      |> Map.new()
+    end
   end
 
-  defp build_embedded_cover_url(_), do: nil
+  # Extract navidrome_id from metadata JSON
+  defp extract_navidrome_id(nil), do: nil
+  defp extract_navidrome_id(""), do: nil
+  defp extract_navidrome_id("{}"), do: nil
+
+  defp extract_navidrome_id(metadata) when is_binary(metadata) do
+    case Jason.decode(metadata) do
+      {:ok, map} -> Map.get(map, "navidrome_id")
+      _ -> nil
+    end
+  end
+
+  defp extract_navidrome_id(metadata) when is_map(metadata) do
+    Map.get(metadata, "navidrome_id")
+  end
+
+  defp extract_navidrome_id(_), do: nil
 end
