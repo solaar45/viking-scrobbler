@@ -90,7 +90,7 @@ defmodule AppApiWeb.StatsController do
   end
 
   # ═══════════════════════════════════════════════════════════
-  # TOP ARTISTS (FIXED - No COUNT DISTINCT in SELECT)
+  # TOP ARTISTS
   # ═══════════════════════════════════════════════════════════
 
   # GET /api/stats/top-artists
@@ -98,17 +98,16 @@ defmodule AppApiWeb.StatsController do
     limit = String.to_integer(params["limit"] || "50")
     range = params["range"] || "month"
 
-    # First get total plays for percentage calculation
     query = Listen |> apply_time_filter(range)
     total_plays = Repo.aggregate(query, :count, :id)
 
-    # Get artist stats WITHOUT unique_tracks
     stats_query =
       query
       |> group_by([l], l.artist_name)
       |> select([l], %{
         name: l.artist_name,
         plays: count(l.id),
+        last_played: max(l.listened_at),
         avg_per_day: fragment("ROUND(COUNT(*) * 1.0 / ?, 1)", ^get_days_for_range(range))
       })
       |> order_by([l], desc: count(l.id))
@@ -116,7 +115,7 @@ defmodule AppApiWeb.StatsController do
 
     artists = Repo.all(stats_query)
 
-    # Get ALL listens for these artists to calculate unique_tracks in Elixir
+    # Get ALL listens for these artists to calculate unique_tracks
     artist_names = Enum.map(artists, & &1.name)
 
     tracks_by_artist =
@@ -134,7 +133,6 @@ defmodule AppApiWeb.StatsController do
         %{}
       end
 
-    # Calculate unique_tracks and percentage in Elixir
     stats =
       artists
       |> Enum.with_index(1)
@@ -152,6 +150,8 @@ defmodule AppApiWeb.StatsController do
         |> Map.put(:rank, rank)
         |> Map.put(:percentage, percentage)
         |> Map.put(:unique_tracks, unique_tracks)
+        |> Map.put(:last_played_relative, format_relative_time(artist.last_played))
+        |> Map.put(:cover_url, get_artist_cover(artist.name))
       end)
 
     json(conn, %{
@@ -166,7 +166,7 @@ defmodule AppApiWeb.StatsController do
   end
 
   # ═══════════════════════════════════════════════════════════
-  # TOP TRACKS (FIXED)
+  # TOP TRACKS
   # ═══════════════════════════════════════════════════════════
 
   # GET /api/stats/top-tracks
@@ -204,13 +204,14 @@ defmodule AppApiWeb.StatsController do
         |> Map.put(:rank, rank)
         |> Map.put(:percentage, percentage)
         |> Map.put(:last_played_relative, format_relative_time(stat.last_played))
+        |> Map.put(:cover_url, get_track_cover(stat.track, stat.artist))
       end)
 
     json(conn, %{data: stats, meta: get_meta_info(params)})
   end
 
   # ═══════════════════════════════════════════════════════════
-  # TOP ALBUMS (FIXED)
+  # TOP ALBUMS
   # ═══════════════════════════════════════════════════════════
 
   # GET /api/stats/top-albums
@@ -227,7 +228,8 @@ defmodule AppApiWeb.StatsController do
       |> select([l], %{
         album: l.release_name,
         artist: l.artist_name,
-        plays: count(l.id)
+        plays: count(l.id),
+        last_played: max(l.listened_at)
       })
       |> order_by([l], desc: count(l.id))
       |> limit(^limit)
@@ -246,15 +248,16 @@ defmodule AppApiWeb.StatsController do
         stat
         |> Map.put(:rank, rank)
         |> Map.put(:percentage, percentage)
-        # Placeholder
         |> Map.put(:completion_rate, 85)
+        |> Map.put(:last_played_relative, format_relative_time(stat.last_played))
+        |> Map.put(:cover_url, get_album_cover(stat.album, stat.artist))
       end)
 
     json(conn, %{data: stats, meta: get_meta_info(params)})
   end
 
   # ═══════════════════════════════════════════════════════════
-  # TOP GENRES (Already OK)
+  # TOP GENRES
   # ═══════════════════════════════════════════════════════════
 
   # GET /api/stats/top-genres
@@ -268,7 +271,8 @@ defmodule AppApiWeb.StatsController do
       |> where([l], not is_nil(l.metadata))
       |> select([l], %{
         metadata: l.metadata,
-        duration_ms: l.duration_ms
+        duration_ms: l.duration_ms,
+        listened_at: l.listened_at
       })
 
     listens = Repo.all(query)
@@ -279,25 +283,36 @@ defmodule AppApiWeb.StatsController do
       |> Enum.flat_map(fn listen ->
         case listen.metadata do
           %{"genres" => genres} when is_list(genres) ->
-            Enum.map(genres, &{&1, listen.duration_ms || 0})
+            Enum.map(genres, &{&1, listen.duration_ms || 0, listen.listened_at})
 
           _ ->
             []
         end
       end)
-      |> Enum.group_by(fn {genre, _} -> genre end, fn {_, duration} -> duration end)
-      |> Enum.map(fn {genre, durations} ->
+      |> Enum.group_by(
+        fn {genre, _, _} -> genre end,
+        fn {_, duration, listened_at} -> {duration, listened_at} end
+      )
+      |> Enum.map(fn {genre, data} ->
+        durations = Enum.map(data, fn {d, _} -> d end)
+        listen_times = Enum.map(data, fn {_, ts} -> ts end)
+
         %{
           genre: genre,
-          plays: length(durations),
+          plays: length(data),
           avg_duration: avg_duration(durations),
-          artists: 0
+          artists: 0,
+          last_played: Enum.max(listen_times)
         }
       end)
       |> Enum.sort_by(& &1.plays, :desc)
       |> Enum.take(limit)
       |> Enum.with_index(1)
-      |> Enum.map(fn {stat, rank} -> Map.put(stat, :rank, rank) end)
+      |> Enum.map(fn {stat, rank} ->
+        stat
+        |> Map.put(:rank, rank)
+        |> Map.put(:last_played_relative, format_relative_time(stat.last_played))
+      end)
 
     total_plays = Enum.sum(Enum.map(genre_stats, & &1.plays))
 
@@ -317,7 +332,7 @@ defmodule AppApiWeb.StatsController do
   end
 
   # ═══════════════════════════════════════════════════════════
-  # TOP YEARS (Already OK)
+  # TOP YEARS
   # ═══════════════════════════════════════════════════════════
 
   # GET /api/stats/top-years
@@ -332,7 +347,8 @@ defmodule AppApiWeb.StatsController do
       |> select([l], %{
         metadata: l.metadata,
         release_name: l.release_name,
-        artist_name: l.artist_name
+        artist_name: l.artist_name,
+        listened_at: l.listened_at
       })
 
     listens = Repo.all(query)
@@ -347,15 +363,16 @@ defmodule AppApiWeb.StatsController do
       end)
       |> Enum.map(fn listen ->
         year = get_in(listen.metadata, ["release_year"])
-        {year, listen.release_name, listen.artist_name}
+        {year, listen.release_name, listen.artist_name, listen.listened_at}
       end)
-      |> Enum.group_by(fn {year, _, _} -> year end)
+      |> Enum.group_by(fn {year, _, _, _} -> year end)
       |> Enum.map(fn {year, items} ->
-        albums = items |> Enum.map(fn {_, album, _} -> album end) |> Enum.uniq()
+        albums = items |> Enum.map(fn {_, album, _, _} -> album end) |> Enum.uniq()
+        listen_times = items |> Enum.map(fn {_, _, _, ts} -> ts end)
 
         top_album_data =
           items
-          |> Enum.frequencies_by(fn {_, album, artist} -> {album, artist} end)
+          |> Enum.frequencies_by(fn {_, album, artist, _} -> {album, artist} end)
           |> Enum.max_by(fn {_, count} -> count end, fn -> {{nil, nil}, 0} end)
           |> elem(0)
 
@@ -365,13 +382,18 @@ defmodule AppApiWeb.StatsController do
           year: year,
           plays: length(items),
           albums: length(albums),
-          top_album: "#{album_name} - #{artist_name}"
+          top_album: "#{album_name} - #{artist_name}",
+          last_played: Enum.max(listen_times)
         }
       end)
       |> Enum.sort_by(& &1.plays, :desc)
       |> Enum.take(limit)
       |> Enum.with_index(1)
-      |> Enum.map(fn {stat, rank} -> Map.put(stat, :rank, rank) end)
+      |> Enum.map(fn {stat, rank} ->
+        stat
+        |> Map.put(:rank, rank)
+        |> Map.put(:last_played_relative, format_relative_time(stat.last_played))
+      end)
 
     total_plays = Enum.sum(Enum.map(year_stats, & &1.plays))
 
@@ -391,7 +413,7 @@ defmodule AppApiWeb.StatsController do
   end
 
   # ═══════════════════════════════════════════════════════════
-  # TOP DATES (Already OK)
+  # TOP DATES
   # ═══════════════════════════════════════════════════════════
 
   # GET /api/stats/top-dates
@@ -434,7 +456,7 @@ defmodule AppApiWeb.StatsController do
   end
 
   # ═══════════════════════════════════════════════════════════
-  # TOP TIMES (Already OK)
+  # TOP TIMES
   # ═══════════════════════════════════════════════════════════
 
   # GET /api/stats/top-times
@@ -480,7 +502,7 @@ defmodule AppApiWeb.StatsController do
   end
 
   # ═══════════════════════════════════════════════════════════
-  # TOP DURATIONS (Already OK)
+  # TOP DURATIONS
   # ═══════════════════════════════════════════════════════════
 
   # GET /api/stats/top-durations
@@ -624,4 +646,25 @@ defmodule AppApiWeb.StatsController do
   end
 
   defp format_duration(_), do: "0h 00m"
+
+  defp get_artist_cover(artist_name) do
+    # Navidrome Artist Cover (falls verfügbar)
+    navidrome_url = Application.get_env(:app_api, :navidrome_url, "http://localhost:4533")
+    encoded_artist = URI.encode(artist_name)
+    "#{navidrome_url}/rest/getCoverArt?v=1.16.1&c=viking&artist=#{encoded_artist}&size=200"
+  end
+
+  defp get_track_cover(track_name, artist_name) do
+    # Navidrome Album Cover für Track
+    navidrome_url = Application.get_env(:app_api, :navidrome_url, "http://localhost:4533")
+    encoded_track = URI.encode("#{artist_name} - #{track_name}")
+    "#{navidrome_url}/rest/getCoverArt?v=1.16.1&c=viking&track=#{encoded_track}&size=200"
+  end
+
+  defp get_album_cover(album_name, artist_name) do
+    # Navidrome Album Cover
+    navidrome_url = Application.get_env(:app_api, :navidrome_url, "http://localhost:4533")
+    encoded_album = URI.encode("#{artist_name} - #{album_name}")
+    "#{navidrome_url}/rest/getCoverArt?v=1.16.1&c=viking&album=#{encoded_album}&size=200"
+  end
 end
