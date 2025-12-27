@@ -42,3 +42,14 @@ config :phoenix, :json_library, Jason
 # Import environment specific config. This must remain at the bottom
 # of this file so it overrides the configuration defined above.
 import_config "#{config_env()}.exs"
+
+config :app_api,
+  navidrome_url: System.get_env("NAVIDROME_URL") || "http://localhost:4533",
+  navidrome_username: System.get_env("NAVIDROME_USERNAME") || "admin",
+  navidrome_password: System.get_env("NAVIDROME_PASSWORD") || "password"
+
+# Alternativ für Production (runtime.exs):
+# config :app_api,
+#   navidrome_url: System.fetch_env!("NAVIDROME_URL"),
+#   navidrome_username: System.fetch_env!("NAVIDROME_USERNAME"),
+#   navidrome_password: System.fetch_env!("NAVIDROME_PASSWORD")

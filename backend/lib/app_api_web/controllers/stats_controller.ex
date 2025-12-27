@@ -179,10 +179,11 @@ defmodule AppApiWeb.StatsController do
 
     stats_query =
       query
-      |> group_by([l], [l.track_name, l.artist_name])
+      |> group_by([l], [l.track_name, l.artist_name, l.release_name])
       |> select([l], %{
         track: l.track_name,
         artist: l.artist_name,
+        album: l.release_name,
         plays: count(l.id),
         last_played: max(l.listened_at)
       })
@@ -204,7 +205,7 @@ defmodule AppApiWeb.StatsController do
         |> Map.put(:rank, rank)
         |> Map.put(:percentage, percentage)
         |> Map.put(:last_played_relative, format_relative_time(stat.last_played))
-        |> Map.put(:cover_url, get_track_cover(stat.track, stat.artist))
+        |> Map.put(:cover_url, get_album_cover(stat.album, stat.artist))
       end)
 
     json(conn, %{data: stats, meta: get_meta_info(params)})
@@ -647,24 +648,143 @@ defmodule AppApiWeb.StatsController do
 
   defp format_duration(_), do: "0h 00m"
 
-  defp get_artist_cover(artist_name) do
-    # Navidrome Artist Cover (falls verfügbar)
-    navidrome_url = Application.get_env(:app_api, :navidrome_url, "http://localhost:4533")
-    encoded_artist = URI.encode(artist_name)
-    "#{navidrome_url}/rest/getCoverArt?v=1.16.1&c=viking&artist=#{encoded_artist}&size=200"
-  end
+  # ═══════════════════════════════════════════════════════════
+  # NAVIDROME COVERART INTEGRATION
+  # ═══════════════════════════════════════════════════════════
 
-  defp get_track_cover(track_name, artist_name) do
-    # Navidrome Album Cover für Track
-    navidrome_url = Application.get_env(:app_api, :navidrome_url, "http://localhost:4533")
-    encoded_track = URI.encode("#{artist_name} - #{track_name}")
-    "#{navidrome_url}/rest/getCoverArt?v=1.16.1&c=viking&track=#{encoded_track}&size=200"
+  defp get_artist_cover(artist_name) do
+    case fetch_navidrome_artist_id(artist_name) do
+      {:ok, artist_id} ->
+        build_coverart_url(artist_id)
+
+      {:error, _} ->
+        nil
+    end
   end
 
   defp get_album_cover(album_name, artist_name) do
-    # Navidrome Album Cover
-    navidrome_url = Application.get_env(:app_api, :navidrome_url, "http://localhost:4533")
-    encoded_album = URI.encode("#{artist_name} - #{album_name}")
-    "#{navidrome_url}/rest/getCoverArt?v=1.16.1&c=viking&album=#{encoded_album}&size=200"
+    case fetch_navidrome_album_id(album_name, artist_name) do
+      {:ok, album_id} ->
+        build_coverart_url(album_id)
+
+      {:error, _} ->
+        nil
+    end
+  end
+
+  defp fetch_navidrome_artist_id(artist_name) do
+    with {:ok, base_url} <- get_navidrome_base_url(),
+         {:ok, credentials} <- get_navidrome_credentials(),
+         {:ok, response} <- search_navidrome("artist", artist_name, credentials, base_url),
+         {:ok, artist_id} <- extract_artist_id(response) do
+      {:ok, artist_id}
+    else
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp fetch_navidrome_album_id(album_name, artist_name) do
+    with {:ok, base_url} <- get_navidrome_base_url(),
+         {:ok, credentials} <- get_navidrome_credentials(),
+         {:ok, response} <- search_navidrome("album", "#{artist_name} #{album_name}", credentials, base_url),
+         {:ok, album_id} <- extract_album_id(response) do
+      {:ok, album_id}
+    else
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp search_navidrome(entity_type, query, {username, password, salt}, base_url) do
+    token = :crypto.hash(:md5, password <> salt) |> Base.encode16(case: :lower)
+
+    search_url =
+      "#{base_url}/rest/search3.view?query=#{URI.encode(query)}&u=#{username}&t=#{token}&s=#{salt}&v=1.16.1&c=viking&f=json"
+
+    case HTTPoison.get(search_url, [], recv_timeout: 5000, timeout: 5000) do
+      {:ok, %HTTPoison.Response{status_code: 200, body: body}} ->
+        {:ok, Jason.decode!(body)}
+
+      {:ok, %HTTPoison.Response{status_code: status}} ->
+        {:error, {:http_error, status}}
+
+      {:error, %HTTPoison.Error{reason: reason}} ->
+        {:error, {:request_failed, reason}}
+    end
+  rescue
+    e -> {:error, {:exception, e}}
+  end
+
+  defp extract_artist_id(response) do
+    case get_in(response, ["subsonic-response", "searchResult3", "artist"]) do
+      [first_artist | _] ->
+        case Map.get(first_artist, "id") do
+          nil -> {:error, :no_id}
+          id -> {:ok, id}
+        end
+
+      _ ->
+        {:error, :no_results}
+    end
+  end
+
+  defp extract_album_id(response) do
+    case get_in(response, ["subsonic-response", "searchResult3", "album"]) do
+      [first_album | _] ->
+        case Map.get(first_album, "id") do
+          nil -> {:error, :no_id}
+          id -> {:ok, id}
+        end
+
+      _ ->
+        {:error, :no_results}
+    end
+  end
+
+  defp build_coverart_url(entity_id) do
+    case get_navidrome_base_url() do
+      {:ok, base_url} ->
+        case get_navidrome_credentials() do
+          {:ok, {username, password, salt}} ->
+            token = :crypto.hash(:md5, password <> salt) |> Base.encode16(case: :lower)
+            "#{base_url}/rest/getCoverArt.view?id=#{entity_id}&size=200&u=#{username}&t=#{token}&s=#{salt}&v=1.16.1&c=viking"
+
+          {:error, _} ->
+            nil
+        end
+
+      {:error, _} ->
+        nil
+    end
+  end
+
+  defp get_navidrome_base_url do
+    case Application.get_env(:app_api, :navidrome_url) do
+      nil -> {:error, :not_configured}
+      url when is_binary(url) -> {:ok, String.trim_trailing(url, "/")}
+      _ -> {:error, :invalid_config}
+    end
+  end
+
+  defp get_navidrome_credentials do
+    username = Application.get_env(:app_api, :navidrome_username)
+    password = Application.get_env(:app_api, :navidrome_password)
+
+    cond do
+      is_nil(username) or is_nil(password) ->
+        {:error, :credentials_not_configured}
+
+      username == "" or password == "" ->
+        {:error, :empty_credentials}
+
+      true ->
+        salt = generate_salt()
+        {:ok, {username, password, salt}}
+    end
+  end
+
+  defp generate_salt do
+    :crypto.strong_rand_bytes(16) |> Base.encode16(case: :lower)
   end
 end

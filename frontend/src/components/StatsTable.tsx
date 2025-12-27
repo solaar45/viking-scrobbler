@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Download, ChevronDown } from 'lucide-react'
 import { cn } from '@/lib/design-tokens'
+import { StatsCover } from './StatsCover'
 
 type StatType = 'artists' | 'tracks' | 'albums' | 'genres' | 'years' | 'dates' | 'times' | 'durations'
 type TimeRange = 'week' | 'month' | 'year' | 'all_time'
@@ -76,43 +77,6 @@ export function StatsTable({ type, timeRange }: StatsTableProps) {
       </div>
     </div>
   )
-
-  // Helper: Get Initial Letter
-  const getInitial = (row: any): string => {
-    const name = row.name || row.track || row.album || '?'
-    return name[0]?.toUpperCase() || '?'
-  }
-
-  // Helper: Cover Image Renderer (NUR CSS, keine externen URLs!)
-  const renderCover = (row: any): React.ReactNode => {
-    // Nur CSS-Placeholder (kein externes Loading!)
-    const initial = getInitial(row)
-    const gradients = [
-      'from-purple-500 to-purple-700',
-      'from-blue-500 to-blue-700',
-      'from-green-500 to-green-700',
-      'from-amber-500 to-amber-700',
-      'from-red-500 to-red-700',
-      'from-pink-500 to-pink-700',
-    ]
-    const gradientIndex = initial.charCodeAt(0) % gradients.length
-    
-    return (
-      <div className="flex items-center justify-center">
-        <div 
-          className={cn(
-            "w-10 h-10 rounded-full flex items-center justify-center",
-            "font-bold text-white text-sm",
-            "bg-gradient-to-br",
-            gradients[gradientIndex],
-            "border border-viking-border-default shadow-sm"
-          )}
-        >
-          {initial}
-        </div>
-      </div>
-    )
-  }
 
   return (
     <div className="flex flex-col gap-4">
@@ -216,7 +180,7 @@ export function StatsTable({ type, timeRange }: StatsTableProps) {
                             col.align === 'center' && 'text-center'
                           )}
                         >
-                          {col.render ? col.render(row, renderPercentageBar, renderCover) : row[col.key]}
+                          {col.render ? col.render(row, renderPercentageBar) : row[col.key]}
                         </td>
                       ))}
                     </tr>
@@ -260,8 +224,7 @@ interface Column {
   align?: 'left' | 'right' | 'center'
   render?: (
     row: any, 
-    renderPercentageBar?: (p: number) => React.ReactNode,
-    renderCover?: (row: any) => React.ReactNode
+    renderPercentageBar?: (p: number) => React.ReactNode
   ) => React.ReactNode
 }
 
@@ -286,7 +249,7 @@ function getColumns(type: StatType): Column[] {
         label: '', 
         width: 'w-[5%]', 
         align: 'center',
-        render: (_row, _renderPercentageBar, renderCover) => renderCover!(_row)
+        render: (row) => <StatsCover coverUrl={row.cover_url} name={row.name} />
       },
       { 
         key: 'artist', 
@@ -321,7 +284,7 @@ function getColumns(type: StatType): Column[] {
         label: '', 
         width: 'w-[5%]', 
         align: 'center',
-        render: (_row, _renderPercentageBar, renderCover) => renderCover!(_row)
+        render: (row) => <StatsCover coverUrl={row.cover_url} name={row.track} />
       },
       { key: 'track', label: 'Track', width: 'w-[18%]' },
       { key: 'artist', label: 'Artist', width: 'w-[15%]' },
@@ -350,7 +313,7 @@ function getColumns(type: StatType): Column[] {
         label: '', 
         width: 'w-[5%]', 
         align: 'center',
-        render: (_row, _renderPercentageBar, renderCover) => renderCover!(_row)
+        render: (row) => <StatsCover coverUrl={row.cover_url} name={row.album} />
       },
       { key: 'album', label: 'Album', width: 'w-[18%]' },
       { key: 'artist', label: 'Artist', width: 'w-[13%]' },
