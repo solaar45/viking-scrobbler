@@ -135,26 +135,26 @@ defmodule AppApiWeb.StatsController do
       end
 
     stats =
-  artists
-  |> Enum.with_index(1)
-  |> Enum.map(fn {artist, rank} ->
-    unique_tracks = Map.get(tracks_by_artist, artist.name, 0)
+      artists
+      |> Enum.with_index(1)
+      |> Enum.map(fn {artist, rank} ->
+        unique_tracks = Map.get(tracks_by_artist, artist.name, 0)
 
-    percentage =
-      if total_plays > 0 do
-        Float.round(artist.plays / total_plays * 100, 1)
-      else
-        0.0
-      end
+        percentage =
+          if total_plays > 0 do
+            Float.round(artist.plays / total_plays * 100, 1)
+          else
+            0.0
+          end
 
-    artist
-    |> Map.put(:rank, rank)
-    |> Map.put(:percentage, percentage)
-    |> Map.put(:unique_tracks, unique_tracks)
-    |> Map.put(:last_played_relative, format_relative_time(artist.last_played))
-    |> Map.put(:cover_url, get_artist_cover_from_id3(artist.name))
-    |> Map.put(:listen_id, artist.sample_listen_id)
-  end)
+        artist
+        |> Map.put(:rank, rank)
+        |> Map.put(:percentage, percentage)
+        |> Map.put(:unique_tracks, unique_tracks)
+        |> Map.put(:last_played_relative, format_relative_time(artist.last_played))
+        |> Map.put(:cover_url, build_embedded_cover_url(artist.sample_listen_id))
+        |> Map.put(:listen_id, artist.sample_listen_id)
+      end)
 
     json(conn, %{
       data: stats,
@@ -194,24 +194,23 @@ defmodule AppApiWeb.StatsController do
       |> limit(^limit)
 
     stats =
-  Repo.all(stats_query)
-  |> Enum.with_index(1)
-  |> Enum.map(fn {stat, rank} ->
-    percentage =
-      if total_plays > 0 do
-        Float.round(stat.plays / total_plays * 100, 1)
-      else
-        0.0
-      end
+      Repo.all(stats_query)
+      |> Enum.with_index(1)
+      |> Enum.map(fn {stat, rank} ->
+        percentage =
+          if total_plays > 0 do
+            Float.round(stat.plays / total_plays * 100, 1)
+          else
+            0.0
+          end
 
-    stat
-    |> Map.put(:rank, rank)
-    |> Map.put(:percentage, percentage)
-    |> Map.put(:last_played_relative, format_relative_time(stat.last_played))
-    |> Map.put(:cover_url, get_album_cover_from_id3(stat.album, stat.artist))
-    |> Map.put(:listen_id, stat.sample_listen_id)
-  end)
-
+        stat
+        |> Map.put(:rank, rank)
+        |> Map.put(:percentage, percentage)
+        |> Map.put(:last_played_relative, format_relative_time(stat.last_played))
+        |> Map.put(:cover_url, build_embedded_cover_url(stat.sample_listen_id))
+        |> Map.put(:listen_id, stat.sample_listen_id)
+      end)
 
     json(conn, %{data: stats, meta: get_meta_info(params)})
   end
@@ -242,25 +241,24 @@ defmodule AppApiWeb.StatsController do
       |> limit(^limit)
 
     stats =
-  Repo.all(stats_query)
-  |> Enum.with_index(1)
-  |> Enum.map(fn {stat, rank} ->
-    percentage =
-      if total_plays > 0 do
-        Float.round(stat.plays / total_plays * 100, 1)
-      else
-        0.0
-      end
+      Repo.all(stats_query)
+      |> Enum.with_index(1)
+      |> Enum.map(fn {stat, rank} ->
+        percentage =
+          if total_plays > 0 do
+            Float.round(stat.plays / total_plays * 100, 1)
+          else
+            0.0
+          end
 
-    stat
-    |> Map.put(:rank, rank)
-    |> Map.put(:percentage, percentage)
-    |> Map.put(:completion_rate, 85)
-    |> Map.put(:last_played_relative, format_relative_time(stat.last_played))
-    |> Map.put(:cover_url, get_album_cover_from_id3(stat.album, stat.artist))
-    |> Map.put(:listen_id, stat.sample_listen_id)
-  end)
-
+        stat
+        |> Map.put(:rank, rank)
+        |> Map.put(:percentage, percentage)
+        |> Map.put(:completion_rate, 85)
+        |> Map.put(:last_played_relative, format_relative_time(stat.last_played))
+        |> Map.put(:cover_url, build_embedded_cover_url(stat.sample_listen_id))
+        |> Map.put(:listen_id, stat.sample_listen_id)
+      end)
 
     json(conn, %{data: stats, meta: get_meta_info(params)})
   end
@@ -657,84 +655,12 @@ defmodule AppApiWeb.StatsController do
   defp day_name(_), do: "N/A"
 
   # ═══════════════════════════════════════════════════════════
-  # ID3 TAG COVERART (aus metadata JSONB)
+  # COVER URL BUILDER (nur embedded covers)
   # ═══════════════════════════════════════════════════════════
 
-  defp get_artist_cover_from_id3(artist_name) do
-    # Hole den neuesten Listen-Eintrag für diesen Artist
-    listen =
-      Repo.one(
-        from(l in Listen,
-          where: l.artist_name == ^artist_name,
-          where: not is_nil(l.metadata),
-          order_by: [desc: l.listened_at],
-          limit: 1
-        )
-      )
-
-    extract_cover_from_metadata(listen)
+  defp build_embedded_cover_url(listen_id) when is_integer(listen_id) do
+    "/api/embedded-cover/listen/#{listen_id}"
   end
 
-  defp get_album_cover_from_id3(album_name, artist_name) do
-    # Hole den neuesten Listen-Eintrag für Album + Artist
-    listen =
-      Repo.one(
-        from(l in Listen,
-          where: l.release_name == ^album_name,
-          where: l.artist_name == ^artist_name,
-          where: not is_nil(l.metadata),
-          order_by: [desc: l.listened_at],
-          limit: 1
-        )
-      )
-
-    extract_cover_from_metadata(listen)
-  end
-
-  defp extract_cover_from_metadata(nil), do: nil
-
-  defp extract_cover_from_metadata(%{metadata: metadata}) when is_binary(metadata) do
-    case Jason.decode(metadata) do
-      {:ok, meta_map} -> extract_cover_url(meta_map)
-      {:error, _} -> nil
-    end
-  end
-
-  defp extract_cover_from_metadata(_), do: nil
-
-  defp extract_cover_url(meta_map) when is_map(meta_map) do
-    cond do
-      # ✅ FIX: Subsonic cover_art URL (vom Navidrome-Scrobbling)
-      Map.has_key?(meta_map, "cover_art") ->
-        meta_map["cover_art"]
-
-      # Navidrome: coverArt ID
-      Map.has_key?(meta_map, "coverArt") ->
-        build_navidrome_cover_url(meta_map["coverArt"])
-
-      # Direkte URL (z.B. von ListenBrainz)
-      Map.has_key?(meta_map, "cover_url") ->
-        meta_map["cover_url"]
-
-      # MusicBrainz Release ID
-      Map.has_key?(meta_map, "release_mbid") ->
-        "https://coverartarchive.org/release/#{meta_map["release_mbid"]}/front-250"
-
-      # Fallback: Album Art URL
-      Map.has_key?(meta_map, "album_art_url") ->
-        meta_map["album_art_url"]
-
-      true ->
-        nil
-    end
-  end
-
-  defp extract_cover_url(_), do: nil
-
-  defp build_navidrome_cover_url(cover_art_id) when is_binary(cover_art_id) do
-    navidrome_url = Application.get_env(:app_api, :navidrome_url, "http://localhost:4533")
-    "#{navidrome_url}/rest/getCoverArt.view?id=#{cover_art_id}&size=200"
-  end
-
-  defp build_navidrome_cover_url(_), do: nil
+  defp build_embedded_cover_url(_), do: nil
 end

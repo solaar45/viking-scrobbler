@@ -39,10 +39,10 @@ defmodule AppApiWeb.EmbeddedCoverController do
   end
 
   defp fetch_and_cache(conn, listen) do
-    # Try to extract embedded picture first
+    # Extract embedded picture from audio file via Navidrome
     case NavidromeIntegration.fetch_embedded_picture(listen) do
-      {:ok, img} ->
-        if is_binary(img) and String.starts_with?(img, "data:") do
+      {:ok, img} when is_binary(img) ->
+        if String.starts_with?(img, "data:") do
           {mime, base64} = parse_data_uri(img)
           case Base.decode64(base64) do
             {:ok, bin} -> write_and_respond(conn, listen.id, "embedded_covers", mime, bin)
@@ -56,43 +56,8 @@ defmodule AppApiWeb.EmbeddedCoverController do
         write_and_respond(conn, listen.id, "embedded_covers", mime, data)
 
       {:error, _} ->
-        # Fallback: attempt to download Navidrome cover_art URL from metadata
-        fallback_from_metadata(conn, listen)
-    end
-  end
-
-  defp fallback_from_metadata(conn, listen) do
-    max_bytes = Application.get_env(:app_api, :cover_max_bytes, 800_000)
-    allowed = Application.get_env(:app_api, :cover_allowed_mimes, ["image/jpeg", "image/png", "image/webp"])
-
-    meta = cond do
-      is_nil(listen.metadata) -> %{}
-      is_binary(listen.metadata) -> (try do Jason.decode!(listen.metadata) rescue _ -> %{} end)
-      is_map(listen.metadata) -> listen.metadata
-      true -> %{}
-    end
-
-    case Map.get(meta, "cover_art") do
-      nil -> send_resp(conn, 404, "No embedded image")
-      url ->
-        case HTTPoison.get(url, [], follow_redirect: true, recv_timeout: 15_000) do
-          {:ok, %HTTPoison.Response{status_code: 200, body: body, headers: headers}} ->
-            mime = headers |> Enum.find_value(fn {k, v} -> if String.downcase(to_string(k)) == "content-type", do: to_string(v) end) || "image/jpeg"
-            if mime in allowed and byte_size(body) <= max_bytes do
-              write_and_respond(conn, listen.id, "embedded_covers", mime, body)
-            else
-              Logger.warn("Fallback cover skipped for listen #{listen.id}: mime=#{inspect(mime)} size=#{byte_size(body)}")
-              send_resp(conn, 404, "No embedded image")
-            end
-
-          {:ok, %HTTPoison.Response{status_code: code}} ->
-            Logger.warn("Fallback cover HTTP status #{code} for listen #{listen.id}")
-            send_resp(conn, 404, "No embedded image")
-
-          {:error, reason} ->
-            Logger.error("Fallback cover download failed for listen #{listen.id}: #{inspect(reason)}")
-            send_resp(conn, 404, "No embedded image")
-        end
+        # Kein Fallback - nur ID3-Cover oder 404
+        send_resp(conn, 404, "No embedded image")
     end
   end
 

@@ -15,7 +15,7 @@ defmodule AppApi.Listen do
     field :artist_mbid, :string
     field :release_mbid, :string
     field :user_name, :string
-    
+
     # ===== TIER 1: Performance-kritische Felder (NEU) =====
     field :origin_url, :string
     field :music_service, :string
@@ -24,7 +24,7 @@ defmodule AppApi.Listen do
     field :discnumber, :integer
     field :loved, :boolean, default: false
     field :rating, :integer
-    
+
     # ===== TIER 2 & 3: Strukturierte + unstrukturierte Daten =====
     field :metadata, :string, default: "{}"
     field :additional_info, :map, default: %{}
@@ -39,13 +39,14 @@ defmodule AppApi.Listen do
     :origin_url, :music_service, :duration_ms, :tracknumber,
     :discnumber, :loved, :rating
   ]
-  
+
   # Tier 2 Keys die aus additional_info in metadata JSONB extrahiert werden
   @tier2_keys [
-    "genres", "tags", "release_year", "label", "isrc",
-    "submission_client", "submission_client_version",
-    "artist_mbids", "artist_names", "total_tracks"
-  ]
+  "genres", "tags", "release_year", "label", "isrc",
+  "submission_client", "submission_client_version",
+  "artist_mbids", "artist_names", "total_tracks",
+  "navidrome_id", "cover_art", "coverArt"
+]
 
   @doc false
   def changeset(listen, attrs) do
@@ -56,17 +57,17 @@ defmodule AppApi.Listen do
   end
 
   # ===== PRIVATE: Auto-Extraktion aus additional_info =====
-  
+
   defp auto_extract_metadata(changeset) do
     case get_change(changeset, :additional_info) do
-      nil -> 
+      nil ->
         changeset
-      
+
       info when is_map(info) ->
         # Tier 2 Metadata als JSON String encodieren
         tier2_metadata = extract_tier2_metadata(info)
         metadata_json = Jason.encode!(tier2_metadata)
-        
+
         changeset
         |> put_if_present(:origin_url, info["origin_url"])
         |> put_if_present(:music_service, info["music_service"] || info["submission_client"])
@@ -95,7 +96,7 @@ defmodule AppApi.Listen do
   defp put_if_present(changeset, _field, _value), do: changeset
 
   # ===== PUBLIC: Query Helpers =====
-  
+
   @doc """
   Filter listens by user name
   """
@@ -160,7 +161,7 @@ defmodule AppApi.Listen do
   end
 
   # ===== JSON HELPERS für SQLite =====
-  
+
   @doc """
   Parse metadata JSON string to map (SQLite compatibility)
   """
