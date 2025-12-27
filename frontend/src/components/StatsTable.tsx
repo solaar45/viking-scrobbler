@@ -231,6 +231,24 @@ export function StatsTable({ type, timeRange }: StatsTableProps) {
   )
 }
 
+// Helper: construct URL for embedded cover images only
+function embeddedCoverUrl(kind: 'artists' | 'tracks' | 'albums', row: any): string | null {
+  // Prefer a server endpoint that serves only embedded covers by id
+  const id = row.listen_id ?? row.id ?? row.track_id ?? row.album_id ?? row.artist_id
+  if (id) {
+    return `/api/embedded-cover/${kind}/${id}`
+  }
+
+  // Allow data URIs (already embedded) or same-origin paths only
+  const url = row.cover_url
+  if (typeof url === 'string') {
+    if (url.startsWith('data:')) return url
+    if (url.startsWith('/')) return url
+  }
+
+  return null
+}
+
 // ===== COLUMN DEFINITIONS =====
 
 interface Column {
@@ -265,7 +283,7 @@ function getColumns(type: StatType): Column[] {
         label: '', 
         width: 'w-[5%]', 
         align: 'center',
-        render: (row) => <StatsCover coverUrl={row.cover_url} name={row.name} />
+        render: (row) => <StatsCover coverUrl={embeddedCoverUrl('artists', row)} name={row.name} />
       },
       { 
         key: 'artist', 
@@ -300,7 +318,7 @@ function getColumns(type: StatType): Column[] {
         label: '', 
         width: 'w-[5%]', 
         align: 'center',
-        render: (row) => <StatsCover coverUrl={row.cover_url} name={row.track} />
+        render: (row) => <StatsCover coverUrl={embeddedCoverUrl('tracks', row)} name={row.track} />
       },
       { key: 'track', label: 'Track', width: 'w-[18%]' },
       { key: 'artist', label: 'Artist', width: 'w-[15%]' },
@@ -329,7 +347,7 @@ function getColumns(type: StatType): Column[] {
         label: '', 
         width: 'w-[5%]', 
         align: 'center',
-        render: (row) => <StatsCover coverUrl={row.cover_url} name={row.album} />
+        render: (row) => <StatsCover coverUrl={embeddedCoverUrl('albums', row)} name={row.album} />
       },
       { key: 'album', label: 'Album', width: 'w-[18%]' },
       { key: 'artist', label: 'Artist', width: 'w-[13%]' },

@@ -108,7 +108,8 @@ defmodule AppApiWeb.StatsController do
         name: l.artist_name,
         plays: count(l.id),
         last_played: max(l.listened_at),
-        avg_per_day: fragment("ROUND(COUNT(*) * 1.0 / ?, 1)", ^get_days_for_range(range))
+        avg_per_day: fragment("ROUND(COUNT(*) * 1.0 / ?, 1)", ^get_days_for_range(range)),
+        sample_listen_id: max(l.id)
       })
       |> order_by([l], desc: count(l.id))
       |> limit(^limit)
@@ -151,7 +152,8 @@ defmodule AppApiWeb.StatsController do
         |> Map.put(:percentage, percentage)
         |> Map.put(:unique_tracks, unique_tracks)
         |> Map.put(:last_played_relative, format_relative_time(artist.last_played))
-        |> Map.put(:cover_url, get_artist_cover_from_id3(artist.name))
+        |> Map.put(:cover_url, nil)
+        |> Map.put(:listen_id, artist.sample_listen_id)
       end)
 
     json(conn, %{
@@ -185,7 +187,8 @@ defmodule AppApiWeb.StatsController do
         artist: l.artist_name,
         album: l.release_name,
         plays: count(l.id),
-        last_played: max(l.listened_at)
+        last_played: max(l.listened_at),
+        sample_listen_id: max(l.id)
       })
       |> order_by([l], desc: count(l.id))
       |> limit(^limit)
@@ -205,7 +208,8 @@ defmodule AppApiWeb.StatsController do
         |> Map.put(:rank, rank)
         |> Map.put(:percentage, percentage)
         |> Map.put(:last_played_relative, format_relative_time(stat.last_played))
-        |> Map.put(:cover_url, get_album_cover_from_id3(stat.album, stat.artist))
+        |> Map.put(:cover_url, nil)
+        |> Map.put(:listen_id, stat.sample_listen_id)
       end)
 
     json(conn, %{data: stats, meta: get_meta_info(params)})
@@ -230,7 +234,8 @@ defmodule AppApiWeb.StatsController do
         album: l.release_name,
         artist: l.artist_name,
         plays: count(l.id),
-        last_played: max(l.listened_at)
+        last_played: max(l.listened_at),
+        sample_listen_id: max(l.id)
       })
       |> order_by([l], desc: count(l.id))
       |> limit(^limit)
@@ -251,7 +256,8 @@ defmodule AppApiWeb.StatsController do
         |> Map.put(:percentage, percentage)
         |> Map.put(:completion_rate, 85)
         |> Map.put(:last_played_relative, format_relative_time(stat.last_played))
-        |> Map.put(:cover_url, get_album_cover_from_id3(stat.album, stat.artist))
+        |> Map.put(:cover_url, nil)
+        |> Map.put(:listen_id, stat.sample_listen_id)
       end)
 
     json(conn, %{data: stats, meta: get_meta_info(params)})

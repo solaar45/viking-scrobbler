@@ -54,6 +54,7 @@ defmodule AppApiWeb.Router do
     get "/stats/top-dates", StatsController, :top_dates
     get "/stats/top-times", StatsController, :top_times
     get "/stats/top-durations", StatsController, :top_durations
+    get "/embedded-cover/:kind/:id", EmbeddedCoverController, :show
 
   end
 

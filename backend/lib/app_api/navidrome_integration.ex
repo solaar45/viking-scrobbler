@@ -399,7 +399,8 @@ defmodule AppApi.NavidromeIntegration do
       "tracknumber" => song["track"],
       "discnumber" => song["discNumber"],
       "bitrate" => song["bitRate"],
-      "path" => song["path"]
+      "path" => song["path"],
+      "navidrome_id" => song["id"]
     }
 
     {:ok, metadata}
@@ -482,5 +483,92 @@ defmodule AppApi.NavidromeIntegration do
 
   defp maybe_put(acc, _source_map, key, value) do
     Map.put(acc, key, value)
+  end
+
+  # Public: fetch embedded picture for a given Listen. Returns {:ok, {mime, binary}} or {:error, reason}
+  def fetch_embedded_picture(%Listen{} = listen) do
+    meta = parse_metadata(listen.metadata)
+
+    img = Map.get(meta, "embedded_picture") || Map.get(meta, "picture")
+
+    if is_binary(img) and String.starts_with?(img, "data:") do
+      {:ok, img}
+    else
+        with {:ok, nav_config} <- resolve_navidrome_config(listen),
+             {:ok, song_meta} <- search_song(nav_config.url, nav_config.username, nav_config.password, listen.artist_name, listen.track_name),
+             stream_url = build_stream_url(nav_config, song_meta),
+             {:ok, resp} <- HTTPoison.get(stream_url, [], recv_timeout: 15_000, follow_redirect: true),
+             {:ok, {mime, data}} <- parse_id3_apic(resp.body) do
+          {:ok, {mime, data}}
+        else
+          error ->
+            Logger.debug("Embedded picture fetch failed: #{inspect(error)}")
+            {:error, :no_embedded_picture}
+        end
+    end
+  end
+
+  defp build_stream_url(%{url: url, username: u, password: p}, song_meta) do
+    params = %{"u" => u, "p" => p, "v" => "1.16.1", "c" => "VikingScrobbler"}
+    q = URI.encode_query(params)
+
+    cond do
+      song_meta["navidrome_id"] -> "#{url}/rest/stream.view?#{q}&id=#{song_meta["navidrome_id"]}"
+      song_meta["path"] -> "#{url}/rest/stream.view?#{q}&path=#{URI.encode(song_meta["path"])}"
+      true -> "#{url}/rest/stream.view?#{q}"
+    end
+  end
+
+  # Minimal ID3 APIC parser supporting v2.3/v2.4 frames
+  defp parse_id3_apic(<<"ID3", _ver1, _ver2, _flags, sz1, sz2, sz3, sz4, rest::binary>>) do
+    tag_size = synchsafe_to_int(<<sz1, sz2, sz3, sz4>>)
+    tag_data = :binary.part(rest, 0, min(byte_size(rest), tag_size))
+    parse_frames(tag_data)
+  end
+
+  defp parse_id3_apic(_), do: {:error, :not_id3}
+
+  defp parse_frames(<<>>), do: {:error, :no_apic}
+
+  defp parse_frames(bin), do: parse_frames(bin, 0)
+
+  defp parse_frames(bin, offset) when byte_size(bin) - offset < 10, do: {:error, :no_apic}
+
+  defp parse_frames(bin, offset) do
+    header = :binary.part(bin, offset, 10)
+    <<id::binary-4, size_b1, size_b2, size_b3, size_b4, _flags::binary-2>> = header
+    size = :binary.decode_unsigned(<<size_b1, size_b2, size_b3, size_b4>>)
+    frame_start = offset + 10
+    frame_end = frame_start + size
+
+    if frame_end > byte_size(bin) do
+      {:error, :truncated}
+    else
+      frame = :binary.part(bin, frame_start, size)
+
+      case id do
+        "APIC" -> parse_apic_frame(frame)
+        _ -> parse_frames(bin, frame_end)
+      end
+    end
+  end
+
+  defp parse_apic_frame(<<encoding, rest::binary>>) do
+    case String.split(rest, <<0>>, parts: 2) do
+      [mime_bin, rest2] ->
+        mime = to_string(mime_bin)
+        <<_pic_type, desc_and_data::binary>> = rest2
+        case String.split(desc_and_data, <<0>>, parts: 2) do
+          [_desc, image_data] -> {:ok, {mime, image_data}}
+          _ -> {:error, :invalid_apic}
+        end
+
+      _ -> {:error, :invalid_apic}
+    end
+  end
+
+  defp synchsafe_to_int(<<a, b, c, d>>) do
+    import Bitwise
+    ((a &&& 0x7F) <<< 21) ||| ((b &&& 0x7F) <<< 14) ||| ((c &&& 0x7F) <<< 7) ||| (d &&& 0x7F)
   end
 end

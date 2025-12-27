@@ -25,21 +25,25 @@ export function OverviewPage() {
   const loadStats = async () => {
     setLoading(true)
     try {
-      // Mock data for now - replace with real API call
-      await new Promise(resolve => setTimeout(resolve, 500))
-      
+      const resp = await fetch(`/api/stats/overview?range=${timeRange}`)
+      if (!resp.ok) throw new Error(`Failed to load overview: ${resp.status}`)
+      const body = await resp.json()
+
+      // Ensure recent_activity dates are ISO strings for the chart
+      const recent = (body.recent_activity || []).map((r: any) => ({
+        date: r.date && r.date.length ? new Date(r.date).toISOString() : new Date().toISOString(),
+        plays: r.plays || 0
+      }))
+
       setStats({
-        total_plays: 1856,
-        unique_artists: 87,
-        unique_albums: 52,
-        total_listening_time: '156h 23m',
-        top_artist: { name: 'Tool', plays: 342 },
-        top_track: { name: 'Lateralus', artist: 'Tool', plays: 89 },
-        top_album: { name: 'Lateralus', artist: 'Tool', plays: 156 },
-        recent_activity: Array.from({ length: 30 }, (_, i) => ({
-          date: new Date(Date.now() - i * 86400000).toISOString(),
-          plays: Math.floor(Math.random() * 100) + 20
-        })).reverse()
+        total_plays: body.total_plays || 0,
+        unique_artists: body.unique_artists || 0,
+        unique_albums: body.unique_albums || 0,
+        total_listening_time: body.total_listening_time || '0h 0m',
+        top_artist: body.top_artist || { name: 'N/A', plays: 0 },
+        top_track: body.top_track || { name: 'N/A', artist: 'N/A', plays: 0 },
+        top_album: body.top_album || { name: 'N/A', artist: 'N/A', plays: 0 },
+        recent_activity: recent
       })
     } catch (error) {
       console.error('Failed to load overview stats', error)
@@ -68,7 +72,7 @@ export function OverviewPage() {
           <BarChart3 className="w-6 h-6 text-viking-purple" />
           <h1 className={VIKING_DESIGN.typography.title.page}>Overview</h1>
         </div>
-        
+
         {/* Time Range Filter - ANALOG RECENT LISTENS */}
         <div className="flex items-center gap-2">
           <span className={cn("text-sm font-medium", VIKING_DESIGN.colors.text.secondary)}>
@@ -266,7 +270,7 @@ function CompactTopList({ type }: CompactTopListProps) {
     try {
       // Mock data - replace with real API
       await new Promise(resolve => setTimeout(resolve, 300))
-      
+
       const mockData = Array.from({ length: 5 }, (_, i) => ({
         rank: i + 1,
         name: type === 'artists' ? `Artist ${i + 1}` : `Track ${i + 1}`,
@@ -274,7 +278,7 @@ function CompactTopList({ type }: CompactTopListProps) {
         track: type === 'tracks' ? `Track ${i + 1}` : undefined,
         plays: Math.floor(Math.random() * 200) + 50
       }))
-      
+
       setData(mockData)
     } catch (error) {
       console.error(`Failed to load top ${type}`, error)
@@ -358,7 +362,7 @@ function CompactTopList({ type }: CompactTopListProps) {
 
 function SimpleLineChart({ data }: { data: Array<{ date: string; plays: number }> }) {
   const maxPlays = Math.max(...data.map(d => d.plays))
-  
+
   return (
     <div className="relative h-48">
       <div className="flex items-end justify-between h-full gap-1">
@@ -391,7 +395,7 @@ function OverviewSkeleton() {
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
       <div className={cn("h-8 w-48 rounded-lg", VIKING_DESIGN.colors.card.tertiary, VIKING_DESIGN.effects.loading.pulse)} />
-      
+
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {Array.from({ length: 4 }).map((_, i) => (
           <div key={i} className={cn(VIKING_DESIGN.components.card, "p-6")}>

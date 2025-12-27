@@ -3,14 +3,14 @@ import { cn } from '@/lib/design-tokens'
 
 interface StatsCoverProps {
   coverUrl?: string | null
-  name: string
+  name?: string | null
   size?: 'sm' | 'md' | 'lg'
 }
 
 export function StatsCover({ coverUrl, name, size = 'md' }: StatsCoverProps) {
   const [imgError, setImgError] = useState(false)
 
-  const initial = name[0]?.toUpperCase() || '?'
+  const initial = name && name.length > 0 ? name[0].toUpperCase() : '?'
 
   const gradients = [
     'from-purple-500 to-purple-700',
@@ -33,7 +33,7 @@ export function StatsCover({ coverUrl, name, size = 'md' }: StatsCoverProps) {
       {coverUrl && !imgError ? (
         <img
           src={coverUrl}
-          alt={name}
+          alt={name ?? ''}
           className={cn(
             sizeClasses[size],
             "rounded-full border border-viking-border-default shadow-sm object-cover"
