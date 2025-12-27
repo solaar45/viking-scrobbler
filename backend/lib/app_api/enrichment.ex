@@ -25,9 +25,18 @@ defmodule AppApi.Enrichment do
             fragment("? = ?", l.metadata, "null") or
             l.metadata == "" or
             is_nil(l.metadata) or
-            fragment("json_extract(?, '$.genres') IS NULL", l.metadata) or
-            fragment("json_array_length(json_extract(?, '$.genres')) = 0", l.metadata) or
-            fragment("json_extract(?, '$.release_year') IS NULL", l.metadata),
+            # ✅ FIXED: Check both 'genres' AND 'genre' (Navidrome uses singular)
+            (fragment("json_extract(?, '$.genres') IS NULL", l.metadata) and
+               fragment("json_extract(?, '$.genre') IS NULL", l.metadata)) or
+            # ✅ FIXED: Safe array check - only if genres exists and is array
+            fragment(
+              "(json_type(json_extract(?, '$.genres')) = 'array' AND json_array_length(json_extract(?, '$.genres')) = 0)",
+              l.metadata,
+              l.metadata
+            ) or
+            # ✅ FIXED: Check both 'year' AND 'release_year' (Navidrome uses 'year')
+            (fragment("json_extract(?, '$.release_year') IS NULL", l.metadata) and
+               fragment("json_extract(?, '$.year') IS NULL", l.metadata)),
         select: count(l.id)
 
     count = Repo.one(query)
@@ -84,9 +93,18 @@ defmodule AppApi.Enrichment do
             fragment("? = ?", l.metadata, "null") or
             l.metadata == "" or
             is_nil(l.metadata) or
-            fragment("json_extract(?, '$.genres') IS NULL", l.metadata) or
-            fragment("json_array_length(json_extract(?, '$.genres')) = 0", l.metadata) or
-            fragment("json_extract(?, '$.release_year') IS NULL", l.metadata),
+            # ✅ FIXED: Check both 'genres' AND 'genre' (Navidrome uses singular)
+            (fragment("json_extract(?, '$.genres') IS NULL", l.metadata) and
+               fragment("json_extract(?, '$.genre') IS NULL", l.metadata)) or
+            # ✅ FIXED: Safe array check - only if genres exists and is array
+            fragment(
+              "(json_type(json_extract(?, '$.genres')) = 'array' AND json_array_length(json_extract(?, '$.genres')) = 0)",
+              l.metadata,
+              l.metadata
+            ) or
+            # ✅ FIXED: Check both 'year' AND 'release_year' (Navidrome uses 'year')
+            (fragment("json_extract(?, '$.release_year') IS NULL", l.metadata) and
+               fragment("json_extract(?, '$.year') IS NULL", l.metadata)),
         order_by: [desc: l.listened_at],
         limit: ^limit
 
@@ -111,10 +129,15 @@ defmodule AppApi.Enrichment do
   defp enrich_single_listen(listen) do
     current_metadata = parse_metadata(listen.metadata)
 
-    needs_enrichment =
-      is_nil(current_metadata["genres"]) or
-        Enum.empty?(current_metadata["genres"] || []) or
-        is_nil(current_metadata["release_year"])
+    # ✅ FIXED: Check both 'genres'/'genre' and 'year'/'release_year'
+    has_genres =
+      (current_metadata["genres"] && length(current_metadata["genres"]) > 0) ||
+        (current_metadata["genre"] && current_metadata["genre"] != "")
+
+    has_year =
+      current_metadata["release_year"] || current_metadata["year"]
+
+    needs_enrichment = !has_genres || !has_year
 
     if needs_enrichment do
       Logger.info("🔍 Enriching: #{listen.track_name} by #{listen.artist_name}")
