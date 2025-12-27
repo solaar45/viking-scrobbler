@@ -190,8 +190,13 @@ defmodule AppApiWeb.ListenBrainzController do
             time_range: fragment("strftime('%Y-W%W', datetime(?, 'unixepoch'))", l.listened_at),
             listen_count: count(l.id)
           })
-          |> group_by([l], fragment("strftime('%Y-W%W', datetime(?, 'unixepoch'))", l.listened_at))
-          |> order_by([l], asc: fragment("strftime('%Y-W%W', datetime(?, 'unixepoch'))", l.listened_at))
+          |> group_by(
+            [l],
+            fragment("strftime('%Y-W%W', datetime(?, 'unixepoch'))", l.listened_at)
+          )
+          |> order_by([l],
+            asc: fragment("strftime('%Y-W%W', datetime(?, 'unixepoch'))", l.listened_at)
+          )
           |> Repo.all()
 
         "year" ->
@@ -201,7 +206,9 @@ defmodule AppApiWeb.ListenBrainzController do
             listen_count: count(l.id)
           })
           |> group_by([l], fragment("strftime('%Y-%m', datetime(?, 'unixepoch'))", l.listened_at))
-          |> order_by([l], asc: fragment("strftime('%Y-%m', datetime(?, 'unixepoch'))", l.listened_at))
+          |> order_by([l],
+            asc: fragment("strftime('%Y-%m', datetime(?, 'unixepoch'))", l.listened_at)
+          )
           |> Repo.all()
 
         "all_time" ->
@@ -211,7 +218,9 @@ defmodule AppApiWeb.ListenBrainzController do
             listen_count: count(l.id)
           })
           |> group_by([l], fragment("strftime('%Y', datetime(?, 'unixepoch'))", l.listened_at))
-          |> order_by([l], asc: fragment("strftime('%Y', datetime(?, 'unixepoch'))", l.listened_at))
+          |> order_by([l],
+            asc: fragment("strftime('%Y', datetime(?, 'unixepoch'))", l.listened_at)
+          )
           |> Repo.all()
 
         _ ->
@@ -393,14 +402,20 @@ defmodule AppApiWeb.ListenBrainzController do
   defp format_listen(listen) do
     metadata =
       case listen.metadata do
-        nil -> %{}
+        nil ->
+          %{}
+
         str when is_binary(str) ->
           case Jason.decode(str) do
             {:ok, map} -> map
             _ -> %{}
           end
-        map when is_map(map) -> map
-        _ -> %{}
+
+        map when is_map(map) ->
+          map
+
+        _ ->
+          %{}
       end
 
     genres_string =
@@ -430,14 +445,20 @@ defmodule AppApiWeb.ListenBrainzController do
   defp format_listen_detailed_hybrid(listen) do
     metadata =
       case listen.metadata do
-        nil -> %{}
+        nil ->
+          %{}
+
         str when is_binary(str) ->
           case Jason.decode(str) do
             {:ok, map} -> map
             _ -> %{}
           end
-        map when is_map(map) -> map
-        _ -> %{}
+
+        map when is_map(map) ->
+          map
+
+        _ ->
+          %{}
       end
 
     base_info = listen.additional_info || %{}
@@ -446,28 +467,43 @@ defmodule AppApiWeb.ListenBrainzController do
       case metadata["genres"] do
         list when is_list(list) and list != [] ->
           list |> Enum.take(3) |> Enum.join(", ")
-        _ -> nil
+
+        _ ->
+          nil
       end
 
     genres = genres_from_metadata || base_info["genres"] || "–"
 
     release_year =
       cond do
-        is_integer(metadata["year"]) -> metadata["year"]
+        is_integer(metadata["year"]) ->
+          metadata["year"]
+
         is_binary(metadata["year"]) and String.length(metadata["year"]) >= 4 ->
           String.slice(metadata["year"], 0, 4)
-        is_integer(metadata["mb_release_year"]) -> metadata["mb_release_year"]
+
+        is_integer(metadata["mb_release_year"]) ->
+          metadata["mb_release_year"]
+
         is_binary(metadata["mb_release_year"]) and String.length(metadata["mb_release_year"]) >= 4 ->
           String.slice(metadata["mb_release_year"], 0, 4)
-        is_integer(metadata["release_year"]) -> metadata["release_year"]
+
+        is_integer(metadata["release_year"]) ->
+          metadata["release_year"]
+
         is_binary(metadata["release_year"]) and String.length(metadata["release_year"]) >= 4 ->
           String.slice(metadata["release_year"], 0, 4)
-        true -> base_info["release_year"] || nil
+
+        true ->
+          base_info["release_year"] || nil
       end
 
     duration_ms = base_info["duration_ms"] || listen.duration_ms
     tracknumber = base_info["tracknumber"] || listen.tracknumber
     discnumber = base_info["discnumber"] || listen.discnumber
+
+    # ✅ FIX: navidrome_id aus metadata in additional_info mergen
+    navidrome_id = metadata["navidrome_id"] || base_info["navidrome_id"]
 
     merged_info =
       base_info
@@ -476,6 +512,8 @@ defmodule AppApiWeb.ListenBrainzController do
       |> Map.put_new("discnumber", discnumber)
       |> Map.put("genres", genres)
       |> Map.put("release_year", release_year)
+      # ✅ Cover ID durchreichen!
+      |> Map.put("navidrome_id", navidrome_id)
 
     %{
       listened_at: listen.listened_at,
@@ -498,12 +536,14 @@ defmodule AppApiWeb.ListenBrainzController do
   end
 
   defp parse_timestamp(nil), do: DateTime.utc_now() |> DateTime.to_unix()
+
   defp parse_timestamp(ts) when is_binary(ts) do
     case Integer.parse(ts) do
       {timestamp, _} -> timestamp
       :error -> DateTime.utc_now() |> DateTime.to_unix()
     end
   end
+
   defp parse_timestamp(ts) when is_integer(ts), do: ts
   defp parse_timestamp(_), do: DateTime.utc_now() |> DateTime.to_unix()
 
