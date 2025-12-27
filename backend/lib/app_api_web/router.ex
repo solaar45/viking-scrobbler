@@ -42,7 +42,13 @@ defmodule AppApiWeb.Router do
     post("/enrichment/start", EnrichmentController, :start)
 
     # ═══════════════════════════════════════════════════════════
-    # STATS ENDPOINTS (NEW)
+    # COVER ART PROXY (ID3 ONLY)
+    # ═══════════════════════════════════════════════════════════
+    get "/covers/:navidrome_id", CoverController, :show_by_navidrome_id
+    get "/listens/:listen_id/cover", CoverController, :show_by_listen_id
+
+    # ═══════════════════════════════════════════════════════════
+    # STATS ENDPOINTS
     # ═══════════════════════════════════════════════════════════
 
     get "/stats/overview", StatsController, :overview
