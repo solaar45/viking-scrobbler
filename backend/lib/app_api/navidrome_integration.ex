@@ -15,13 +15,14 @@ defmodule AppApi.NavidromeIntegration do
   """
   def enrich_listen_from_navidrome(%Listen{} = listen) do
     with {:ok, navidrome_config} <- resolve_navidrome_config(listen),
-         {:ok, song_data} <- search_song(
-           navidrome_config.url,
-           navidrome_config.username,
-           navidrome_config.password,
-           listen.artist_name,
-           listen.track_name
-         ) do
+         {:ok, song_data} <-
+           search_song(
+             navidrome_config.url,
+             navidrome_config.username,
+             navidrome_config.password,
+             listen.artist_name,
+             listen.track_name
+           ) do
       update_listen_with_navidrome_data(listen, song_data)
     else
       {:error, reason} ->
@@ -39,16 +40,18 @@ defmodule AppApi.NavidromeIntegration do
       iex> AppApi.NavidromeIntegration.enrich_recent_listens("viking_user", 50)
       42
   """
-  def enrich_recent_listens(user_name, count \\ 50) when is_binary(user_name) and is_integer(count) do
+  def enrich_recent_listens(user_name, count \\ 50)
+      when is_binary(user_name) and is_integer(count) do
     Logger.info("🔄 Starting batch enrichment for #{user_name}, limit: #{count}")
 
     # Query für Listens ohne Genres
     query =
-      from l in Listen,
-      where: l.user_name == ^user_name,
-      where: fragment("? NOT LIKE '%genres%'", l.metadata) or l.metadata == "{}",
-      order_by: [desc: l.listened_at],
-      limit: ^count
+      from(l in Listen,
+        where: l.user_name == ^user_name,
+        where: fragment("? NOT LIKE '%genres%'", l.metadata) or l.metadata == "{}",
+        order_by: [desc: l.listened_at],
+        limit: ^count
+      )
 
     listens = Repo.all(query)
     total = length(listens)
@@ -64,11 +67,14 @@ defmodule AppApi.NavidromeIntegration do
         listens
         |> Enum.with_index(1)
         |> Enum.map(fn {listen, index} ->
-          Logger.info("Processing #{index}/#{total}: #{listen.artist_name} - #{listen.track_name}")
+          Logger.info(
+            "Processing #{index}/#{total}: #{listen.artist_name} - #{listen.track_name}"
+          )
 
           case enrich_listen_from_navidrome(listen) do
             {:ok, _} ->
-              :timer.sleep(200)  # Rate limiting (5 requests/sec)
+              # Rate limiting (5 requests/sec)
+              :timer.sleep(200)
               1
 
             {:error, reason} ->
@@ -175,11 +181,12 @@ defmodule AppApi.NavidromeIntegration do
         token = NavidromeCredential.decrypt_token(cred)
 
         if token do
-          {:ok, %{
-            url: cred.url,
-            username: cred.username,
-            password: token
-          }}
+          {:ok,
+           %{
+             url: cred.url,
+             username: cred.username,
+             password: token
+           }}
         else
           {:error, :decryption_failed}
         end
@@ -225,7 +232,7 @@ defmodule AppApi.NavidromeIntegration do
         test_credentials = [
           {username, username},
           {username, "navidrome"},
-          {"admin", "admin"},
+          {"admin", "admin"}
         ]
 
         Enum.find_value(test_credentials, {:error, :auth_failed}, fn {user, pass} ->
@@ -368,12 +375,11 @@ defmodule AppApi.NavidromeIntegration do
   defp parse_search_response(body, artist, track) do
     case Jason.decode(body) do
       {:ok, %{"subsonic-response" => %{"searchResult3" => %{"song" => songs}}}}
-        when is_list(songs) and length(songs) > 0 ->
-
+      when is_list(songs) and length(songs) > 0 ->
         matched_song =
           Enum.find(songs, fn song ->
             String.downcase(song["artist"] || "") == String.downcase(artist) and
-            String.downcase(song["title"] || "") == String.downcase(track)
+              String.downcase(song["title"] || "") == String.downcase(track)
           end) || List.first(songs)
 
         extract_metadata(matched_song)
@@ -390,25 +396,25 @@ defmodule AppApi.NavidromeIntegration do
   end
 
   defp extract_metadata(song) do
-  metadata = %{
-    "genre" => song["genre"],
-    "genres" => parse_genres(song["genre"]),
-    "album" => song["album"],
-    "year" => song["year"],
-    "duration_ms" => (song["duration"] || 0) * 1000,
-    "tracknumber" => song["track"],
-    "discnumber" => song["discNumber"],
-    "bitrate" => song["bitRate"],
-    "path" => song["path"],
-    "navidrome_id" => song["id"],
-    "coverArt" => song["coverArt"]
-  }
+    metadata = %{
+      "genre" => song["genre"],
+      "genres" => parse_genres(song["genre"]),
+      "album" => song["album"],
+      "year" => song["year"],
+      "duration_ms" => (song["duration"] || 0) * 1000,
+      "tracknumber" => song["track"],
+      "discnumber" => song["discNumber"],
+      "bitrate" => song["bitRate"],
+      "path" => song["path"],
+      "navidrome_id" => song["id"],
+      "coverArt" => song["coverArt"]
+    }
 
-  {:ok, metadata}
-end
-
+    {:ok, metadata}
+  end
 
   defp parse_genres(nil), do: []
+
   defp parse_genres(genre_string) when is_binary(genre_string) do
     genre_string
     |> String.split(~r/[;,\/]/)
@@ -424,16 +430,19 @@ end
       current_metadata = parse_metadata(listen.metadata)
 
       # Merge selected Navidrome fields into metadata (only when present)
-      extra = %{}
-      |> maybe_put(navidrome_data, "genres", genres)
-      |> maybe_put(navidrome_data, "year", navidrome_data["year"])
-      |> maybe_put(navidrome_data, "album", navidrome_data["album"])
-      |> maybe_put(navidrome_data, "duration_ms", navidrome_data["duration_ms"])
-      |> maybe_put(navidrome_data, "tracknumber", navidrome_data["tracknumber"])
-      |> maybe_put(navidrome_data, "discnumber", navidrome_data["discnumber"])
-      |> maybe_put(navidrome_data, "bitrate", navidrome_data["bitrate"])
-      |> maybe_put(navidrome_data, "path", navidrome_data["path"])
-      |> Map.put("source", "navidrome_id3")
+      extra =
+        %{}
+        |> maybe_put(navidrome_data, "genres", genres)
+        |> maybe_put(navidrome_data, "year", navidrome_data["year"])
+        |> maybe_put(navidrome_data, "album", navidrome_data["album"])
+        |> maybe_put(navidrome_data, "duration_ms", navidrome_data["duration_ms"])
+        |> maybe_put(navidrome_data, "tracknumber", navidrome_data["tracknumber"])
+        |> maybe_put(navidrome_data, "discnumber", navidrome_data["discnumber"])
+        |> maybe_put(navidrome_data, "bitrate", navidrome_data["bitrate"])
+        |> maybe_put(navidrome_data, "path", navidrome_data["path"])
+        |> maybe_put(navidrome_data, "navidrome_id", navidrome_data["navidrome_id"])
+        |> maybe_put(navidrome_data, "coverArt", navidrome_data["coverArt"])
+        |> Map.put("source", "navidrome_id3")
 
       new_metadata = Map.merge(current_metadata, extra)
 
@@ -473,6 +482,7 @@ end
   end
 
   defp parse_metadata(nil), do: %{}
+
   defp parse_metadata(str) when is_binary(str) do
     case Jason.decode(str) do
       {:ok, map} -> map
@@ -496,17 +506,25 @@ end
     if is_binary(img) and String.starts_with?(img, "data:") do
       {:ok, img}
     else
-        with {:ok, nav_config} <- resolve_navidrome_config(listen),
-             {:ok, song_meta} <- search_song(nav_config.url, nav_config.username, nav_config.password, listen.artist_name, listen.track_name),
-             stream_url = build_stream_url(nav_config, song_meta),
-             {:ok, resp} <- HTTPoison.get(stream_url, [], recv_timeout: 15_000, follow_redirect: true),
-             {:ok, {mime, data}} <- parse_id3_apic(resp.body) do
-          {:ok, {mime, data}}
-        else
-          error ->
-            Logger.debug("Embedded picture fetch failed: #{inspect(error)}")
-            {:error, :no_embedded_picture}
-        end
+      with {:ok, nav_config} <- resolve_navidrome_config(listen),
+           {:ok, song_meta} <-
+             search_song(
+               nav_config.url,
+               nav_config.username,
+               nav_config.password,
+               listen.artist_name,
+               listen.track_name
+             ),
+           stream_url = build_stream_url(nav_config, song_meta),
+           {:ok, resp} <-
+             HTTPoison.get(stream_url, [], recv_timeout: 15_000, follow_redirect: true),
+           {:ok, {mime, data}} <- parse_id3_apic(resp.body) do
+        {:ok, {mime, data}}
+      else
+        error ->
+          Logger.debug("Embedded picture fetch failed: #{inspect(error)}")
+          {:error, :no_embedded_picture}
+      end
     end
   end
 
@@ -560,17 +578,19 @@ end
       [mime_bin, rest2] ->
         mime = to_string(mime_bin)
         <<_pic_type, desc_and_data::binary>> = rest2
+
         case String.split(desc_and_data, <<0>>, parts: 2) do
           [_desc, image_data] -> {:ok, {mime, image_data}}
           _ -> {:error, :invalid_apic}
         end
 
-      _ -> {:error, :invalid_apic}
+      _ ->
+        {:error, :invalid_apic}
     end
   end
 
   defp synchsafe_to_int(<<a, b, c, d>>) do
     import Bitwise
-    ((a &&& 0x7F) <<< 21) ||| ((b &&& 0x7F) <<< 14) ||| ((c &&& 0x7F) <<< 7) ||| (d &&& 0x7F)
+    (a &&& 0x7F) <<< 21 ||| (b &&& 0x7F) <<< 14 ||| (c &&& 0x7F) <<< 7 ||| (d &&& 0x7F)
   end
 end
