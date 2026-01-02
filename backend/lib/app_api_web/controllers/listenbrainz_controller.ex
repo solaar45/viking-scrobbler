@@ -335,9 +335,20 @@ defmodule AppApiWeb.ListenBrainzController do
   # ============================================================================
 
   defp process_live_scrobbles(conn, payload, user_name) when is_list(payload) do
+    # Extract player info from request
+    player_info = extract_player_info(conn)
+    
     listens =
       Enum.map(payload, fn listen_data ->
         track_metadata = listen_data["track_metadata"] || %{}
+        base_additional_info = track_metadata["additional_info"] || %{}
+        
+        # Enrich additional_info with player information
+        enriched_additional_info = 
+          base_additional_info
+          |> Map.put("media_player", player_info.player_name)
+          |> maybe_put("player_client", player_info.client)
+          |> maybe_put("player_platform", player_info.platform)
 
         %{
           listened_at: parse_timestamp(listen_data["listened_at"]),
@@ -347,7 +358,7 @@ defmodule AppApiWeb.ListenBrainzController do
           recording_mbid: get_in(track_metadata, ["additional_info", "recording_mbid"]),
           artist_mbid: get_in(track_metadata, ["additional_info", "artist_mbid"]),
           release_mbid: get_in(track_metadata, ["additional_info", "release_mbid"]),
-          additional_info: track_metadata["additional_info"] || %{},
+          additional_info: enriched_additional_info,
           user_name: user_name,
           inserted_at: DateTime.utc_now() |> DateTime.truncate(:second)
         }
@@ -356,7 +367,7 @@ defmodule AppApiWeb.ListenBrainzController do
 
     case Repo.insert_all(Listen, listens) do
       {count, _} when count > 0 ->
-        Logger.info("✅ Scrobbled #{count} tracks for #{user_name}")
+        Logger.info("✅ Scrobbled #{count} tracks for #{user_name} via #{player_info.player_name}")
 
         # Real-time metadata enrichment
         listens_to_enrich =
@@ -398,6 +409,109 @@ defmodule AppApiWeb.ListenBrainzController do
         |> json(%{status: "error", message: "Failed to insert listens"})
     end
   end
+
+  # Extract player information from request headers and additional_info
+  defp extract_player_info(conn) do
+    user_agent = get_req_header(conn, "user-agent") |> List.first()
+    
+    player_name = parse_player_from_user_agent(user_agent)
+    {client, platform} = parse_client_and_platform(user_agent)
+    
+    %{
+      player_name: player_name,
+      client: client,
+      platform: platform,
+      user_agent: user_agent
+    }
+  end
+  
+  # Parse player name from User-Agent header
+  defp parse_player_from_user_agent(nil), do: "Unknown"
+  defp parse_player_from_user_agent(user_agent) do
+    cond do
+      String.contains?(user_agent, "Feishin") ->
+        extract_client_with_version(user_agent, "Feishin")
+      
+      String.contains?(user_agent, "Amperfy") ->
+        extract_client_with_version(user_agent, "Amperfy")
+      
+      String.contains?(user_agent, "Symfonium") ->
+        extract_client_with_version(user_agent, "Symfonium")
+      
+      String.contains?(user_agent, "Sonixd") ->
+        extract_client_with_version(user_agent, "Sonixd")
+      
+      String.contains?(user_agent, "Sublime") ->
+        extract_client_with_version(user_agent, "Sublime")
+      
+      String.contains?(user_agent, "Tempo") ->
+        extract_client_with_version(user_agent, "Tempo")
+      
+      String.contains?(user_agent, "Subtracks") ->
+        extract_client_with_version(user_agent, "Subtracks")
+      
+      String.contains?(user_agent, "Ultrasonic") ->
+        extract_client_with_version(user_agent, "Ultrasonic")
+      
+      String.contains?(user_agent, "iSub") ->
+        extract_client_with_version(user_agent, "iSub")
+      
+      String.contains?(user_agent, "play:Sub") ->
+        "play:Sub"
+      
+      String.contains?(user_agent, "Navidrome") ->
+        "Navidrome Web"
+      
+      String.contains?(user_agent, "Mozilla") or String.contains?(user_agent, "Chrome") ->
+        "Web Browser"
+      
+      true ->
+        # Check if submission_client is in the format we expect from Navidrome
+        "Unknown Client"
+    end
+  end
+  
+  # Extract client name with version
+  defp extract_client_with_version(user_agent, client_name) do
+    # Try to extract version: "Feishin/0.5.0" or "Feishin [feishin/Windows]"
+    case Regex.run(~r/#{client_name}[\/\s]+([\d\.]+)/i, user_agent) do
+      [_, version] -> "#{client_name} #{version}"
+      _ -> client_name
+    end
+  end
+  
+  # Parse client type and platform from User-Agent
+  defp parse_client_and_platform(nil), do: {nil, nil}
+  defp parse_client_and_platform(user_agent) do
+    platform = cond do
+      String.contains?(user_agent, "Windows") -> "Windows"
+      String.contains?(user_agent, "Macintosh") or String.contains?(user_agent, "Mac OS") -> "macOS"
+      String.contains?(user_agent, "Linux") -> "Linux"
+      String.contains?(user_agent, "Android") -> "Android"
+      String.contains?(user_agent, "iOS") or String.contains?(user_agent, "iPhone") or String.contains?(user_agent, "iPad") -> "iOS"
+      true -> nil
+    end
+    
+    client = cond do
+      String.contains?(user_agent, "Feishin") -> "feishin"
+      String.contains?(user_agent, "Amperfy") -> "amperfy"
+      String.contains?(user_agent, "Symfonium") -> "symfonium"
+      String.contains?(user_agent, "Sonixd") -> "sonixd"
+      String.contains?(user_agent, "Sublime") -> "sublime"
+      String.contains?(user_agent, "Tempo") -> "tempo"
+      String.contains?(user_agent, "Subtracks") -> "subtracks"
+      String.contains?(user_agent, "Ultrasonic") -> "ultrasonic"
+      String.contains?(user_agent, "iSub") -> "isub"
+      String.contains?(user_agent, "play:Sub") -> "playsub"
+      true -> nil
+    end
+    
+    {client, platform}
+  end
+  
+  # Helper to conditionally add keys to map
+  defp maybe_put(map, _key, nil), do: map
+  defp maybe_put(map, key, value), do: Map.put(map, key, value)
 
   defp format_listen(listen) do
     metadata =
