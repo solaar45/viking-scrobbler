@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react"
 import { Calendar, Clock } from "lucide-react"
-import { VIKING_DESIGN, cn } from "@/lib/design-tokens"
+import { VIKING_DESIGN, VIKING_TYPOGRAPHY, cn } from "@/lib/design-tokens"
 
 interface DateTimeFormats {
   dateFormat: string
@@ -98,9 +98,9 @@ export function DateTimeSettings() {
       {/* HEADER */}
       <div className={VIKING_DESIGN.layouts.header.wrapper}>
         <div className={VIKING_DESIGN.layouts.header.title}>
-          <h3 className={VIKING_DESIGN.typography.title.card}>Date & Time Format</h3>
+          <h3 className={VIKING_TYPOGRAPHY.heading.m}>Date & Time Format</h3>
           <span className={VIKING_DESIGN.layouts.header.separator}>|</span>
-          <span className={VIKING_DESIGN.layouts.header.subtitle}>
+          <span className={VIKING_TYPOGRAPHY.label.inline}>
             Customize how dates and times are displayed
           </span>
         </div>
@@ -112,7 +112,7 @@ export function DateTimeSettings() {
           {/* Date Format */}
           <div className={VIKING_DESIGN.layouts.form.field}>
             <label className={cn(
-              VIKING_DESIGN.typography.label.base,
+              VIKING_TYPOGRAPHY.label.default,
               "flex items-center",
               VIKING_DESIGN.spacing.inlineGap.small
             )}>
@@ -122,7 +122,7 @@ export function DateTimeSettings() {
             <select
               value={dateFormat}
               onChange={(e) => handleDateFormatChange(e.target.value)}
-              className={VIKING_DESIGN.components.select.base}
+              className={cn(VIKING_DESIGN.components.select.base, VIKING_TYPOGRAPHY.body.l)}
             >
               {DATE_FORMATS.map((format) => (
                 <option key={format.id} value={format.id}>
@@ -135,7 +135,7 @@ export function DateTimeSettings() {
           {/* Time Format */}
           <div className={VIKING_DESIGN.layouts.form.field}>
             <label className={cn(
-              VIKING_DESIGN.typography.label.base,
+              VIKING_TYPOGRAPHY.label.default,
               "flex items-center",
               VIKING_DESIGN.spacing.inlineGap.small
             )}>
@@ -145,7 +145,7 @@ export function DateTimeSettings() {
             <select
               value={timeFormat}
               onChange={(e) => handleTimeFormatChange(e.target.value)}
-              className={VIKING_DESIGN.components.select.base}
+              className={cn(VIKING_DESIGN.components.select.base, VIKING_TYPOGRAPHY.body.l)}
             >
               {TIME_FORMATS.map((format) => (
                 <option key={format.id} value={format.id}>
@@ -157,7 +157,7 @@ export function DateTimeSettings() {
 
           {/* Live Preview */}
           <div className={cn("pt-4", VIKING_DESIGN.colors.border.default, "border-t")}>
-            <label className={cn(VIKING_DESIGN.typography.label.base, "mb-3")}>
+            <label className={cn(VIKING_TYPOGRAPHY.label.default, "mb-3")}>
               Live Preview
             </label>
             <div className={cn(
@@ -167,15 +167,14 @@ export function DateTimeSettings() {
               "border"
             )}>
               <div className={cn(
-                "text-2xl font-semibold",
-                VIKING_DESIGN.typography.code,
-                VIKING_DESIGN.colors.text.primary
+                VIKING_TYPOGRAPHY.display.m,
+                "text-center"
               )}>
                 {formatPreviewDate()}
                 <span className={cn(VIKING_DESIGN.colors.text.tertiary, "mx-2")}>•</span>
                 {formatPreviewTime()}
               </div>
-              <p className={cn(VIKING_DESIGN.typography.helper, "mt-3")}>
+              <p className={cn(VIKING_TYPOGRAPHY.body.s, "mt-3")}>
                 This format will be used across all tables and displays
               </p>
             </div>
