@@ -30,38 +30,92 @@ defmodule AppApiWeb.StatsController do
     total_ms = Repo.one(from(l in query, select: sum(l.duration_ms))) || 0
     total_listening_time = format_duration(total_ms)
 
-    # Top artist
+    # Top artist WITH sample_listen_id for cover
     top_artist =
       Repo.one(
         from(l in query,
           group_by: l.artist_name,
-          select: %{name: l.artist_name, plays: count(l.id)},
+          select: %{
+            name: l.artist_name, 
+            plays: count(l.id),
+            sample_listen_id: max(l.id)
+          },
           order_by: [desc: count(l.id)],
           limit: 1
         )
-      ) || %{name: "N/A", plays: 0}
+      ) || %{name: "N/A", plays: 0, sample_listen_id: nil}
 
-    # Top track
+    # Top track WITH sample_listen_id for cover
     top_track =
       Repo.one(
         from(l in query,
           group_by: [l.track_name, l.artist_name],
-          select: %{name: l.track_name, artist: l.artist_name, plays: count(l.id)},
+          select: %{
+            name: l.track_name, 
+            artist: l.artist_name, 
+            plays: count(l.id),
+            sample_listen_id: max(l.id)
+          },
           order_by: [desc: count(l.id)],
           limit: 1
         )
-      ) || %{name: "N/A", artist: "N/A", plays: 0}
+      ) || %{name: "N/A", artist: "N/A", plays: 0, sample_listen_id: nil}
 
-    # Top album
+    # Top album WITH sample_listen_id for cover
     top_album =
       Repo.one(
         from(l in query,
           group_by: [l.release_name, l.artist_name],
-          select: %{name: l.release_name, artist: l.artist_name, plays: count(l.id)},
+          select: %{
+            name: l.release_name, 
+            artist: l.artist_name, 
+            plays: count(l.id),
+            sample_listen_id: max(l.id)
+          },
           order_by: [desc: count(l.id)],
           limit: 1
         )
-      ) || %{name: "N/A", artist: "N/A", plays: 0}
+      ) || %{name: "N/A", artist: "N/A", plays: 0, sample_listen_id: nil}
+
+    # Batch fetch navidrome_ids for all top items
+    sample_listen_ids = [
+      top_artist.sample_listen_id,
+      top_track.sample_listen_id,
+      top_album.sample_listen_id
+    ] |> Enum.filter(&(&1 != nil))
+
+    navidrome_ids = get_navidrome_ids_batch(sample_listen_ids)
+
+    # Add additional_info with navidrome_id to each top item
+    top_artist = 
+      if top_artist.sample_listen_id do
+        navidrome_id = Map.get(navidrome_ids, top_artist.sample_listen_id)
+        top_artist
+        |> Map.put(:additional_info, %{navidrome_id: navidrome_id})
+        |> Map.delete(:sample_listen_id)
+      else
+        Map.delete(top_artist, :sample_listen_id)
+      end
+
+    top_track = 
+      if top_track.sample_listen_id do
+        navidrome_id = Map.get(navidrome_ids, top_track.sample_listen_id)
+        top_track
+        |> Map.put(:additional_info, %{navidrome_id: navidrome_id})
+        |> Map.delete(:sample_listen_id)
+      else
+        Map.delete(top_track, :sample_listen_id)
+      end
+
+    top_album = 
+      if top_album.sample_listen_id do
+        navidrome_id = Map.get(navidrome_ids, top_album.sample_listen_id)
+        top_album
+        |> Map.put(:additional_info, %{navidrome_id: navidrome_id})
+        |> Map.delete(:sample_listen_id)
+      else
+        Map.delete(top_album, :sample_listen_id)
+      end
 
     # Recent activity (last 30 days)
     recent_activity =
