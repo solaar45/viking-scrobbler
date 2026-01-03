@@ -75,17 +75,17 @@ export function ListenRow({ listen, formatDate, formatTime, formatDuration }: Li
       </td>
       
       {/* Bitrate */}
-      <td className="table-cell-dense table-cell-secondary text-right truncate max-w-[100px] font-mono text-xs">
+      <td className="table-cell-dense table-cell-secondary text-right truncate max-w-[100px]">
         {bitrate}
       </td>
       
       {/* Format */}
-      <td className="table-cell-dense table-cell-secondary truncate max-w-[80px] font-mono text-xs font-semibold text-cyan-400">
+      <td className="table-cell-dense table-cell-secondary truncate max-w-[80px] text-cyan-400">
         {format}
       </td>
       
       {/* Player */}
-      <td className="table-cell-dense table-cell-secondary truncate max-w-[120px] text-xs">
+      <td className="table-cell-dense table-cell-secondary truncate max-w-[120px]">
         {player}
       </td>
       
