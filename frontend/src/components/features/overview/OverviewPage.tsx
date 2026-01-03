@@ -16,6 +16,24 @@ interface PeriodStats {
   currentStreak: number
 }
 
+interface RecentListen {
+  id: string
+  track: string
+  artist: string
+  album: string
+  playedAt: string
+  duration: number
+  releaseYear?: string | number
+  genres?: string
+  additional_info?: {
+    navidrome_id?: string
+    originalBitRate?: number
+    originalFormat?: string
+    media_player?: string
+    [key: string]: any
+  }
+}
+
 interface DashboardStats {
   filtered: PeriodStats
   lifetime: PeriodStats
@@ -24,6 +42,7 @@ interface DashboardStats {
   top_track: { name: string; artist: string; plays: number; additional_info?: any }
   top_album: { name: string; artist: string; plays: number; additional_info?: any }
   recent_activity: Array<{ date: string; plays: number }>
+  recent_listens: RecentListen[]
   breakdown_by_player?: Array<{ name: string; plays: number; share: string }>
   breakdown_by_hour?: Array<{ name: string; plays: number; share: string }>
   breakdown_by_genre?: Array<{ name: string; plays: number; share: string }>
@@ -69,6 +88,25 @@ function formatDate(iso: string) {
   return `${day}.${month}.${year}`
 }
 
+// Aggregate player data from recent listens
+function aggregateByPlayer(listens: RecentListen[]): Array<{ name: string; plays: number; share: string }> {
+  const playerCounts = new Map<string, number>()
+  const total = listens.length
+
+  listens.forEach(listen => {
+    const player = listen.additional_info?.media_player || 'Unknown'
+    playerCounts.set(player, (playerCounts.get(player) || 0) + 1)
+  })
+
+  return Array.from(playerCounts.entries())
+    .map(([name, plays]) => ({
+      name,
+      plays,
+      share: `${((plays / total) * 100).toFixed(1)}%`
+    }))
+    .sort((a, b) => b.plays - a.plays)
+}
+
 export function OverviewPage() {
   const [stats, setStats] = useState<DashboardStats | null>(null)
   const [loading, setLoading] = useState(true)
@@ -91,7 +129,7 @@ export function OverviewPage() {
   const loadStats = async () => {
     setLoading(true)
     try {
-      // API 1: Main metrics from /1/stats/user/{username}/totals (SAME AS RECENT LISTENS)
+      // API 1: Main metrics from /1/stats/user/{username}/totals
       const statsResponse = await fetch(`/1/stats/user/${username}/totals?range=${timeRange}`)
       const statsJson = await statsResponse.json()
       const totals = statsJson.payload || {}
@@ -104,18 +142,57 @@ export function OverviewPage() {
       
       console.log('🎵 Overview API Response:', overview)
 
+      // API 3: Recent listens for player aggregation
+      const recentResponse = await fetch(`/1/user/${username}/recent-listens?count=500`)
+      const recentJson = await recentResponse.json()
+      
+      const recentListens = (recentJson.payload?.listens || []).map((listen: any) => ({
+        id: listen.listened_at?.toString() || Math.random().toString(),
+        track: listen.track_name || 'Unknown Track',
+        artist: listen.artist_name || 'Unknown Artist',
+        album: listen.release_name || 'Unknown Album',
+        playedAt: listen.listened_at
+          ? new Date(listen.listened_at * 1000).toISOString()
+          : new Date().toISOString(),
+        duration: Math.floor(
+          (listen.additional_info?.duration_ms ??
+            listen.additional_info?.extended?.duration_ms ??
+            0) / 1000
+        ),
+        releaseYear: listen.additional_info?.release_year ?? undefined,
+        genres: listen.additional_info?.genres || '–',
+        additional_info: listen.additional_info || {},
+      }))
+
+      console.log(`📀 Loaded ${recentListens.length} recent listens`)
+
+      // Filter recent listens by time range
+      const selectedPeriod = PERIODS.find((p) => p.id === timeRange)
+      let filteredListens = recentListens
+      
+      if (selectedPeriod?.days) {
+        const cutoffDate = new Date()
+        cutoffDate.setDate(cutoffDate.getDate() - selectedPeriod.days)
+        const cutoffTimestamp = cutoffDate.getTime()
+        
+        filteredListens = recentListens.filter((listen: RecentListen) => {
+          const listenDate = new Date(listen.playedAt).getTime()
+          return listenDate >= cutoffTimestamp
+        })
+      }
+
+      console.log(`🔍 Filtered to ${filteredListens.length} listens for ${timeRange}`)
+
+      // Aggregate player data from filtered listens
+      const breakdown_by_player = aggregateByPlayer(filteredListens)
+      console.log('📊 Player breakdown:', breakdown_by_player)
+
       // Lifetime stats for trends
       const lifetimeResponse = await fetch(`/1/stats/user/${username}/totals?range=all_time`)
       const lifetimeJson = await lifetimeResponse.json()
       const lifetimeTotals = lifetimeJson.payload || {}
 
-      // Mock breakdown data (will be replaced with real API data)
-      const breakdown_by_player = [
-        { name: 'Navidrome', plays: 456, share: '76.3%' },
-        { name: 'Spotify', plays: 98, share: '16.4%' },
-        { name: 'YouTube Music', plays: 44, share: '7.3%' },
-      ]
-
+      // Mock breakdown data for hour and genre (will be replaced with real API data)
       const breakdown_by_hour = [
         { name: 'Morning (6-12)', plays: 234, share: '39.1%' },
         { name: 'Afternoon (12-18)', plays: 189, share: '31.6%' },
@@ -160,6 +237,7 @@ export function OverviewPage() {
         top_track: overview.top_track || { name: 'N/A', artist: 'N/A', plays: 0 },
         top_album: overview.top_album || { name: 'N/A', artist: 'N/A', plays: 0 },
         recent_activity: overview.recent_activity || [],
+        recent_listens: recentListens,
         breakdown_by_player,
         breakdown_by_hour,
         breakdown_by_genre,
