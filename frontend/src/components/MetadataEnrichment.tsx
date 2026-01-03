@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Sparkles, Search, RefreshCw, CheckCircle2, AlertCircle, Database, Music, Calendar, Link } from 'lucide-react'
+import { Sparkles, Search, RefreshCw, CheckCircle2, AlertCircle, Database, Music, Calendar, Link, Radio, Disc, Info } from 'lucide-react'
 import { VIKING_DESIGN, cn, getButtonClasses, getAlertClasses } from '@/lib/design-tokens'
 
 const API_BASE = window.location.origin
@@ -10,6 +10,16 @@ interface ScanResult {
   missing_genres: number
   missing_year: number
   missing_navidrome_id: number
+  missing_any: number
+}
+
+interface PlayerInfoScanResult {
+  success: boolean
+  total: number
+  missing_player: number
+  missing_bitrate: number
+  missing_format: number
+  missing_genres: number
   missing_any: number
 }
 
@@ -26,10 +36,15 @@ type EnrichmentField = 'all' | 'genres' | 'year' | 'navidrome_id'
 
 export function MetadataEnrichment() {
   const [scanResult, setScanResult] = useState<ScanResult | null>(null)
+  const [playerScanResult, setPlayerScanResult] = useState<PlayerInfoScanResult | null>(null)
   const [scanning, setScanning] = useState(false)
+  const [playerScanning, setPlayerScanning] = useState(false)
   const [enriching, setEnriching] = useState(false)
+  const [backfilling, setBackfilling] = useState(false)
   const [enrichmentResult, setEnrichmentResult] = useState<EnrichmentResult | null>(null)
+  const [backfillResult, setBackfillResult] = useState<EnrichmentResult | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [playerError, setPlayerError] = useState<string | null>(null)
   const [selectedField, setSelectedField] = useState<EnrichmentField>('all')
 
   const handleScan = async () => {
@@ -51,6 +66,28 @@ export function MetadataEnrichment() {
       setError(err instanceof Error ? err.message : 'Scan failed')
     } finally {
       setScanning(false)
+    }
+  }
+
+  const handlePlayerScan = async () => {
+    setPlayerScanning(true)
+    setPlayerError(null)
+    setPlayerScanResult(null)
+    setBackfillResult(null)
+
+    try {
+      const response = await fetch(`${API_BASE}/api/enrichment/scan-player-info`)
+      const data: PlayerInfoScanResult = await response.json()
+
+      if (!data.success) {
+        throw new Error('Player info scan failed')
+      }
+
+      setPlayerScanResult(data)
+    } catch (err) {
+      setPlayerError(err instanceof Error ? err.message : 'Player scan failed')
+    } finally {
+      setPlayerScanning(false)
     }
   }
 
@@ -85,6 +122,38 @@ export function MetadataEnrichment() {
       setError(err instanceof Error ? err.message : 'Enrichment failed')
     } finally {
       setEnriching(false)
+    }
+  }
+
+  const handleBackfill = async () => {
+    if (!playerScanResult || playerScanResult.missing_any === 0) {
+      return
+    }
+
+    setBackfilling(true)
+    setPlayerError(null)
+    setBackfillResult(null)
+
+    try {
+      const url = new URL(`${API_BASE}/api/enrichment/backfill-player-info`)
+      url.searchParams.set('limit', '500')
+
+      const response = await fetch(url.toString(), {
+        method: 'POST',
+      })
+      
+      const data: EnrichmentResult = await response.json()
+
+      if (!data.success) {
+        throw new Error(data.error || 'Backfill failed')
+      }
+
+      setBackfillResult(data)
+      setTimeout(handlePlayerScan, 1000)
+    } catch (err) {
+      setPlayerError(err instanceof Error ? err.message : 'Backfill failed')
+    } finally {
+      setBackfilling(false)
     }
   }
 
@@ -129,7 +198,7 @@ export function MetadataEnrichment() {
         </div>
       </div>
 
-      {/* CARD */}
+      {/* CARD 1: Standard Metadata Enrichment */}
       <div className={VIKING_DESIGN.components.card}>
         <div className={VIKING_DESIGN.components.cardContent}>
           {/* Info Box */}
@@ -368,6 +437,229 @@ export function MetadataEnrichment() {
             <p><strong>💡 Tip:</strong> Use field-specific enrichment to update only what you need</p>
             <p><strong>🎵 Genres:</strong> Fetched from Navidrome ID3 tags or MusicBrainz</p>
             <p><strong>🔗 IDs:</strong> Only available for tracks in your Navidrome library</p>
+          </div>
+        </div>
+      </div>
+
+      {/* CARD 2: Player Info & Audio Metadata Backfill */}
+      <div className={VIKING_DESIGN.components.card}>
+        <div className={VIKING_DESIGN.components.cardContent}>
+          {/* Title */}
+          <div className="mb-4">
+            <h4 className={cn("text-base font-semibold", VIKING_DESIGN.colors.text.primary, "mb-1")}>
+              Player Info & Audio Quality Backfill
+            </h4>
+            <p className={cn("text-sm", VIKING_DESIGN.colors.text.secondary)}>
+              Enrich historical listens with bitrate, format, and genre information
+            </p>
+          </div>
+
+          {/* Warning Box */}
+          <div className={VIKING_DESIGN.components.alert.warning}>
+            <div className={cn("flex items-start", VIKING_DESIGN.spacing.inlineGap.small)}>
+              <Info className={cn("w-4 h-4 flex-shrink-0 mt-0.5", VIKING_DESIGN.colors.status.warning.text)} />
+              <div className="text-xs">
+                <p className="font-semibold mb-1">Important Note:</p>
+                <p className={VIKING_DESIGN.colors.text.secondary}>
+                  <strong>Player info cannot be backfilled</strong> for historical listens. 
+                  The <code className="px-1 py-0.5 rounded bg-viking-bg-tertiary text-xs">getNowPlaying</code> API 
+                  only works for currently active playback. This backfill focuses on:
+                </p>
+                <ul className={cn("list-disc list-inside mt-2 space-y-0.5", VIKING_DESIGN.colors.text.secondary)}>
+                  <li>Bitrate (kbps)</li>
+                  <li>Audio format (MP3, FLAC, etc.)</li>
+                  <li>Genres (if missing)</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          {/* Scan Button */}
+          <div className={VIKING_DESIGN.spacing.elementSpacing}>
+            <button
+              onClick={handlePlayerScan}
+              disabled={playerScanning || backfilling}
+              className={cn(
+                getButtonClasses('primary', playerScanning || backfilling),
+                "w-full flex items-center justify-center",
+                VIKING_DESIGN.spacing.inlineGap.small
+              )}
+            >
+              {playerScanning ? (
+                <>
+                  <RefreshCw className={cn("w-4 h-4", VIKING_DESIGN.effects.loading.spin)} />
+                  Scanning Audio Metadata...
+                </>
+              ) : (
+                <>
+                  <Search className="w-4 h-4" />
+                  Scan Audio Metadata
+                </>
+              )}
+            </button>
+
+            {/* Player Scan Result */}
+            {playerScanResult && (
+              <div className={cn(
+                playerScanResult.missing_any > 0
+                  ? getAlertClasses('warning')
+                  : getAlertClasses('success')
+              )}>
+                <div className={cn("flex items-start mb-3", VIKING_DESIGN.spacing.inlineGap.medium)}>
+                  <Database className={cn(
+                    "w-5 h-5 flex-shrink-0 mt-0.5",
+                    playerScanResult.missing_any > 0
+                      ? VIKING_DESIGN.colors.status.warning.text
+                      : VIKING_DESIGN.colors.status.success.text
+                  )} />
+                  <div className="flex-1">
+                    <p className={cn(
+                      "text-sm font-semibold mb-2",
+                      playerScanResult.missing_any > 0
+                        ? VIKING_DESIGN.colors.status.warning.text
+                        : VIKING_DESIGN.colors.status.success.text
+                    )}>
+                      {playerScanResult.missing_any > 0 ? (
+                        <>Found {playerScanResult.missing_any} tracks with missing audio metadata</>
+                      ) : (
+                        <>All {playerScanResult.total} listens have complete audio metadata! ✓</>
+                      )}
+                    </p>
+
+                    {/* Granular Stats */}
+                    {playerScanResult.missing_any > 0 && (
+                      <div className={cn("text-xs space-y-1", VIKING_DESIGN.colors.text.secondary)}>
+                        <div className="grid grid-cols-2 gap-2">
+                          <div className="flex items-center gap-1">
+                            <Radio className="w-3 h-3" />
+                            <span>Player: {playerScanResult.missing_player} ❌</span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <Disc className="w-3 h-3" />
+                            <span>Bitrate: {playerScanResult.missing_bitrate}</span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <Music className="w-3 h-3" />
+                            <span>Format: {playerScanResult.missing_format}</span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <Sparkles className="w-3 h-3" />
+                            <span>Genres: {playerScanResult.missing_genres}</span>
+                          </div>
+                        </div>
+                        <p className="text-xs italic mt-2 pt-2 border-t border-viking-border-default">
+                          ❌ Player info cannot be backfilled (requires active playback)
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Backfill Button */}
+          {playerScanResult && playerScanResult.missing_any > 0 && (
+            <div className={VIKING_DESIGN.spacing.elementSpacing}>
+              <button
+                onClick={handleBackfill}
+                disabled={backfilling}
+                className={cn(
+                  getButtonClasses('primary', backfilling),
+                  "w-full flex items-center justify-center",
+                  VIKING_DESIGN.spacing.inlineGap.small
+                )}
+              >
+                {backfilling ? (
+                  <>
+                    <RefreshCw className={cn("w-4 h-4", VIKING_DESIGN.effects.loading.spin)} />
+                    Backfilling Audio Metadata...
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="w-4 h-4" />
+                    Backfill Audio Metadata (up to 500 tracks)
+                  </>
+                )}
+              </button>
+
+              {backfilling && (
+                <div className="space-y-2 mt-3">
+                  <div className="h-2 rounded-full overflow-hidden bg-viking-bg-tertiary">
+                    <div className={cn(
+                      "h-full bg-gradient-to-r from-viking-purple to-viking-purple-dark w-1/2 rounded-full",
+                      VIKING_DESIGN.effects.loading.pulse
+                    )}></div>
+                  </div>
+                  <p className={cn(VIKING_DESIGN.typography.helper, "text-center")}>
+                    Processing tracks... This may take several minutes.
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Backfill Result */}
+          {backfillResult && (
+            <div className={getAlertClasses('success')}>
+              <div className={cn(
+                "flex items-start mb-3",
+                VIKING_DESIGN.spacing.inlineGap.medium
+              )}>
+                <CheckCircle2 className={cn(
+                  "w-5 h-5 flex-shrink-0 mt-0.5",
+                  VIKING_DESIGN.colors.status.success.text
+                )} />
+                <p className={cn(
+                  "text-sm font-semibold",
+                  VIKING_DESIGN.colors.status.success.text
+                )}>
+                  Backfill complete!
+                </p>
+              </div>
+              <div className={cn(
+                "text-sm space-y-1 ml-8",
+                VIKING_DESIGN.colors.text.secondary
+              )}>
+                <div>✓ Processed: {backfillResult.processed} tracks</div>
+                <div>✓ Enriched: {backfillResult.enriched} tracks</div>
+                {backfillResult.failed > 0 && (
+                  <div className={VIKING_DESIGN.colors.status.warning.text}>
+                    ⚠ Failed: {backfillResult.failed} tracks (not in Navidrome)
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Player Error */}
+          {playerError && (
+            <div className={getAlertClasses('error')}>
+              <div className={cn("flex items-start", VIKING_DESIGN.spacing.inlineGap.medium)}>
+                <AlertCircle className={cn(
+                  "w-5 h-5 flex-shrink-0 mt-0.5",
+                  VIKING_DESIGN.colors.status.error.text
+                )} />
+                <div>
+                  <p className={cn(
+                    "text-sm font-semibold",
+                    VIKING_DESIGN.colors.status.error.text
+                  )}>
+                    Error
+                  </p>
+                  <p className={cn("text-sm mt-1", VIKING_DESIGN.colors.text.secondary)}>
+                    {playerError}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Tips */}
+          <div className={cn(VIKING_DESIGN.typography.helper, "space-y-1 pt-2")}>
+            <p><strong>🎯 Best for:</strong> Historical listens missing audio quality info</p>
+            <p><strong>⚡ Speed:</strong> Processes ~200 tracks per minute (with rate limiting)</p>
+            <p><strong>📊 Source:</strong> Data from Navidrome ID3 tags</p>
           </div>
         </div>
       </div>
