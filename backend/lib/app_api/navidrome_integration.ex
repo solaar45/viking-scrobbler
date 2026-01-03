@@ -545,6 +545,9 @@ defmodule AppApi.NavidromeIntegration do
       current_metadata = parse_metadata(listen.metadata)
       current_additional_info = listen.additional_info || %{}
 
+      # DEBUG: Log what we're getting from Navidrome
+      Logger.debug("🔍 Navidrome data: bitrate=#{inspect(navidrome_data["bitrate"])}, format=#{inspect(navidrome_data["format"])}")
+
       # Merge selected Navidrome fields into metadata (only when present)
       extra_metadata =
         %{}
@@ -565,6 +568,8 @@ defmodule AppApi.NavidromeIntegration do
         current_additional_info
         |> maybe_put(navidrome_data, "originalBitRate", navidrome_data["bitrate"])
         |> maybe_put(navidrome_data, "originalFormat", navidrome_data["format"])
+
+      Logger.debug("🔍 Updated additional_info: #{inspect(updated_additional_info)}")
 
       new_metadata = Map.merge(current_metadata, extra_metadata)
 
