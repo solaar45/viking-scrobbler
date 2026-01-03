@@ -94,6 +94,7 @@ export function OverviewPage() {
       const overview = await overviewResponse.json()
       
       console.log('🎵 Overview API Response:', overview)
+      console.log('🔍 Top Artist metadata:', overview.top_artist)
 
       // Lifetime stats for trends
       const lifetimeResponse = await fetch(`/1/stats/user/${username}/totals?range=all_time`)
@@ -132,6 +133,8 @@ export function OverviewPage() {
           currentStreak: lifetimeTotals.current_streak || 0,
         },
         // FROM OVERVIEW API:
+        // TODO: Backend needs to include navidrome_id in top items for covers!
+        // For now, covers won't show because API doesn't include metadata
         total_listening_time: overview.total_listening_time || '0h 0m',
         top_artist: overview.top_artist || { name: 'N/A', plays: 0 },
         top_track: overview.top_track || { name: 'N/A', artist: 'N/A', plays: 0 },
@@ -349,8 +352,16 @@ interface HeroCardProps {
 }
 
 function HeroCard({ type, name, subtitle, plays, item, coverSize, className }: HeroCardProps) {
+  // Try to get cover URL - will be undefined if no navidrome_id
   const coverUrl = getCoverUrl(item, coverSize)
   const typeLabels = { artist: 'TOP ARTIST', track: 'TOP TRACK', album: 'TOP ALBUM' }
+  
+  // Debug: Check if item has metadata
+  console.log(`🎨 ${type} "${name}":`, {
+    hasAdditionalInfo: !!item?.additional_info,
+    navidromeId: item?.additional_info?.navidrome_id,
+    coverUrl
+  })
 
   return (
     <div className={cn(
@@ -381,13 +392,19 @@ function HeroCard({ type, name, subtitle, plays, item, coverSize, className }: H
               alt={name}
               className="w-full h-full object-cover"
               loading="lazy"
+              onError={(e) => {
+                console.error(`❌ Failed to load cover for ${name}:`, coverUrl)
+                e.currentTarget.style.display = 'none'
+              }}
             />
           ) : (
+            // FALLBACK: No cover available (API doesn't include navidrome_id)
             <div className={cn(
               "w-full h-full flex items-center justify-center",
               VIKING_DESIGN.colors.card.elevated
             )}>
               <Music className="w-20 h-20 text-viking-text-tertiary opacity-30" />
+              {/* TODO: Backend needs to include navidrome_id in top items! */}
             </div>
           )}
         </div>
