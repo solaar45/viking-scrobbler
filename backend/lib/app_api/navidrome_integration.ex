@@ -560,11 +560,11 @@ defmodule AppApi.NavidromeIntegration do
         |> maybe_put(navidrome_data, "coverArt", navidrome_data["coverArt"])
         |> Map.put("source", "navidrome_id3")
 
-      # Merge bitRate and format into additional_info (properly merge JSONB)
+      # Merge bitRate and format into additional_info (use maybe_put to skip nils)
       updated_additional_info =
         current_additional_info
-        |> Map.put("originalBitRate", navidrome_data["bitrate"])
-        |> Map.put("originalFormat", navidrome_data["format"])
+        |> maybe_put(navidrome_data, "originalBitRate", navidrome_data["bitrate"])
+        |> maybe_put(navidrome_data, "originalFormat", navidrome_data["format"])
 
       new_metadata = Map.merge(current_metadata, extra_metadata)
 
