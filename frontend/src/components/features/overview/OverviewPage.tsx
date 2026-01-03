@@ -6,6 +6,7 @@ import { getCoverUrl } from '@/lib/cover-utils'
 interface DashboardStats {
   total_plays: number
   unique_artists: number
+  unique_tracks: number
   unique_albums: number
   total_listening_time: string
   avg_per_day: number
@@ -23,6 +24,7 @@ interface DashboardStats {
 interface LifetimeStats {
   total_plays: number
   unique_artists: number
+  unique_tracks: number
   unique_albums: number
   avg_per_day: number
   current_streak: number
@@ -68,6 +70,8 @@ export function OverviewPage() {
       const resp = await fetch(`/api/stats/overview?range=${timeRange}`)
       if (!resp.ok) throw new Error(`Failed to load overview: ${resp.status}`)
       const body = await resp.json()
+      
+      console.log('📊 Overview API Response:', body)
 
       // Lifetime stats for trends
       const lifetimeResp = await fetch(`/api/stats/overview?range=all_time`)
@@ -88,6 +92,7 @@ export function OverviewPage() {
       setStats({
         total_plays: body.total_plays || 0,
         unique_artists: body.unique_artists || 0,
+        unique_tracks: body.unique_tracks || 0,
         unique_albums: body.unique_albums || 0,
         total_listening_time: body.total_listening_time || '0h 0m',
         avg_per_day: body.avg_per_day || 0,
@@ -106,6 +111,7 @@ export function OverviewPage() {
         setLifetime({
           total_plays: lifetimeBody.total_plays || 0,
           unique_artists: lifetimeBody.unique_artists || 0,
+          unique_tracks: lifetimeBody.unique_tracks || 0,
           unique_albums: lifetimeBody.unique_albums || 0,
           avg_per_day: lifetimeBody.avg_per_day || 0,
           current_streak: lifetimeBody.current_streak || 0,
@@ -134,6 +140,7 @@ export function OverviewPage() {
   const trends = {
     plays: calculateTrend(stats.total_plays, lifetime?.total_plays),
     artists: calculateTrend(stats.unique_artists, lifetime?.unique_artists),
+    tracks: calculateTrend(stats.unique_tracks, lifetime?.unique_tracks),
     albums: calculateTrend(stats.unique_albums, lifetime?.unique_albums),
     avgPerDay: calculateTrend(stats.avg_per_day, lifetime?.avg_per_day),
     streak: calculateTrend(stats.current_streak, lifetime?.current_streak),
@@ -179,7 +186,7 @@ export function OverviewPage() {
           type="artist"
           name={stats.top_artist.name}
           plays={stats.top_artist.plays}
-          additional_info={stats.top_artist.additional_info}
+          item={stats.top_artist}
           coverSize={240}
           className="lg:col-span-6"
         />
@@ -192,7 +199,7 @@ export function OverviewPage() {
             name={stats.top_track.name}
             subtitle={stats.top_track.artist}
             plays={stats.top_track.plays}
-            additional_info={stats.top_track.additional_info}
+            item={stats.top_track}
             coverSize={180}
           />
 
@@ -202,7 +209,7 @@ export function OverviewPage() {
             name={stats.top_album.name}
             subtitle={stats.top_album.artist}
             plays={stats.top_album.plays}
-            additional_info={stats.top_album.additional_info}
+            item={stats.top_album}
             coverSize={180}
           />
 
@@ -238,8 +245,8 @@ export function OverviewPage() {
         />
         <MetricCard
           label="Songs"
-          value={stats.unique_artists}
-          trend={trends.artists !== undefined ? { value: trends.artists, label: trendLabel } : undefined}
+          value={stats.unique_tracks}
+          trend={trends.tracks !== undefined ? { value: trends.tracks, label: trendLabel } : undefined}
         />
         <MetricCard
           label="Albums"
@@ -307,14 +314,17 @@ interface HeroCardProps {
   name: string
   subtitle?: string
   plays: number
-  additional_info?: any
+  item: any
   coverSize: number
   className?: string
 }
 
-function HeroCard({ type, name, subtitle, plays, additional_info, coverSize, className }: HeroCardProps) {
-  const coverUrl = getCoverUrl({ additional_info }, coverSize)
+function HeroCard({ type, name, subtitle, plays, item, coverSize, className }: HeroCardProps) {
+  // Pass complete item to getCoverUrl so it can extract artist/album names
+  const coverUrl = getCoverUrl(item, coverSize)
   const typeLabels = { artist: 'TOP ARTIST', track: 'TOP TRACK', album: 'TOP ALBUM' }
+  
+  console.log(`🎨 Cover URL for ${type} "${name}":`, coverUrl)
 
   return (
     <div className={cn(
@@ -345,6 +355,10 @@ function HeroCard({ type, name, subtitle, plays, additional_info, coverSize, cla
               alt={name}
               className="w-full h-full object-cover"
               loading="lazy"
+              onError={(e) => {
+                console.error(`❌ Failed to load cover for ${name}:`, coverUrl)
+                e.currentTarget.style.display = 'none'
+              }}
             />
           ) : (
             <div className={cn(
@@ -461,8 +475,7 @@ function AreaChart({ data }: { data: Array<{ date: string; plays: number }> }) {
               <title>{item.date}: {item.plays} plays</title>
             </circle>
           )
-        })}
-      </svg>
+        })}      </svg>
     </div>
   )
 }
