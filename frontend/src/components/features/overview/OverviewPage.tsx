@@ -82,32 +82,23 @@ export function OverviewPage() {
   const loadStats = async () => {
     setLoading(true)
     try {
-      // Filtered stats (same API as RecentListens)
+      // API 1: Main metrics from /1/stats/user/{username}/totals (SAME AS RECENT LISTENS)
       const statsResponse = await fetch(`/1/stats/user/${username}/totals?range=${timeRange}`)
       const statsJson = await statsResponse.json()
       const totals = statsJson.payload || {}
       
-      console.log('📊 Overview Stats API Response:', totals)
+      console.log('📊 Stats API Response:', totals)
+
+      // API 2: Overview data with listening time and top items
+      const overviewResponse = await fetch(`/api/stats/overview?range=${timeRange}`)
+      const overview = await overviewResponse.json()
+      
+      console.log('🎵 Overview API Response:', overview)
 
       // Lifetime stats for trends
       const lifetimeResponse = await fetch(`/1/stats/user/${username}/totals?range=all_time`)
       const lifetimeJson = await lifetimeResponse.json()
       const lifetimeTotals = lifetimeJson.payload || {}
-
-      // Mock data for top items (replace with real API)
-      const topArtist = { name: 'Top Artist', plays: 0 }
-      const topTrack = { name: 'Top Track', artist: 'Artist', plays: 0 }
-      const topAlbum = { name: 'Top Album', artist: 'Artist', plays: 0 }
-
-      // Mock recent activity
-      const recent = Array.from({ length: 30 }, (_, i) => {
-        const date = new Date()
-        date.setDate(date.getDate() - (29 - i))
-        return {
-          date: date.toISOString(),
-          plays: Math.floor(Math.random() * 50) + 10
-        }
-      })
 
       // Mock hourly activity
       const hourly = Array.from({ length: 24 }, (_, hour) => ({
@@ -140,11 +131,12 @@ export function OverviewPage() {
           peakValue: lifetimeTotals.peak_value || 0,
           currentStreak: lifetimeTotals.current_streak || 0,
         },
-        total_listening_time: totals.total_listening_time || '0h 0m',
-        top_artist: topArtist,
-        top_track: topTrack,
-        top_album: topAlbum,
-        recent_activity: recent,
+        // FROM OVERVIEW API:
+        total_listening_time: overview.total_listening_time || '0h 0m',
+        top_artist: overview.top_artist || { name: 'N/A', plays: 0 },
+        top_track: overview.top_track || { name: 'N/A', artist: 'N/A', plays: 0 },
+        top_album: overview.top_album || { name: 'N/A', artist: 'N/A', plays: 0 },
+        recent_activity: overview.recent_activity || [],
         hourly_activity: hourly
       })
     } catch (error) {
