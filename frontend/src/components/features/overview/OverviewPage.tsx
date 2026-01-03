@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { BarChart3, Music, Clock, TrendingUp, TrendingDown, Timer } from 'lucide-react'
+import { BarChart3, Music, TrendingUp, TrendingDown } from 'lucide-react'
 import { VIKING_DESIGN, VIKING_TYPOGRAPHY, cn } from '@/lib/design-tokens'
 import { getCoverUrl } from '@/lib/cover-utils'
 
@@ -217,7 +217,7 @@ export function OverviewPage() {
           name={stats.top_artist.name}
           plays={stats.top_artist.plays}
           item={stats.top_artist}
-          coverSize={240}
+          coverSize={640}
           className="lg:col-span-6"
         />
 
@@ -246,17 +246,12 @@ export function OverviewPage() {
           {/* LISTENING TIME CARD */}
           <div className={cn(
             VIKING_DESIGN.components.card,
-            "sm:col-span-2 p-6 flex items-center justify-between"
+            "sm:col-span-2 p-6"
           )}>
-            <div>
-              <p className={cn(VIKING_TYPOGRAPHY.label.inline, "mb-2")}>
-                Total Listening Time
-              </p>
-              <p className={VIKING_TYPOGRAPHY.display.l}>{stats.total_listening_time}</p>
-            </div>
-            <div className={cn("p-3 rounded-lg", VIKING_DESIGN.colors.card.elevated)}>
-              <Timer className="w-8 h-8 text-yellow-400" />
-            </div>
+            <p className={cn(VIKING_TYPOGRAPHY.label.inline, "mb-2")}>
+              Total Listening Time
+            </p>
+            <p className={VIKING_TYPOGRAPHY.display.l}>{stats.total_listening_time}</p>
           </div>
         </div>
       </div>
@@ -318,16 +313,14 @@ export function OverviewPage() {
           </div>
         </div>
 
-        {/* 24H LISTENING CLOCK (1/3) */}
+        {/* PEAK HOURS - Horizontal Bar Chart (1/3) */}
         <div className={VIKING_DESIGN.components.card}>
           <div className={VIKING_DESIGN.components.cardContent}>
-            <div className="flex items-center justify-between mb-4">
-              <h2 className={VIKING_TYPOGRAPHY.heading.m}>
-                <Clock className="inline w-5 h-5 mr-2 text-viking-purple" />
-                Peak Hours
-              </h2>
+            <div className="flex items-center mb-4">
+              <BarChart3 className="w-5 h-5 mr-2 text-viking-purple" />
+              <h2 className={VIKING_TYPOGRAPHY.heading.m}>Peak Hours</h2>
             </div>
-            <ClockHeatmap data={stats.hourly_activity || []} />
+            <HorizontalBarChart data={stats.hourly_activity || []} />
           </div>
         </div>
       </div>
@@ -366,9 +359,8 @@ function HeroCard({ type, name, subtitle, plays, item, coverSize, className }: H
       "hover:shadow-xl",
       className
     )}>
-      <div className="flex items-start justify-between">
+      <div className="flex items-start">
         <span className={VIKING_TYPOGRAPHY.label.inline}>{typeLabels[type]}</span>
-        <span className="text-3xl">🥇</span>
       </div>
 
       {/* ALBUM COVER */}
@@ -651,64 +643,67 @@ function generateAreaPath(
   return `${linePath} L ${rightX},${bottomY} L ${paddingLeft},${bottomY} Z`
 }
 
-// ===== CLOCK HEATMAP =====
-function ClockHeatmap({ data }: { data: Array<{ hour: number; plays: number }> }) {
+// ===== HORIZONTAL BAR CHART (Peak Hours) =====
+function HorizontalBarChart({ data }: { data: Array<{ hour: number; plays: number }> }) {
+  if (data.length === 0) {
+    return (
+      <div className="h-48 flex items-center justify-center text-viking-text-tertiary">
+        No data available
+      </div>
+    )
+  }
+
   const maxPlays = Math.max(...data.map(d => d.plays), 1)
-  const radius = 80
-  const centerX = 100
-  const centerY = 100
 
   return (
-    <div className="relative h-48 flex items-center justify-center">
-      <svg viewBox="0 0 200 200" className="w-full h-full">
-        {/* Clock circle segments */}
-        {data.map((item) => {
-          const intensity = item.plays / maxPlays
-          const color = `rgba(99, 102, 241, ${0.2 + intensity * 0.8})`
-          
-          return (
-            <g key={item.hour}>
-              <path
-                d={describeArc(centerX, centerY, radius - 20, radius, (item.hour * 15) - 90, (item.hour * 15) - 90 + 14)}
-                fill={color}
-                className="hover:opacity-80 transition-opacity cursor-pointer"
-              >
-                <title>{item.hour}:00 - {item.plays} plays</title>
-              </path>
-            </g>
-          )
-        })}
+    <div className="space-y-1 h-[500px] overflow-y-auto pr-2">
+      {data.map((item) => {
+        const percentage = (item.plays / maxPlays) * 100
+        const intensity = item.plays / maxPlays
         
-        {/* Center label */}
-        <text x={centerX} y={centerY} textAnchor="middle" dominantBaseline="middle" className="fill-viking-text-primary text-xl font-bold">
-          24h
-        </text>
-      </svg>
+        return (
+          <div
+            key={item.hour}
+            className="group cursor-default"
+            title={`${item.hour}:00 - ${item.plays} plays`}
+          >
+            <div className="flex items-center gap-2">
+              {/* Hour label */}
+              <span className={cn(
+                VIKING_TYPOGRAPHY.data.s,
+                "w-8 text-right"
+              )}>
+                {String(item.hour).padStart(2, '0')}
+              </span>
+              
+              {/* Bar container */}
+              <div className="flex-1 h-5 bg-viking-bg-tertiary rounded-sm overflow-hidden">
+                <div
+                  className={cn(
+                    "h-full transition-all duration-300 rounded-sm",
+                    "bg-gradient-to-r from-viking-purple to-viking-purple-dark",
+                    "group-hover:brightness-110"
+                  )}
+                  style={{ 
+                    width: `${percentage}%`,
+                    opacity: 0.4 + (intensity * 0.6)
+                  }}
+                />
+              </div>
+              
+              {/* Play count */}
+              <span className={cn(
+                VIKING_TYPOGRAPHY.data.s,
+                "w-10 text-right text-viking-text-tertiary"
+              )}>
+                {item.plays}
+              </span>
+            </div>
+          </div>
+        )
+      })}
     </div>
   )
-}
-
-function describeArc(x: number, y: number, innerRadius: number, outerRadius: number, startAngle: number, endAngle: number): string {
-  const start1 = polarToCartesian(x, y, outerRadius, endAngle)
-  const end1 = polarToCartesian(x, y, outerRadius, startAngle)
-  const start2 = polarToCartesian(x, y, innerRadius, endAngle)
-  const end2 = polarToCartesian(x, y, innerRadius, startAngle)
-  const largeArcFlag = endAngle - startAngle <= 180 ? '0' : '1'
-  return [
-    'M', start1.x, start1.y,
-    'A', outerRadius, outerRadius, 0, largeArcFlag, 0, end1.x, end1.y,
-    'L', end2.x, end2.y,
-    'A', innerRadius, innerRadius, 0, largeArcFlag, 1, start2.x, start2.y,
-    'Z'
-  ].join(' ')
-}
-
-function polarToCartesian(centerX: number, centerY: number, radius: number, angleInDegrees: number) {
-  const angleInRadians = (angleInDegrees) * Math.PI / 180.0
-  return {
-    x: centerX + (radius * Math.cos(angleInRadians)),
-    y: centerY + (radius * Math.sin(angleInRadians))
-  }
 }
 
 // ===== SKELETON =====
