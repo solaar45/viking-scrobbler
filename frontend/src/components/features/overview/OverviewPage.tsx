@@ -1,20 +1,59 @@
 import { useEffect, useState } from 'react'
-import { BarChart3, Music, Users, Disc, Clock, TrendingUp, ArrowRight } from 'lucide-react'
+import { BarChart3, Music, Users, Disc, Clock, TrendingUp, TrendingDown, Timer } from 'lucide-react'
 import { VIKING_DESIGN, VIKING_TYPOGRAPHY, cn } from '@/lib/design-tokens'
+import { getCoverUrl } from '@/lib/cover-utils'
 
 interface DashboardStats {
   total_plays: number
   unique_artists: number
   unique_albums: number
   total_listening_time: string
-  top_artist: { name: string; plays: number }
-  top_track: { name: string; artist: string; plays: number }
-  top_album: { name: string; artist: string; plays: number }
+  avg_per_day: number
+  current_streak: number
+  peak_day: string | null
+  peak_value: number
+  most_active_day: string | null
+  top_artist: { name: string; plays: number; additional_info?: any }
+  top_track: { name: string; artist: string; plays: number; additional_info?: any }
+  top_album: { name: string; artist: string; plays: number; additional_info?: any }
   recent_activity: Array<{ date: string; plays: number }>
+  hourly_activity?: Array<{ hour: number; plays: number }>
+}
+
+interface LifetimeStats {
+  total_plays: number
+  unique_artists: number
+  unique_albums: number
+  avg_per_day: number
+  current_streak: number
+}
+
+type TrendInfo = {
+  value?: number
+  label: string
+}
+
+function calculateTrend(current?: number, lifetime?: number): number | undefined {
+  if (current === undefined || lifetime === undefined || lifetime === 0) {
+    return undefined
+  }
+  const diff = current - lifetime
+  return (diff / lifetime) * 100
+}
+
+function getTrendLabel(timeRange: string): string {
+  switch (timeRange) {
+    case 'week': return 'last week'
+    case 'month': return 'last month'
+    case 'year': return 'last year'
+    case 'all_time': return 'lifetime'
+    default: return 'last period'
+  }
 }
 
 export function OverviewPage() {
   const [stats, setStats] = useState<DashboardStats | null>(null)
+  const [lifetime, setLifetime] = useState<LifetimeStats | null>(null)
   const [loading, setLoading] = useState(true)
   const [timeRange, setTimeRange] = useState<'week' | 'month' | 'year' | 'all_time'>('all_time')
 
@@ -25,14 +64,25 @@ export function OverviewPage() {
   const loadStats = async () => {
     setLoading(true)
     try {
+      // Filtered stats
       const resp = await fetch(`/api/stats/overview?range=${timeRange}`)
       if (!resp.ok) throw new Error(`Failed to load overview: ${resp.status}`)
       const body = await resp.json()
 
-      // Ensure recent_activity dates are ISO strings for the chart
+      // Lifetime stats for trends
+      const lifetimeResp = await fetch(`/api/stats/overview?range=all_time`)
+      const lifetimeBody = lifetimeResp.ok ? await lifetimeResp.json() : null
+
+      // Process recent activity
       const recent = (body.recent_activity || []).map((r: any) => ({
         date: r.date && r.date.length ? new Date(r.date).toISOString() : new Date().toISOString(),
         plays: r.plays || 0
+      }))
+
+      // Mock hourly activity (replace with real API)
+      const hourly = Array.from({ length: 24 }, (_, hour) => ({
+        hour,
+        plays: Math.floor(Math.random() * 50) + 10
       }))
 
       setStats({
@@ -40,11 +90,27 @@ export function OverviewPage() {
         unique_artists: body.unique_artists || 0,
         unique_albums: body.unique_albums || 0,
         total_listening_time: body.total_listening_time || '0h 0m',
+        avg_per_day: body.avg_per_day || 0,
+        current_streak: body.current_streak || 0,
+        peak_day: body.peak_day || null,
+        peak_value: body.peak_value || 0,
+        most_active_day: body.most_active_day || null,
         top_artist: body.top_artist || { name: 'N/A', plays: 0 },
         top_track: body.top_track || { name: 'N/A', artist: 'N/A', plays: 0 },
         top_album: body.top_album || { name: 'N/A', artist: 'N/A', plays: 0 },
-        recent_activity: recent
+        recent_activity: recent,
+        hourly_activity: hourly
       })
+
+      if (lifetimeBody) {
+        setLifetime({
+          total_plays: lifetimeBody.total_plays || 0,
+          unique_artists: lifetimeBody.unique_artists || 0,
+          unique_albums: lifetimeBody.unique_albums || 0,
+          avg_per_day: lifetimeBody.avg_per_day || 0,
+          current_streak: lifetimeBody.current_streak || 0,
+        })
+      }
     } catch (error) {
       console.error('Failed to load overview stats', error)
     } finally {
@@ -64,8 +130,17 @@ export function OverviewPage() {
     )
   }
 
+  const trendLabel = getTrendLabel(timeRange)
+  const trends = {
+    plays: calculateTrend(stats.total_plays, lifetime?.total_plays),
+    artists: calculateTrend(stats.unique_artists, lifetime?.unique_artists),
+    albums: calculateTrend(stats.unique_albums, lifetime?.unique_albums),
+    avgPerDay: calculateTrend(stats.avg_per_day, lifetime?.avg_per_day),
+    streak: calculateTrend(stats.current_streak, lifetime?.current_streak),
+  }
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* HEADER */}
       <div className={VIKING_DESIGN.layouts.header.wrapper}>
         <div className={VIKING_DESIGN.layouts.header.title}>
@@ -75,9 +150,7 @@ export function OverviewPage() {
 
         {/* Time Range Filter */}
         <div className="flex items-center gap-2">
-          <span className={VIKING_TYPOGRAPHY.label.default}>
-            Time Range:
-          </span>
+          <span className={VIKING_TYPOGRAPHY.label.default}>Time Range:</span>
           <select
             value={timeRange}
             onChange={(e) => setTimeRange(e.target.value as any)}
@@ -99,321 +172,389 @@ export function OverviewPage() {
         </div>
       </div>
 
-      {/* KPI CARDS */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <KPICard
-          icon={Music}
-          title="Total Plays"
-          value={stats.total_plays.toLocaleString()}
-          iconColor="text-viking-purple"
-        />
-        <KPICard
-          icon={Users}
-          title="Unique Artists"
-          value={stats.unique_artists.toLocaleString()}
-          iconColor="text-viking-emerald"
-        />
-        <KPICard
-          icon={Disc}
-          title="Unique Albums"
-          value={stats.unique_albums.toLocaleString()}
-          iconColor="text-blue-400"
-        />
-        <KPICard
-          icon={Clock}
-          title="Listening Time"
-          value={stats.total_listening_time}
-          iconColor="text-yellow-400"
-        />
-      </div>
-
-      {/* MINI PODIUM - TOP 3 */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <TopCard
+      {/* HERO SECTION - Bento Grid with Large Covers */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-3">
+        {/* TOP ARTIST - Large (spans 6 cols) */}
+        <HeroCard
           type="artist"
-          medal="🥇"
           name={stats.top_artist.name}
           plays={stats.top_artist.plays}
+          additional_info={stats.top_artist.additional_info}
+          coverSize={240}
+          className="lg:col-span-6"
         />
-        <TopCard
-          type="track"
-          medal="🥇"
-          name={stats.top_track.name}
-          subtitle={stats.top_track.artist}
-          plays={stats.top_track.plays}
-        />
-        <TopCard
-          type="album"
-          medal="🥇"
-          name={stats.top_album.name}
-          subtitle={stats.top_album.artist}
-          plays={stats.top_album.plays}
-        />
-      </div>
 
-      {/* LISTENING ACTIVITY CHART */}
-      <div className={VIKING_DESIGN.components.card}>
-        <div className={VIKING_DESIGN.components.cardContent}>
-          <div className="flex items-center justify-between mb-4">
-            <h2 className={VIKING_TYPOGRAPHY.heading.m}>
-              <TrendingUp className="inline w-5 h-5 mr-2 text-viking-purple" />
-              Listening Activity
-            </h2>
-            <span className={VIKING_TYPOGRAPHY.label.inline}>Last 30 Days</span>
+        {/* RIGHT COLUMN (spans 6 cols) */}
+        <div className="lg:col-span-6 grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {/* TOP TRACK */}
+          <HeroCard
+            type="track"
+            name={stats.top_track.name}
+            subtitle={stats.top_track.artist}
+            plays={stats.top_track.plays}
+            additional_info={stats.top_track.additional_info}
+            coverSize={180}
+          />
+
+          {/* TOP ALBUM */}
+          <HeroCard
+            type="album"
+            name={stats.top_album.name}
+            subtitle={stats.top_album.artist}
+            plays={stats.top_album.plays}
+            additional_info={stats.top_album.additional_info}
+            coverSize={180}
+          />
+
+          {/* LISTENING TIME CARD */}
+          <div className={cn(
+            VIKING_DESIGN.components.card,
+            "sm:col-span-2 p-6 flex items-center justify-between"
+          )}>
+            <div>
+              <p className={cn(VIKING_TYPOGRAPHY.label.inline, "mb-2")}>
+                Total Listening Time
+              </p>
+              <p className={VIKING_TYPOGRAPHY.display.l}>{stats.total_listening_time}</p>
+            </div>
+            <div className={cn("p-3 rounded-lg", VIKING_DESIGN.colors.card.elevated)}>
+              <Timer className="w-8 h-8 text-yellow-400" />
+            </div>
           </div>
-          <SimpleLineChart data={stats.recent_activity} />
         </div>
       </div>
 
-      {/* COMPACT TOP LISTS */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <CompactTopList type="artists" />
-        <CompactTopList type="tracks" />
+      {/* 8 KPI CARDS - Compact Grid */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-8 gap-3">
+        <MetricCard
+          label="Plays"
+          value={stats.total_plays}
+          trend={trends.plays !== undefined ? { value: trends.plays, label: trendLabel } : undefined}
+        />
+        <MetricCard
+          label="Artists"
+          value={stats.unique_artists}
+          trend={trends.artists !== undefined ? { value: trends.artists, label: trendLabel } : undefined}
+        />
+        <MetricCard
+          label="Songs"
+          value={stats.unique_artists}
+          trend={trends.artists !== undefined ? { value: trends.artists, label: trendLabel } : undefined}
+        />
+        <MetricCard
+          label="Albums"
+          value={stats.unique_albums}
+          trend={trends.albums !== undefined ? { value: trends.albums, label: trendLabel } : undefined}
+        />
+        <MetricCard
+          label="Daily Avg"
+          value={stats.avg_per_day}
+          unit="tracks"
+          trend={trends.avgPerDay !== undefined ? { value: trends.avgPerDay, label: trendLabel } : undefined}
+        />
+        <MetricCard
+          label="Top Day"
+          valueStr={stats.most_active_day}
+        />
+        <MetricCard
+          label="Best Day"
+          valueStr={stats.peak_day}
+        />
+        <MetricCard
+          label="Streak"
+          value={stats.current_streak}
+          unit="days"
+          trend={trends.streak !== undefined ? { value: trends.streak, label: trendLabel } : undefined}
+        />
+      </div>
+
+      {/* ACTIVITY VISUALIZATION - 2/3 Chart + 1/3 Clock */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+        {/* LISTENING ACTIVITY CHART (2/3) */}
+        <div className={cn(VIKING_DESIGN.components.card, "lg:col-span-2")}>
+          <div className={VIKING_DESIGN.components.cardContent}>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className={VIKING_TYPOGRAPHY.heading.m}>
+                <TrendingUp className="inline w-5 h-5 mr-2 text-viking-purple" />
+                Listening Activity
+              </h2>
+              <span className={VIKING_TYPOGRAPHY.label.inline}>Last 30 Days</span>
+            </div>
+            <AreaChart data={stats.recent_activity} />
+          </div>
+        </div>
+
+        {/* 24H LISTENING CLOCK (1/3) */}
+        <div className={VIKING_DESIGN.components.card}>
+          <div className={VIKING_DESIGN.components.cardContent}>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className={VIKING_TYPOGRAPHY.heading.m}>
+                <Clock className="inline w-5 h-5 mr-2 text-viking-purple" />
+                Peak Hours
+              </h2>
+            </div>
+            <ClockHeatmap data={stats.hourly_activity || []} />
+          </div>
+        </div>
       </div>
     </div>
   )
 }
 
-// ===== SUB-COMPONENTS =====
-
-interface KPICardProps {
-  icon: React.ElementType
-  title: string
-  value: string
-  iconColor: string
-}
-
-function KPICard({ icon: Icon, title, value, iconColor }: KPICardProps) {
-  return (
-    <div className={cn(VIKING_DESIGN.components.card, VIKING_DESIGN.effects.transition.base, "hover:shadow-lg")}>
-      <div className="p-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className={cn(VIKING_TYPOGRAPHY.label.inline, "mb-2")}>{title}</p>
-            {/* NEW: Use display.l for large stat numbers (36px, mono, semibold) */}
-            <p className={VIKING_TYPOGRAPHY.display.l}>{value}</p>
-          </div>
-          <div className={cn("p-3 rounded-lg", VIKING_DESIGN.colors.card.elevated)}>
-            <Icon className={cn("w-8 h-8", iconColor)} />
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-interface TopCardProps {
+// ===== HERO CARD =====
+interface HeroCardProps {
   type: 'artist' | 'track' | 'album'
-  medal: string
   name: string
   subtitle?: string
   plays: number
+  additional_info?: any
+  coverSize: number
+  className?: string
 }
 
-function TopCard({ type, medal, name, subtitle, plays }: TopCardProps) {
-  const typeIcons = {
-    artist: Users,
-    track: Music,
-    album: Disc,
-  }
-  const Icon = typeIcons[type]
+function HeroCard({ type, name, subtitle, plays, additional_info, coverSize, className }: HeroCardProps) {
+  const coverUrl = getCoverUrl({ additional_info }, coverSize)
+  const typeLabels = { artist: 'TOP ARTIST', track: 'TOP TRACK', album: 'TOP ALBUM' }
 
   return (
-    <div className={cn(VIKING_DESIGN.components.card, VIKING_DESIGN.effects.transition.base, "hover:shadow-lg")}>
-      <div className="p-6">
-        <div className="flex items-start justify-between mb-4">
-          <span className={VIKING_TYPOGRAPHY.label.inline}>
-            {type.toUpperCase()}
-          </span>
-          <span className="text-3xl">{medal}</span>
-        </div>
-        <div className="flex items-center gap-3">
-          <div className={cn("p-2 rounded-lg", VIKING_DESIGN.colors.card.elevated)}>
-            <Icon className="w-5 h-5 text-viking-purple" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className={cn(VIKING_TYPOGRAPHY.body.l, "font-semibold truncate")}>
-              {name}
-            </p>
-            {subtitle && (
-              <p className={cn(VIKING_TYPOGRAPHY.body.s, "truncate")}>
-                {subtitle}
-              </p>
-            )}
-          </div>
-        </div>
-        <div className="mt-4 pt-4 border-t border-viking-border-default">
-          <div className="flex items-center justify-between">
-            <span className={VIKING_TYPOGRAPHY.body.s}>Plays</span>
-            {/* NEW: Use data.m for numeric values */}
-            <span className={VIKING_TYPOGRAPHY.data.m}>
-              {plays.toLocaleString()}
-            </span>
-          </div>
+    <div className={cn(
+      VIKING_DESIGN.components.card,
+      "p-6 flex flex-col gap-4 group",
+      VIKING_DESIGN.effects.transition.base,
+      "hover:shadow-xl",
+      className
+    )}>
+      <div className="flex items-start justify-between">
+        <span className={VIKING_TYPOGRAPHY.label.inline}>{typeLabels[type]}</span>
+        <span className="text-3xl">🥇</span>
+      </div>
+
+      {/* ALBUM COVER */}
+      <div className="relative mx-auto">
+        <div 
+          className={cn(
+            "rounded-lg overflow-hidden",
+            "shadow-2xl shadow-viking-purple/20",
+            "transition-transform duration-300 group-hover:scale-105"
+          )}
+          style={{ width: coverSize, height: coverSize }}
+        >
+          {coverUrl ? (
+            <img 
+              src={coverUrl} 
+              alt={name}
+              className="w-full h-full object-cover"
+              loading="lazy"
+            />
+          ) : (
+            <div className={cn(
+              "w-full h-full flex items-center justify-center",
+              VIKING_DESIGN.colors.card.elevated
+            )}>
+              <Music className="w-20 h-20 text-viking-text-tertiary opacity-30" />
+            </div>
+          )}
         </div>
       </div>
-    </div>
-  )
-}
 
-interface CompactTopListProps {
-  type: 'artists' | 'tracks'
-}
-
-function CompactTopList({ type }: CompactTopListProps) {
-  const [data, setData] = useState<any[]>([])
-  const [loading, setLoading] = useState(true)
-
-  useEffect(() => {
-    loadData()
-  }, [type])
-
-  const loadData = async () => {
-    setLoading(true)
-    try {
-      // Mock data - replace with real API
-      await new Promise(resolve => setTimeout(resolve, 300))
-
-      const mockData = Array.from({ length: 5 }, (_, i) => ({
-        rank: i + 1,
-        name: type === 'artists' ? `Artist ${i + 1}` : `Track ${i + 1}`,
-        artist: type === 'tracks' ? `Artist ${i + 1}` : undefined,
-        track: type === 'tracks' ? `Track ${i + 1}` : undefined,
-        plays: Math.floor(Math.random() * 200) + 50
-      }))
-
-      setData(mockData)
-    } catch (error) {
-      console.error(`Failed to load top ${type}`, error)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const Icon = type === 'artists' ? Users : Music
-
-  return (
-    <div className={VIKING_DESIGN.components.card}>
-      <div className={VIKING_DESIGN.components.cardContent}>
-        <div className="flex items-center justify-between mb-4">
-          <h3 className={VIKING_TYPOGRAPHY.heading.m}>
-            <Icon className="inline w-5 h-5 mr-2 text-viking-purple" />
-            Top {type === 'artists' ? 'Artists' : 'Tracks'}
-          </h3>
-          <a
-            href={`/statistics?tab=${type}`}
-            onClick={(e) => {
-              e.preventDefault()
-              window.history.pushState({}, '', `/statistics?tab=${type}`)
-              window.dispatchEvent(new PopStateEvent('popstate'))
-            }}
-            className={cn(
-              VIKING_TYPOGRAPHY.interactive.button.ghost,
-              "flex items-center gap-1",
-              "hover:text-viking-purple",
-              VIKING_DESIGN.effects.transition.base
-            )}
-          >
-            View All <ArrowRight className="w-3 h-3" />
-          </a>
-        </div>
-
-        {loading ? (
-          <div className="space-y-3">
-            {Array.from({ length: 5 }).map((_, i) => (
-              <div key={i} className={cn("h-12 rounded-lg", VIKING_DESIGN.colors.card.tertiary, VIKING_DESIGN.effects.loading.pulse)} />
-            ))}
-          </div>
-        ) : (
-          <div className="space-y-2">
-            {data.map((item, i) => (
-              <div
-                key={i}
-                className={cn(
-                  "flex items-center justify-between p-3 rounded-lg",
-                  VIKING_DESIGN.colors.card.elevated,
-                  VIKING_DESIGN.effects.transition.base,
-                  "hover:bg-viking-bg-tertiary"
-                )}
-              >
-                <div className="flex items-center gap-3 flex-1 min-w-0">
-                  <span className={VIKING_TYPOGRAPHY.data.s}>
-                    {i + 1}.
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <p className={cn(VIKING_TYPOGRAPHY.body.l, "font-semibold truncate")}>
-                      {type === 'artists' ? item.name : item.track}
-                    </p>
-                    {type === 'tracks' && (
-                      <p className={cn(VIKING_TYPOGRAPHY.body.s, "truncate")}>
-                        {item.artist}
-                      </p>
-                    )}
-                  </div>
-                </div>
-                {/* NEW: Use data.m for play counts */}
-                <span className={cn(VIKING_TYPOGRAPHY.data.m, "ml-3")}>
-                  {item.plays}↻
-                </span>
-              </div>
-            ))}
-          </div>
+      {/* INFO */}
+      <div className="text-center">
+        <p className={cn(VIKING_TYPOGRAPHY.body.l, "font-bold truncate mb-1")}>
+          {name}
+        </p>
+        {subtitle && (
+          <p className={cn(VIKING_TYPOGRAPHY.body.s, "truncate mb-2")}>
+            {subtitle}
+          </p>
         )}
+        <div className="flex items-center justify-center gap-2">
+          <span className={VIKING_TYPOGRAPHY.data.m}>{plays.toLocaleString()}</span>
+          <span className={VIKING_TYPOGRAPHY.body.s}>plays</span>
+        </div>
       </div>
     </div>
   )
 }
 
-function SimpleLineChart({ data }: { data: Array<{ date: string; plays: number }> }) {
-  const maxPlays = Math.max(...data.map(d => d.plays))
+// ===== METRIC CARD =====
+interface MetricCardProps {
+  label: string
+  value?: number
+  valueStr?: string | null
+  unit?: string
+  trend?: TrendInfo
+}
+
+function MetricCard({ label, value, valueStr, unit, trend }: MetricCardProps) {
+  const displayValue = valueStr ?? (typeof value === 'number' ? value.toLocaleString() : '0')
+  const trendValue = trend?.value
+  const trendPositive = trendValue !== undefined && trendValue > 0
+  const trendNegative = trendValue !== undefined && trendValue < 0
+
+  return (
+    <div className="bg-viking-bg-secondary hover:bg-viking-bg-tertiary/50 rounded-lg px-4 py-4 min-h-[110px] transition-colors duration-200 cursor-default border border-viking-border-subtle/50">
+      <div className={cn(VIKING_TYPOGRAPHY.label.inline, "mb-3")}>{label}</div>
+      <div className="flex items-baseline gap-1.5 mb-1.5">
+        <span className={VIKING_TYPOGRAPHY.display.l}>{displayValue}</span>
+        {unit && <span className={VIKING_TYPOGRAPHY.data.s}>{unit}</span>}
+      </div>
+      {trendValue !== undefined && (
+        <div className="flex items-center gap-1.5 text-[11px]">
+          {trendPositive && <TrendingUp className="w-3 h-3 text-emerald-500" strokeWidth={2.5} />}
+          {trendNegative && <TrendingDown className="w-3 h-3 text-red-500" strokeWidth={2.5} />}
+          <span className={`font-semibold ${
+            trendPositive ? "text-emerald-500" : trendNegative ? "text-red-500" : "text-viking-text-tertiary"
+          }`}>
+            {trendPositive ? "+" : ""}{trendValue.toFixed(1)}%
+          </span>
+          <span className="text-viking-text-tertiary">from {trend.label}</span>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ===== AREA CHART =====
+function AreaChart({ data }: { data: Array<{ date: string; plays: number }> }) {
+  if (data.length === 0) return <div className="h-48 flex items-center justify-center text-viking-text-tertiary">No data</div>
+
+  const maxPlays = Math.max(...data.map(d => d.plays), 1)
 
   return (
     <div className="relative h-48">
-      <div className="flex items-end justify-between h-full gap-1">
-        {data.map((item, i) => (
-          <div key={i} className="flex-1 flex flex-col items-center gap-2">
-            <div className="w-full flex flex-col justify-end h-full">
-              <div
-                className={cn(
-                  "w-full rounded-t-sm bg-gradient-to-t from-viking-purple to-viking-purple-dark",
-                  VIKING_DESIGN.effects.transition.base,
-                  "hover:brightness-110 cursor-pointer"
-                )}
-                style={{ height: `${(item.plays / maxPlays) * 100}%` }}
-                title={`${item.date}: ${item.plays} plays`}
-              />
-            </div>
-            {i % 5 === 0 && (
-              <span className={VIKING_TYPOGRAPHY.body.s}>
-                {new Date(item.date).getDate()}
-              </span>
-            )}
-          </div>
-        ))}
-      </div>
+      <svg viewBox="0 0 800 200" className="w-full h-full">
+        <defs>
+          <linearGradient id="areaGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stopColor="rgb(99, 102, 241)" stopOpacity="0.3" />
+            <stop offset="100%" stopColor="rgb(99, 102, 241)" stopOpacity="0.05" />
+          </linearGradient>
+        </defs>
+        
+        {/* Area fill */}
+        <path
+          d={generateAreaPath(data, maxPlays, 800, 200)}
+          fill="url(#areaGradient)"
+        />
+        
+        {/* Line */}
+        <path
+          d={generateLinePath(data, maxPlays, 800, 200)}
+          fill="none"
+          stroke="rgb(99, 102, 241)"
+          strokeWidth="2"
+        />
+        
+        {/* Data points */}
+        {data.map((item, i) => {
+          const x = (i / (data.length - 1)) * 800
+          const y = 200 - (item.plays / maxPlays) * 180
+          return (
+            <circle
+              key={i}
+              cx={x}
+              cy={y}
+              r="4"
+              fill="rgb(99, 102, 241)"
+              className="hover:r-6 transition-all cursor-pointer"
+            >
+              <title>{item.date}: {item.plays} plays</title>
+            </circle>
+          )
+        })}
+      </svg>
     </div>
   )
 }
 
+function generateLinePath(data: Array<{ plays: number }>, max: number, width: number, height: number): string {
+  if (data.length === 0) return ''
+  const points = data.map((d, i) => {
+    const x = (i / (data.length - 1)) * width
+    const y = height - (d.plays / max) * (height * 0.9)
+    return `${x},${y}`
+  })
+  return `M ${points.join(' L ')}`
+}
+
+function generateAreaPath(data: Array<{ plays: number }>, max: number, width: number, height: number): string {
+  if (data.length === 0) return ''
+  const linePath = generateLinePath(data, max, width, height)
+  return `${linePath} L ${width},${height} L 0,${height} Z`
+}
+
+// ===== CLOCK HEATMAP =====
+function ClockHeatmap({ data }: { data: Array<{ hour: number; plays: number }> }) {
+  const maxPlays = Math.max(...data.map(d => d.plays), 1)
+  const radius = 80
+  const centerX = 100
+  const centerY = 100
+
+  return (
+    <div className="relative h-48 flex items-center justify-center">
+      <svg viewBox="0 0 200 200" className="w-full h-full">
+        {/* Clock circle segments */}
+        {data.map((item) => {
+          const angle = (item.hour * 15 - 90) * (Math.PI / 180)
+          const intensity = item.plays / maxPlays
+          const color = `rgba(99, 102, 241, ${0.2 + intensity * 0.8})`
+          
+          return (
+            <g key={item.hour}>
+              <path
+                d={describeArc(centerX, centerY, radius - 20, radius, (item.hour * 15) - 90, (item.hour * 15) - 90 + 14)}
+                fill={color}
+                className="hover:opacity-80 transition-opacity cursor-pointer"
+              >
+                <title>{item.hour}:00 - {item.plays} plays</title>
+              </path>
+            </g>
+          )
+        })}
+        
+        {/* Center label */}
+        <text x={centerX} y={centerY} textAnchor="middle" dominantBaseline="middle" className="fill-viking-text-primary text-xl font-bold">
+          24h
+        </text>
+      </svg>
+    </div>
+  )
+}
+
+function describeArc(x: number, y: number, innerRadius: number, outerRadius: number, startAngle: number, endAngle: number): string {
+  const start1 = polarToCartesian(x, y, outerRadius, endAngle)
+  const end1 = polarToCartesian(x, y, outerRadius, startAngle)
+  const start2 = polarToCartesian(x, y, innerRadius, endAngle)
+  const end2 = polarToCartesian(x, y, innerRadius, startAngle)
+  const largeArcFlag = endAngle - startAngle <= 180 ? '0' : '1'
+  return [
+    'M', start1.x, start1.y,
+    'A', outerRadius, outerRadius, 0, largeArcFlag, 0, end1.x, end1.y,
+    'L', end2.x, end2.y,
+    'A', innerRadius, innerRadius, 0, largeArcFlag, 1, start2.x, start2.y,
+    'Z'
+  ].join(' ')
+}
+
+function polarToCartesian(centerX: number, centerY: number, radius: number, angleInDegrees: number) {
+  const angleInRadians = (angleInDegrees) * Math.PI / 180.0
+  return {
+    x: centerX + (radius * Math.cos(angleInRadians)),
+    y: centerY + (radius * Math.sin(angleInRadians))
+  }
+}
+
+// ===== SKELETON =====
 function OverviewSkeleton() {
   return (
-    <div className="space-y-6 max-w-7xl mx-auto">
+    <div className="space-y-4 max-w-7xl mx-auto">
       <div className={cn("h-8 w-48 rounded-lg", VIKING_DESIGN.colors.card.tertiary, VIKING_DESIGN.effects.loading.pulse)} />
-
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        {Array.from({ length: 4 }).map((_, i) => (
-          <div key={i} className={cn(VIKING_DESIGN.components.card, "p-6")}>
-            <div className={cn("h-20 rounded-lg", VIKING_DESIGN.colors.card.tertiary, VIKING_DESIGN.effects.loading.pulse)} />
-          </div>
-        ))}
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {Array.from({ length: 3 }).map((_, i) => (
-          <div key={i} className={cn(VIKING_DESIGN.components.card, "p-6")}>
-            <div className={cn("h-32 rounded-lg", VIKING_DESIGN.colors.card.tertiary, VIKING_DESIGN.effects.loading.pulse)} />
-          </div>
-        ))}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-3">
+        <div className={cn("lg:col-span-6 h-80 rounded-lg", VIKING_DESIGN.colors.card.tertiary, VIKING_DESIGN.effects.loading.pulse)} />
+        <div className="lg:col-span-6 grid grid-cols-2 gap-3">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className={cn("h-40 rounded-lg", VIKING_DESIGN.colors.card.tertiary, VIKING_DESIGN.effects.loading.pulse)} />
+          ))}
+        </div>
       </div>
     </div>
   )
