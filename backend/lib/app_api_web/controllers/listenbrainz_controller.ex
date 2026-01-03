@@ -41,6 +41,8 @@ defmodule AppApiWeb.ListenBrainzController do
             process_live_scrobbles(conn, payload, user_name)
 
           "playing_now" ->
+            # Update cache when playing_now is received
+            update_player_cache_from_now_playing(user_name, payload)
             json(conn, %{status: "ok", message: "playing_now received"})
 
           "import" ->
@@ -335,8 +337,14 @@ defmodule AppApiWeb.ListenBrainzController do
   # ============================================================================
 
   defp process_live_scrobbles(conn, payload, user_name) when is_list(payload) do
-    # STEP 1: Get player info BEFORE inserting listens
-    player_info = get_player_info_sync(user_name)
+    # Extract first track info for player matching
+    first_track = List.first(payload)
+    track_metadata = first_track && (first_track["track_metadata"] || %{})
+    scrobble_track = track_metadata && track_metadata["track_name"]
+    scrobble_artist = track_metadata && track_metadata["artist_name"]
+    
+    # STEP 1: Get player info with track validation
+    player_info = get_player_info_validated(user_name, scrobble_track, scrobble_artist)
     
     Logger.info("🎮 Player info for #{user_name}: #{inspect(player_info)}")
     
@@ -413,31 +421,68 @@ defmodule AppApiWeb.ListenBrainzController do
     end
   end
 
-  # Get player info synchronously (with cache fallback)
-  defp get_player_info_sync(user_name) do
-    # Try to get current player from Navidrome getNowPlaying
-    case fetch_player_from_navidrome(user_name) do
+  # Update cache when playing_now is received (best time to capture player info)
+  defp update_player_cache_from_now_playing(user_name, payload) when is_list(payload) do
+    first_track = List.first(payload)
+    
+    if first_track do
+      track_metadata = first_track["track_metadata"] || %{}
+      track_name = track_metadata["track_name"]
+      artist_name = track_metadata["artist_name"]
+      
+      # Try to get player info from getNowPlaying
+      case fetch_player_from_navidrome_with_track(user_name, track_name, artist_name) do
+        {:ok, player_info} ->
+          PlayerSessionCache.put_player(user_name, player_info)
+          Logger.info("🎮 Updated cache from playing_now: #{player_info.player}")
+          :ok
+        
+        _ ->
+          :ok
+      end
+    end
+  end
+  
+  defp update_player_cache_from_now_playing(_, _), do: :ok
+
+  # Get player info with track validation (prevents delayed scrobble issues)
+  defp get_player_info_validated(user_name, scrobble_track, scrobble_artist) do
+    case fetch_player_from_navidrome_with_track(user_name, scrobble_track, scrobble_artist) do
       {:ok, player_info} ->
-        # Cache for future requests
+        # Fresh data, update cache
         PlayerSessionCache.put_player(user_name, player_info)
         player_info
       
+      {:error, :track_mismatch} ->
+        # Delayed scrobble: use cached player (don't query getNowPlaying)
+        Logger.debug("⏱️  Delayed scrobble detected, using cached player")
+        
+        case PlayerSessionCache.get_player(user_name) do
+          {:ok, cached_info} ->
+            Logger.info("🎮 Found cached player: #{cached_info.player}")
+            cached_info
+          
+          {:error, _} ->
+            Logger.debug("⚠️ No cached player available")
+            %{player: "Unknown Client", client: nil, platform: nil}
+        end
+      
       {:error, _reason} ->
-        # Fallback to cached session
+        # Other error: fallback to cache
         case PlayerSessionCache.get_player(user_name) do
           {:ok, cached_info} ->
             Logger.debug("🎮 Using cached player: #{cached_info.player}")
             cached_info
           
           {:error, _} ->
-            Logger.debug("⚠️ No player info available, using Unknown Client")
+            Logger.debug("⚠️ No player info available")
             %{player: "Unknown Client", client: nil, platform: nil}
         end
     end
   end
 
-  # Fetch player info from Navidrome getNowPlaying API
-  defp fetch_player_from_navidrome(user_name) do
+  # Fetch player info from Navidrome and validate track match
+  defp fetch_player_from_navidrome_with_track(user_name, expected_track, expected_artist) do
     # Create a dummy listen just to get navidrome config
     dummy_listen = %Listen{user_name: user_name, additional_info: %{}}
     
@@ -448,11 +493,24 @@ defmodule AppApiWeb.ListenBrainzController do
           navidrome_config.username,
           navidrome_config.password
         ) do
-          {:ok, player_info} ->
-            # Parse player name from Navidrome format
-            parsed = AppApi.NavidromeIntegration.parse_player_name(player_info.player_name)
-            Logger.info("🎮 Found active player: #{parsed.player}")
-            {:ok, parsed}
+          {:ok, now_playing_data} ->
+            # Validate: does getNowPlaying track match the scrobble?
+            now_playing_track = now_playing_data[:title] || now_playing_data[:track]
+            now_playing_artist = now_playing_data[:artist]
+            
+            track_matches = normalize_string(now_playing_track) == normalize_string(expected_track)
+            artist_matches = normalize_string(now_playing_artist) == normalize_string(expected_artist)
+            
+            if track_matches and artist_matches do
+              # Match! Use this player info
+              parsed = AppApi.NavidromeIntegration.parse_player_name(now_playing_data.player_name)
+              Logger.info("🎮 Found active player: #{parsed.player}")
+              {:ok, parsed}
+            else
+              # Mismatch: delayed scrobble
+              Logger.debug("⏱️  Track mismatch (delayed scrobble). Expected: #{expected_track}, Got: #{now_playing_track}")
+              {:error, :track_mismatch}
+            end
           
           error ->
             Logger.debug("⚠️ getNowPlaying failed: #{inspect(error)}")
@@ -464,6 +522,11 @@ defmodule AppApiWeb.ListenBrainzController do
         error
     end
   end
+  
+  # Normalize strings for comparison (case-insensitive, trim whitespace)
+  defp normalize_string(nil), do: ""
+  defp normalize_string(str) when is_binary(str), do: String.downcase(String.trim(str))
+  defp normalize_string(_), do: ""
 
   # Helper to conditionally add keys to map
   defp maybe_put(map, _key, nil), do: map
