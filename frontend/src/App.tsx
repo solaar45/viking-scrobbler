@@ -1,10 +1,6 @@
 import { SidebarProvider, SidebarInset, SidebarTrigger } from '@/components/ui/sidebar'
-import { AppSidebar } from '@/components/layout'
-import { OverviewPage } from '@/components/features/overview'
-import { RecentListensPage } from '@/components/features/recent-listens'
-import { StatisticsPage } from '@/components/features/statistics'
-import { SettingsPage } from '@/components/features/settings'
 import { Separator } from '@/components/ui/separator'
+import { AppSidebar, OverviewPage, RecentListensPage, StatisticsPage, SettingsPage } from '@/components'
 import { useEffect, useState } from 'react'
 
 export default function App() {
