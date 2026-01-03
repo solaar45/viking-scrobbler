@@ -4,7 +4,8 @@ import { useEffect, useState, useMemo, useRef } from "react"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { Activity, RefreshCw, ChevronLeft, ChevronRight, TrendingUp, TrendingDown } from "lucide-react"
 import { DashboardSkeleton } from "./DashboardSkeleton"
-import { ListenRow } from './ListenRow'
+import { StatsCover } from './StatsCover'
+import { getCoverUrl } from '@/lib/cover-utils'
 
 // --- TYPES ---
 export interface PeriodStats {
@@ -613,32 +614,45 @@ export default function DashboardContent() {
                       const bitrate = item.additional_info?.originalBitRate
                       const player = item.additional_info?.media_player
                       const formatColor = getFormatBadgeColor(format)
+                      const coverUrl = getCoverUrl({ additional_info: item.additional_info }, 80)
 
                       return (
                         <tr key={item.id} className="table-row-dense">
+                          {/* Cover */}
                           <td className="table-cell-dense pl-6 w-[50px]">
-                            <ListenRow
-                              listen={item}
-                              formatDate={formatDate}
-                              formatTime={formatTime}
-                              formatDuration={formatDuration}
+                            <StatsCover 
+                              coverUrl={coverUrl}
+                              name={item.artist}
+                              size="sm"
                             />
                           </td>
+                          
+                          {/* Track */}
                           <td className="table-cell-dense table-cell-primary w-auto min-w-[200px] truncate">
                             {item.track}
                           </td>
+                          
+                          {/* Artist */}
                           <td className="table-cell-dense table-cell-secondary w-auto min-w-[120px] truncate">
                             {item.artist}
                           </td>
+                          
+                          {/* Album */}
                           <td className="table-cell-dense table-cell-secondary w-auto min-w-[120px] truncate">
                             {item.album}
                           </td>
+                          
+                          {/* Year */}
                           <td className="table-cell-dense table-cell-secondary w-1 whitespace-nowrap">
                             {item.releaseYear ?? "—"}
                           </td>
+                          
+                          {/* Genre */}
                           <td className="table-cell-dense table-cell-secondary w-32 truncate font-medium text-emerald-400">
                             {item.genres}
                           </td>
+                          
+                          {/* Format + Bitrate */}
                           <td className="table-cell-dense table-cell-secondary w-1 whitespace-nowrap text-center">
                             {format ? (
                               <div className="flex items-center justify-center gap-1.5">
@@ -657,15 +671,23 @@ export default function DashboardContent() {
                               <span className="text-viking-text-tertiary text-xs">—</span>
                             )}
                           </td>
+                          
+                          {/* Player */}
                           <td className="table-cell-dense table-cell-secondary w-1 whitespace-nowrap">
                             {player || "—"}
                           </td>
+                          
+                          {/* Date */}
                           <td className="table-cell-dense table-cell-secondary w-1 whitespace-nowrap text-right">
                             {formatDate(item.playedAt)}
                           </td>
+                          
+                          {/* Time */}
                           <td className="table-cell-dense table-cell-secondary w-1 whitespace-nowrap text-right">
                             {formatTime(item.playedAt)}
                           </td>
+                          
+                          {/* Duration */}
                           <td className="table-cell-dense table-cell-secondary w-1 whitespace-nowrap text-right pr-6">
                             {formatDuration(item.duration)}
                           </td>
@@ -827,5 +849,4 @@ function formatDuration(sec: number) {
   if (!sec) return "0:00"
   const m = Math.floor(sec / 60)
   const s = sec % 60
-  return `${m}:${s.toString().padStart(2, "0")}`
-}
+  return `${m}:${s.toString().padStart(2, "0")}`}
