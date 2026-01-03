@@ -79,7 +79,6 @@ export function RecentListensPage() {
   const [username, setUsername] = useState<string>("viking_user")
   const [currentPage, setCurrentPage] = useState(1)
   const [pageSize, setPageSize] = useState(25)
-  const [isConnected, setIsConnected] = useState(false)
   const socketRef = useRef<WebSocket | null>(null)
 
   // Initial Data Fetch + Refetch bei Period-Wechsel
@@ -106,7 +105,6 @@ export function RecentListensPage() {
 
     socket.onopen = () => {
       console.log("✅ WebSocket connected")
-      setIsConnected(true)
 
       const joinMessage = JSON.stringify({
         topic: `scrobbles:${username}`,
@@ -130,12 +128,10 @@ export function RecentListensPage() {
 
     socket.onerror = (error) => {
       console.error("❌ WebSocket error:", error)
-      setIsConnected(false)
     }
 
     socket.onclose = () => {
       console.log("🔌 WebSocket disconnected")
-      setIsConnected(false)
     }
 
     socketRef.current = socket
@@ -327,7 +323,6 @@ export function RecentListensPage() {
                             <td className="table-cell-dense table-cell-secondary w-[140px] truncate">
                               {item.album}
                             </td>
-                            {/* NEW: Use data.m for Year column */}
                             <td className={`table-cell-dense w-[55px] ${VIKING_TYPOGRAPHY.data.m}`}>
                               {item.releaseYear ?? "—"}
                             </td>
@@ -356,7 +351,6 @@ export function RecentListensPage() {
                                 <span className="text-viking-text-tertiary text-xs">—</span>
                               )}
                             </td>
-                            {/* NEW: Use data.m for Duration column */}
                             <td className={`table-cell-dense w-[70px] text-right border-r border-viking-border-emphasis/50 ${VIKING_TYPOGRAPHY.data.m}`}>
                               {formatDuration(item.duration)}
                             </td>
@@ -365,11 +359,9 @@ export function RecentListensPage() {
                             <td className="table-cell-dense table-cell-secondary w-[100px] truncate">
                               {player || "—"}
                             </td>
-                            {/* NEW: Use data.m for Date column */}
                             <td className={`table-cell-dense w-[90px] text-right ${VIKING_TYPOGRAPHY.data.m}`}>
                               {formatDate(item.playedAt)}
                             </td>
-                            {/* NEW: Use data.m for Time column */}
                             <td className={`table-cell-dense w-[60px] text-right pr-6 ${VIKING_TYPOGRAPHY.data.m}`}>
                               {formatTime(item.playedAt)}
                             </td>
