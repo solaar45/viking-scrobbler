@@ -560,11 +560,11 @@ defmodule AppApi.NavidromeIntegration do
         |> maybe_put(navidrome_data, "coverArt", navidrome_data["coverArt"])
         |> Map.put("source", "navidrome_id3")
 
-      # Also store bitRate and format in additional_info for API access
-      extra_additional_info =
+      # Merge bitRate and format into additional_info (properly merge JSONB)
+      updated_additional_info =
         current_additional_info
-        |> maybe_put(navidrome_data, "originalBitRate", navidrome_data["bitrate"])
-        |> maybe_put(navidrome_data, "originalFormat", navidrome_data["format"])
+        |> Map.put("originalBitRate", navidrome_data["bitrate"])
+        |> Map.put("originalFormat", navidrome_data["format"])
 
       new_metadata = Map.merge(current_metadata, extra_metadata)
 
@@ -572,7 +572,7 @@ defmodule AppApi.NavidromeIntegration do
         listen
         |> Ecto.Changeset.change(%{
           metadata: Jason.encode!(new_metadata),
-          additional_info: extra_additional_info,
+          additional_info: updated_additional_info,
           duration_ms: listen.duration_ms || navidrome_data["duration_ms"],
           tracknumber: listen.tracknumber || navidrome_data["tracknumber"],
           discnumber: listen.discnumber || navidrome_data["discnumber"]
