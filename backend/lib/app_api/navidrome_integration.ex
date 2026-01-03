@@ -33,7 +33,7 @@ defmodule AppApi.NavidromeIntegration do
 
   @doc """
   Get currently playing track and player information from Navidrome.
-  Returns {:ok, %{player: "Feishin [feishin/Windows]", ...}} or {:error, reason}
+  Returns {:ok, %{player: \"Feishin [feishin/Windows]\", ...}} or {:error, reason}
   """
   def get_now_playing(navidrome_url, username, password) do
     params = %{
@@ -151,7 +151,7 @@ defmodule AppApi.NavidromeIntegration do
 
   ## Examples
 
-      iex> AppApi.NavidromeIntegration.enrich_recent_listens("viking_user", 50)
+      iex> AppApi.NavidromeIntegration.enrich_recent_listens(\"viking_user\", 50)
       42
   """
   def enrich_recent_listens(user_name, count \\ 50)
@@ -519,6 +519,7 @@ defmodule AppApi.NavidromeIntegration do
       "tracknumber" => song["track"],
       "discnumber" => song["discNumber"],
       "bitrate" => song["bitRate"],
+      "format" => song["suffix"],
       "path" => song["path"],
       "navidrome_id" => song["id"],
       "coverArt" => song["coverArt"]
@@ -542,9 +543,10 @@ defmodule AppApi.NavidromeIntegration do
 
     if genres && length(genres) > 0 do
       current_metadata = parse_metadata(listen.metadata)
+      current_additional_info = listen.additional_info || %{}
 
       # Merge selected Navidrome fields into metadata (only when present)
-      extra =
+      extra_metadata =
         %{}
         |> maybe_put(navidrome_data, "genres", genres)
         |> maybe_put(navidrome_data, "year", navidrome_data["year"])
@@ -558,12 +560,19 @@ defmodule AppApi.NavidromeIntegration do
         |> maybe_put(navidrome_data, "coverArt", navidrome_data["coverArt"])
         |> Map.put("source", "navidrome_id3")
 
-      new_metadata = Map.merge(current_metadata, extra)
+      # Also store bitRate and format in additional_info for API access
+      extra_additional_info =
+        current_additional_info
+        |> maybe_put(navidrome_data, "originalBitRate", navidrome_data["bitrate"])
+        |> maybe_put(navidrome_data, "originalFormat", navidrome_data["format"])
+
+      new_metadata = Map.merge(current_metadata, extra_metadata)
 
       changeset =
         listen
         |> Ecto.Changeset.change(%{
           metadata: Jason.encode!(new_metadata),
+          additional_info: extra_additional_info,
           duration_ms: listen.duration_ms || navidrome_data["duration_ms"],
           tracknumber: listen.tracknumber || navidrome_data["tracknumber"],
           discnumber: listen.discnumber || navidrome_data["discnumber"]
