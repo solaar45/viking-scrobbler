@@ -200,18 +200,21 @@ export default function RecentListens({
               </button>
             </div>
           ) : (
-            <table className="table-dense">
+            <table className="table-dense table-auto w-full">
               <thead className="sticky top-0 z-10 backdrop-blur-sm">
                 <tr>
-                  <th className="table-head-dense pl-6 text-left w-[20%]">Track</th>
-                  <th className="table-head-dense text-left w-[13%]">Artist</th>
-                  <th className="table-head-dense text-left w-[13%]">Album</th>
-                  <th className="table-head-dense text-left w-[7%]">Year</th>
-                  <th className="table-head-dense text-left w-[11%]">Genre</th>
-                  <th className="table-head-dense text-center w-[10%]">Format</th>
-                  <th className="table-head-dense text-right w-[9%]">Date</th>
-                  <th className="table-head-dense text-right w-[8%]">Time</th>
-                  <th className="table-head-dense text-right pr-6 w-[7%]">Duration</th>
+                  {/* Flexible columns - get most space */}
+                  <th className="table-head-dense pl-6 text-left w-auto min-w-[200px]">Track</th>
+                  <th className="table-head-dense text-left w-auto min-w-[120px]">Artist</th>
+                  <th className="table-head-dense text-left w-auto min-w-[120px]">Album</th>
+                  
+                  {/* Content-fit columns - minimal width */}
+                  <th className="table-head-dense text-left w-1 whitespace-nowrap">Year</th>
+                  <th className="table-head-dense text-left w-32">Genre</th>
+                  <th className="table-head-dense text-center w-1 whitespace-nowrap">Format</th>
+                  <th className="table-head-dense text-right w-1 whitespace-nowrap">Date</th>
+                  <th className="table-head-dense text-right w-1 whitespace-nowrap">Time</th>
+                  <th className="table-head-dense text-right pr-6 w-1 whitespace-nowrap">Duration</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-viking-border-subtle">
@@ -222,22 +225,25 @@ export default function RecentListens({
                   
                   return (
                     <tr key={item.id} className="table-row-dense">
-                      <td className="table-cell-dense table-cell-primary pl-6 truncate max-w-[200px]">
+                      {/* Flexible columns */}
+                      <td className="table-cell-dense table-cell-primary pl-6 w-auto min-w-[200px] truncate">
                         {item.track}
                       </td>
-                      <td className="table-cell-dense table-cell-secondary truncate max-w-[130px]">
+                      <td className="table-cell-dense table-cell-secondary w-auto min-w-[120px] truncate">
                         {item.artist}
                       </td>
-                      <td className="table-cell-dense table-cell-secondary truncate max-w-[130px]">
+                      <td className="table-cell-dense table-cell-secondary w-auto min-w-[120px] truncate">
                         {item.album}
                       </td>
-                      <td className="table-cell-dense table-cell-secondary truncate max-w-[70px]">
+                      
+                      {/* Content-fit columns */}
+                      <td className="table-cell-dense table-cell-secondary w-1 whitespace-nowrap">
                         {item.releaseYear ?? "—"}
                       </td>
-                      <td className="table-cell-dense table-cell-secondary truncate max-w-[120px] font-medium text-emerald-400">
+                      <td className="table-cell-dense table-cell-secondary w-32 truncate font-medium text-emerald-400">
                         {item.genres}
                       </td>
-                      <td className="table-cell-dense table-cell-secondary text-center">
+                      <td className="table-cell-dense table-cell-secondary w-1 whitespace-nowrap text-center">
                         {format ? (
                           <div className="flex items-center justify-center gap-1.5">
                             <span
@@ -255,13 +261,13 @@ export default function RecentListens({
                           <span className="text-viking-text-tertiary text-xs">—</span>
                         )}
                       </td>
-                      <td className="table-cell-dense table-cell-secondary text-right truncate max-w-[100px]">
+                      <td className="table-cell-dense table-cell-secondary w-1 whitespace-nowrap text-right">
                         {formatDate(item.playedAt)}
                       </td>
-                      <td className="table-cell-dense table-cell-secondary text-right truncate max-w-[90px]">
+                      <td className="table-cell-dense table-cell-secondary w-1 whitespace-nowrap text-right">
                         {formatTime(item.playedAt)}
                       </td>
-                      <td className="table-cell-dense table-cell-secondary text-right pr-6 truncate max-w-[80px]">
+                      <td className="table-cell-dense table-cell-secondary w-1 whitespace-nowrap text-right pr-6">
                         {formatDuration(item.duration)}
                       </td>
                     </tr>
