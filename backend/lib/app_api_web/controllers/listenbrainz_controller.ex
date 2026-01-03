@@ -419,9 +419,11 @@ defmodule AppApiWeb.ListenBrainzController do
     Task.start(fn ->
       case AppApi.NavidromeIntegration.fetch_player_info_for_listen(listen) do
         {:ok, player_info} ->
-          # Update listen with accurate player info
-          current_additional_info = listen.additional_info || %{}
+          # Reload listen from DB to get latest state (including Navidrome enrichment)
+          fresh_listen = Repo.get!(Listen, listen.id)
+          current_additional_info = fresh_listen.additional_info || %{}
           
+          # Merge player info with existing additional_info (preserves originalBitRate, etc.)
           updated_additional_info =
             current_additional_info
             |> Map.put("media_player", player_info.player)
@@ -429,7 +431,7 @@ defmodule AppApiWeb.ListenBrainzController do
             |> maybe_put("player_platform", player_info.platform)
           
           changeset =
-            listen
+            fresh_listen
             |> Ecto.Changeset.change(%{
               additional_info: updated_additional_info
             })
