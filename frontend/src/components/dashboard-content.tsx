@@ -601,6 +601,7 @@ export default function DashboardContent() {
                       <th className="table-head-dense text-left w-auto min-w-[120px]">Album</th>
                       <th className="table-head-dense text-left w-1 whitespace-nowrap">Year</th>
                       <th className="table-head-dense text-left w-32">Genre</th>
+                      <th className="table-head-dense text-right w-1 whitespace-nowrap">Bitrate</th>
                       <th className="table-head-dense text-center w-1 whitespace-nowrap">Format</th>
                       <th className="table-head-dense text-left w-1 whitespace-nowrap">Player</th>
                       <th className="table-head-dense text-right w-1 whitespace-nowrap">Date</th>
@@ -652,21 +653,25 @@ export default function DashboardContent() {
                             {item.genres}
                           </td>
                           
-                          {/* Format + Bitrate */}
+                          {/* Bitrate */}
+                          <td className="table-cell-dense table-cell-secondary w-1 whitespace-nowrap text-right">
+                            {bitrate ? (
+                              <span className="text-xs font-semibold text-viking-text-tertiary">
+                                {bitrate} kbps
+                              </span>
+                            ) : (
+                              <span className="text-viking-text-tertiary text-xs">—</span>
+                            )}
+                          </td>
+                          
+                          {/* Format */}
                           <td className="table-cell-dense table-cell-secondary w-1 whitespace-nowrap text-center">
                             {format ? (
-                              <div className="flex items-center justify-center gap-1.5">
-                                <span
-                                  className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold text-white uppercase tracking-wider ${formatColor}`}
-                                >
-                                  {format}
-                                </span>
-                                {bitrate && (
-                                  <span className="text-[10px] font-semibold text-viking-text-tertiary">
-                                    {bitrate}k
-                                  </span>
-                                )}
-                              </div>
+                              <span
+                                className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold text-white uppercase tracking-wider ${formatColor}`}
+                              >
+                                {format}
+                              </span>
                             ) : (
                               <span className="text-viking-text-tertiary text-xs">—</span>
                             )}
