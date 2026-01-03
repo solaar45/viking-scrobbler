@@ -4,9 +4,9 @@
  */
 
 export const VIKING_DESIGN = {
-  // ═══════════════════════════════════════════════════════════
+  // ═══════════════════════════════════════════════════════════════
   // SPACING
-  // ═══════════════════════════════════════════════════════════
+  // ═══════════════════════════════════════════════════════════════
   spacing: {
     // Card/Container padding
     cardPadding: 'p-6',
@@ -30,9 +30,9 @@ export const VIKING_DESIGN = {
     },
   },
 
-  // ═══════════════════════════════════════════════════════════
+  // ═══════════════════════════════════════════════════════════════
   // COLORS
-  // ═══════════════════════════════════════════════════════════
+  // ═══════════════════════════════════════════════════════════════
   colors: {
     // Card/Container backgrounds
     card: {
@@ -82,9 +82,9 @@ export const VIKING_DESIGN = {
     },
   },
 
-  // ═══════════════════════════════════════════════════════════
+  // ═══════════════════════════════════════════════════════════════
   // COMPONENTS
-  // ═══════════════════════════════════════════════════════════
+  // ═══════════════════════════════════════════════════════════════
   components: {
     // Card wrapper
     card: 'card-dense',
@@ -147,9 +147,9 @@ export const VIKING_DESIGN = {
     code: 'bg-viking-bg-secondary px-4 py-3 rounded-lg font-mono text-sm break-all select-all text-viking-text-primary border border-viking-border-default',
   },
 
-  // ═══════════════════════════════════════════════════════════
-  // TYPOGRAPHY
-  // ═══════════════════════════════════════════════════════════
+  // ═══════════════════════════════════════════════════════════════
+  // TYPOGRAPHY (Legacy - Use VIKING_TYPOGRAPHY below)
+  // ═══════════════════════════════════════════════════════════════
   typography: {
     // Page/Card titles
     title: {
@@ -174,9 +174,9 @@ export const VIKING_DESIGN = {
     code: 'font-mono text-sm',
   },
 
-  // ═══════════════════════════════════════════════════════════
+  // ═══════════════════════════════════════════════════════════════
   // EFFECTS
-  // ═══════════════════════════════════════════════════════════
+  // ═══════════════════════════════════════════════════════════════
   effects: {
     // Focus rings
     focus: 'focus:outline-none focus:ring-2 focus:ring-viking-purple/50 focus:border-viking-purple',
@@ -203,9 +203,9 @@ export const VIKING_DESIGN = {
     },
   },
 
-  // ═══════════════════════════════════════════════════════════
+  // ═══════════════════════════════════════════════════════════════
   // LAYOUTS
-  // ═══════════════════════════════════════════════════════════
+  // ═══════════════════════════════════════════════════════════════
   layouts: {
     // Header structure (consistent across all settings)
     header: {
@@ -229,9 +229,79 @@ export const VIKING_DESIGN = {
   },
 }
 
-// ═══════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════
+// VIKING TYPOGRAPHY SYSTEM 2.0
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * Complete typography system based on modern UI/UX best practices
+ * Base font size: 16px (WCAG compliant)
+ * Type scale: Semantic labels for consistent hierarchy
+ */
+export const VIKING_TYPOGRAPHY = {
+  // ╔═════════════════════════════════╗
+  // ║ DISPLAY - Hero/Stat Numbers   ║
+  // ╚═════════════════════════════════╝
+  display: {
+    xl: 'font-mono text-5xl font-bold leading-none tracking-tight text-viking-text-primary',      // 48px - Dashboard Hero
+    l:  'font-mono text-4xl font-semibold leading-none tracking-tight text-viking-text-primary',  // 36px - Metric Cards
+    m:  'font-mono text-3xl font-semibold leading-tight text-viking-text-primary',                // 30px - Large Numbers
+  },
+  
+  // ╔═════════════════════════════════╗
+  // ║ HEADINGS - Structure         ║
+  // ╚═════════════════════════════════╝
+  heading: {
+    xl: 'text-3xl font-bold leading-tight text-viking-text-primary',     // 30px - Page Titles
+    l:  'text-2xl font-semibold leading-tight text-viking-text-primary', // 24px - Section Titles
+    m:  'text-xl font-semibold leading-normal text-viking-text-primary', // 20px - Card Titles
+    s:  'text-lg font-medium leading-normal text-viking-text-primary',   // 17px - Subsections
+  },
+  
+  // ╔═════════════════════════════════╗
+  // ║ BODY - Content Text          ║
+  // ╚═════════════════════════════════╝
+  body: {
+    l: 'text-base leading-relaxed text-viking-text-primary',     // 16px - Default Body (WCAG Standard)
+    m: 'text-sm leading-relaxed text-viking-text-secondary',     // 15px - Secondary Text
+    s: 'text-xs leading-normal text-viking-text-tertiary',       // 13px - Tertiary/Meta
+  },
+  
+  // ╔═════════════════════════════════╗
+  // ║ DATA - Tables & Numbers      ║
+  // ║ ALWAYS use monospace font!   ║
+  // ╚═════════════════════════════════╝
+  data: {
+    l: 'font-mono text-base font-medium text-viking-text-primary',      // 16px - Important Data
+    m: 'font-mono text-sm font-medium text-viking-text-secondary',      // 15px - Table Cells (Year, Duration, Bitrate, Date, Time)
+    s: 'font-mono text-xs font-semibold text-viking-text-tertiary',     // 13px - Dense Data/Units
+  },
+  
+  // ╔═════════════════════════════════╗
+  // ║ LABELS - UI Elements         ║
+  // ╚═════════════════════════════════╝
+  label: {
+    default: 'text-sm font-medium text-viking-text-primary',                                      // 15px - Form Labels
+    inline:  'text-xs font-semibold uppercase tracking-wider text-viking-text-tertiary',          // 13px - Inline Tags/Filters
+    badge:   'text-[11px] font-bold uppercase tracking-widest',                                   // 11px - Badges (Format, Status)
+  },
+  
+  // ╔═════════════════════════════════╗
+  // ║ INTERACTIVE - Buttons/Links   ║
+  // ╚═════════════════════════════════╝
+  interactive: {
+    button: {
+      primary:   'text-sm font-semibold uppercase tracking-wide',                               // 15px - CTA Buttons
+      secondary: 'text-sm font-medium',                                                          // 15px - Secondary Buttons
+      ghost:     'text-sm font-medium text-viking-text-secondary hover:text-viking-purple',     // 15px - Ghost Buttons
+    },
+    link: 'text-sm font-medium text-viking-purple hover:text-viking-purple-dark underline-offset-2 transition-colors', // 15px - Links
+  },
+}
+
+// ═══════════════════════════════════════════════════════════════
 // UTILITY FUNCTIONS
-// ═══════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════
 
 /**
  * Combines multiple class strings safely
