@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { BarChart3, Music, Users, Disc, Clock, TrendingUp, TrendingDown, Timer } from 'lucide-react'
+import { BarChart3, Music, Clock, TrendingUp, TrendingDown, Timer } from 'lucide-react'
 import { VIKING_DESIGN, VIKING_TYPOGRAPHY, cn } from '@/lib/design-tokens'
 import { getCoverUrl } from '@/lib/cover-utils'
 
@@ -388,6 +388,7 @@ interface MetricCardProps {
 function MetricCard({ label, value, valueStr, unit, trend }: MetricCardProps) {
   const displayValue = valueStr ?? (typeof value === 'number' ? value.toLocaleString() : '0')
   const trendValue = trend?.value
+  const trendLabel = trend?.label ?? 'last period'
   const trendPositive = trendValue !== undefined && trendValue > 0
   const trendNegative = trendValue !== undefined && trendValue < 0
 
@@ -407,7 +408,7 @@ function MetricCard({ label, value, valueStr, unit, trend }: MetricCardProps) {
           }`}>
             {trendPositive ? "+" : ""}{trendValue.toFixed(1)}%
           </span>
-          <span className="text-viking-text-tertiary">from {trend.label}</span>
+          <span className="text-viking-text-tertiary">from {trendLabel}</span>
         </div>
       )}
     </div>
@@ -494,7 +495,6 @@ function ClockHeatmap({ data }: { data: Array<{ hour: number; plays: number }> }
       <svg viewBox="0 0 200 200" className="w-full h-full">
         {/* Clock circle segments */}
         {data.map((item) => {
-          const angle = (item.hour * 15 - 90) * (Math.PI / 180)
           const intensity = item.plays / maxPlays
           const color = `rgba(99, 102, 241, ${0.2 + intensity * 0.8})`
           
