@@ -5,7 +5,6 @@ export * from './layout'
 export * from './features'
 
 // Shared Components
-export { default as DashboardContent } from './DashboardContent'
 export { StatsTable } from './StatsTable'
 export { StatsCover } from './StatsCover'
 export { DateTimeSettings } from './DateTimeSettings'
