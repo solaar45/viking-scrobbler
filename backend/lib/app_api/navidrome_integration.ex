@@ -32,6 +32,120 @@ defmodule AppApi.NavidromeIntegration do
   end
 
   @doc """
+  Get currently playing track and player information from Navidrome.
+  Returns {:ok, %{player: "Feishin [feishin/Windows]", ...}} or {:error, reason}
+  """
+  def get_now_playing(navidrome_url, username, password) do
+    params = %{
+      "u" => username,
+      "p" => password,
+      "v" => "1.16.1",
+      "c" => "VikingScrobbler",
+      "f" => "json"
+    }
+
+    query_string = URI.encode_query(params)
+    url = "#{navidrome_url}/rest/getNowPlaying?#{query_string}"
+
+    case HTTPoison.get(url, [], recv_timeout: 3000) do
+      {:ok, %{status_code: 200, body: body}} ->
+        parse_now_playing_response(body, username)
+
+      {:ok, %{status_code: code}} ->
+        {:error, "HTTP #{code}"}
+
+      {:error, reason} ->
+        {:error, "Request failed: #{inspect(reason)}"}
+    end
+  end
+
+  defp parse_now_playing_response(body, target_username) do
+    case Jason.decode(body) do
+      {:ok, %{"subsonic-response" => %{"nowPlaying" => %{"entry" => entries}}}}
+      when is_list(entries) ->
+        # Find entry for target user
+        user_entry =
+          Enum.find(entries, fn entry ->
+            entry["username"] == target_username
+          end)
+
+        case user_entry do
+          nil ->
+            {:error, :no_active_session}
+
+          entry ->
+            player_info = %{
+              player_name: entry["playerName"] || "Unknown Player",
+              username: entry["username"],
+              minutes_ago: entry["minutesAgo"],
+              player_id: entry["playerId"],
+              artist: entry["artist"],
+              title: entry["title"]
+            }
+
+            {:ok, player_info}
+        end
+
+      {:ok, %{"subsonic-response" => %{"nowPlaying" => %{}}}} ->
+        {:error, :no_active_playback}
+
+      {:ok, _other} ->
+        {:error, :invalid_response}
+
+      {:error, reason} ->
+        {:error, {:json_decode, reason}}
+    end
+  end
+
+  @doc """
+  Fetch player info for a recent listen by checking Navidrome's now playing.
+  Returns player name string or nil if not found.
+  """
+  def fetch_player_info_for_listen(%Listen{} = listen) do
+    with {:ok, navidrome_config} <- resolve_navidrome_config(listen),
+         {:ok, player_info} <-
+           get_now_playing(
+             navidrome_config.url,
+             navidrome_config.username,
+             navidrome_config.password
+           ) do
+      # Verify this is the right track (match within last 2 minutes)
+      if player_info.minutes_ago <= 2 &&
+           String.downcase(player_info.artist || "") == String.downcase(listen.artist_name) &&
+           String.downcase(player_info.title || "") == String.downcase(listen.track_name) do
+        {:ok, parse_player_name(player_info.player_name)}
+      else
+        {:error, :track_mismatch}
+      end
+    else
+      error -> error
+    end
+  end
+
+  # Parse player name from Navidrome format: "Feishin [feishin/Windows]"
+  defp parse_player_name(nil), do: %{player: "Unknown", client: nil, platform: nil}
+
+  defp parse_player_name(player_string) when is_binary(player_string) do
+    # Extract player name and details from format: "Feishin [feishin/Windows]"
+    case Regex.run(~r/^([^\[]+)\s*\[([^\/]+)\/([^\]]+)\]/, player_string) do
+      [_, player_name, client, platform] ->
+        %{
+          player: String.trim(player_name),
+          client: String.trim(client),
+          platform: String.trim(platform)
+        }
+
+      _ ->
+        # Fallback: just use the raw string
+        %{
+          player: String.trim(player_string),
+          client: nil,
+          platform: nil
+        }
+    end
+  end
+
+  @doc """
   Batch enrich recent listens without genres for a specific user.
   Returns count of successfully enriched listens.
 
