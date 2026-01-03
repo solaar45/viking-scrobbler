@@ -477,13 +477,13 @@ function AreaChartWithAxes({ data }: { data: Array<{ date: string; plays: number
   const yInterval = Math.ceil(maxPlays / ySteps)
   const yMax = yInterval * ySteps
 
-  // Chart dimensions
-  const chartWidth = 100 // percentage
+  // Chart dimensions - proper viewBox for wide chart
+  const chartWidth = 800
   const chartHeight = 240
-  const paddingLeft = 40
-  const paddingRight = 10
-  const paddingTop = 10
-  const paddingBottom = 30
+  const paddingLeft = 50
+  const paddingRight = 20
+  const paddingTop = 20
+  const paddingBottom = 40
   
   const innerWidth = chartWidth - paddingLeft - paddingRight
   const innerHeight = chartHeight - paddingTop - paddingBottom
@@ -497,8 +497,8 @@ function AreaChartWithAxes({ data }: { data: Array<{ date: string; plays: number
   }
 
   return (
-    <div className="w-full" style={{ height: chartHeight }}>
-      <svg viewBox={`0 0 ${chartWidth} ${chartHeight}`} className="w-full h-full" preserveAspectRatio="none">
+    <div className="w-full h-64">
+      <svg viewBox={`0 0 ${chartWidth} ${chartHeight}`} className="w-full h-full">
         <defs>
           <linearGradient id="areaGradient" x1="0%" y1="0%" x2="0%" y2="100%">
             <stop offset="0%" stopColor="rgb(99, 102, 241)" stopOpacity="0.3" />
@@ -521,15 +521,16 @@ function AreaChartWithAxes({ data }: { data: Array<{ date: string; plays: number
                 y2={y}
                 stroke="rgb(71, 85, 105)"
                 strokeOpacity="0.2"
-                strokeWidth="0.5"
+                strokeWidth="1"
               />
               {/* Y-axis label */}
               <text
-                x={paddingLeft - 5}
+                x={paddingLeft - 10}
                 y={y}
                 textAnchor="end"
                 dominantBaseline="middle"
-                className="fill-viking-text-tertiary text-[3px] font-mono"
+                className="fill-viking-text-tertiary"
+                style={{ fontSize: '12px', fontFamily: 'monospace' }}
               >
                 {value}
               </text>
@@ -544,7 +545,7 @@ function AreaChartWithAxes({ data }: { data: Array<{ date: string; plays: number
           if (!showLabel) return null
           
           const x = paddingLeft + (i / (data.length - 1)) * innerWidth
-          const y = chartHeight - paddingBottom + 15
+          const y = chartHeight - paddingBottom + 20
           
           return (
             <text
@@ -552,7 +553,8 @@ function AreaChartWithAxes({ data }: { data: Array<{ date: string; plays: number
               x={x}
               y={y}
               textAnchor="middle"
-              className="fill-viking-text-tertiary text-[3px]"
+              className="fill-viking-text-tertiary"
+              style={{ fontSize: '11px' }}
             >
               {formatXAxisDate(item.date)}
             </text>
@@ -570,7 +572,7 @@ function AreaChartWithAxes({ data }: { data: Array<{ date: string; plays: number
           d={generateLinePath(data, yMax, paddingLeft, paddingTop, innerWidth, innerHeight)}
           fill="none"
           stroke="rgb(99, 102, 241)"
-          strokeWidth="1"
+          strokeWidth="2"
         />
         
         {/* Data points */}
@@ -582,9 +584,9 @@ function AreaChartWithAxes({ data }: { data: Array<{ date: string; plays: number
               key={i}
               cx={x}
               cy={y}
-              r="1.5"
+              r="4"
               fill="rgb(99, 102, 241)"
-              className="hover:r-2 transition-all cursor-pointer"
+              className="hover:r-6 transition-all cursor-pointer"
             >
               <title>{formatXAxisDate(item.date)}: {item.plays} plays</title>
             </circle>
@@ -598,8 +600,8 @@ function AreaChartWithAxes({ data }: { data: Array<{ date: string; plays: number
           x2={paddingLeft}
           y2={chartHeight - paddingBottom}
           stroke="rgb(71, 85, 105)"
-          strokeOpacity="0.3"
-          strokeWidth="0.5"
+          strokeOpacity="0.5"
+          strokeWidth="1"
         />
         
         {/* X-axis line */}
@@ -609,8 +611,8 @@ function AreaChartWithAxes({ data }: { data: Array<{ date: string; plays: number
           x2={chartWidth - paddingRight}
           y2={chartHeight - paddingBottom}
           stroke="rgb(71, 85, 105)"
-          strokeOpacity="0.3"
-          strokeWidth="0.5"
+          strokeOpacity="0.5"
+          strokeWidth="1"
         />
       </svg>
     </div>
