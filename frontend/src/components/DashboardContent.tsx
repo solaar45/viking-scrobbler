@@ -3,7 +3,7 @@
 import { useEffect, useState, useMemo, useRef } from "react"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { Activity, RefreshCw, ChevronLeft, ChevronRight, TrendingUp, TrendingDown } from "lucide-react"
-import { DashboardSkeleton } from "./DashboardSkeleton"
+import { DashboardSkeleton } from "@/components/layout/DashboardSkeleton"
 import { StatsCover } from './StatsCover'
 import { getCoverUrl } from '@/lib/cover-utils'
 
