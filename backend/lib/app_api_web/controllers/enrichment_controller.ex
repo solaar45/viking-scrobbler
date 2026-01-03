@@ -1,7 +1,7 @@
 defmodule AppApiWeb.EnrichmentController do
   use AppApiWeb, :controller
 
-  alias AppApi.Enrichment
+  alias AppApi.{Enrichment, BackfillPlayerInfo}
 
   @doc """
   GET /api/enrichment/scan
@@ -74,6 +74,84 @@ defmodule AppApiWeb.EnrichmentController do
         conn
         |> put_status(:internal_server_error)
         |> json(%{success: false, error: "Enrichment failed: #{inspect(reason)}"})
+    end
+  end
+
+  @doc """
+  GET /api/enrichment/scan-player-info
+  Returns statistics for missing player info, bitrate, and format
+  
+  Response:
+  ```json
+  {
+    "success": true,
+    "total": 1234,
+    "missing_player": 456,
+    "missing_bitrate": 123,
+    "missing_format": 89,
+    "missing_genres": 67,
+    "missing_any": 567
+  }
+  ```
+  
+  Note: media_player cannot be backfilled for historical listens
+  """
+  def scan_player_info(conn, _params) do
+    user_name = get_user_name_from_token(conn)
+
+    stats = BackfillPlayerInfo.stats(user_name)
+
+    json(conn, Map.put(stats, :success, true))
+  end
+
+  @doc """
+  POST /api/enrichment/backfill-player-info
+  Backfills missing bitrate, format, and genres for existing listens
+  
+  Query params:
+    - limit: max tracks to process (default: 500)
+    - batch_size: tracks per batch (default: 50)
+    - rate_limit_ms: delay between requests in ms (default: 200)
+  
+  Response:
+  ```json
+  {
+    "success": true,
+    "processed": 100,
+    "enriched": 87,
+    "failed": 13
+  }
+  ```
+  
+  Note: This enriches bitrate, format, and genres. Player info cannot be
+  backfilled for historical listens (getNowPlaying only works for active playback)
+  """
+  def backfill_player_info(conn, params) do
+    user_name = get_user_name_from_token(conn)
+
+    limit = parse_int_param(params["limit"], 500)
+    batch_size = parse_int_param(params["batch_size"], 50)
+    rate_limit_ms = parse_int_param(params["rate_limit_ms"], 200)
+
+    opts = [
+      batch_size: batch_size,
+      rate_limit_ms: rate_limit_ms,
+      missing_only: true
+    ]
+
+    case BackfillPlayerInfo.run(user_name, limit, opts) do
+      {:ok, %{success: success_count, failed: failed_count}} ->
+        json(conn, %{
+          success: true,
+          processed: success_count + failed_count,
+          enriched: success_count,
+          failed: failed_count
+        })
+
+      {:error, reason} ->
+        conn
+        |> put_status(:internal_server_error)
+        |> json(%{success: false, error: "Backfill failed: #{inspect(reason)}"})
     end
   end
 
