@@ -32,6 +32,13 @@ type TrendInfo = {
   label: string
 }
 
+const PERIODS = [
+  { id: 'week', label: 'Last 7 Days', days: 7 },
+  { id: 'month', label: 'Last 30 Days', days: 30 },
+  { id: 'year', label: 'Last Year', days: 365 },
+  { id: 'all_time', label: 'All Time', days: null },
+]
+
 function calculateTrend(current?: number, lifetime?: number): number | undefined {
   if (current === undefined || lifetime === undefined || lifetime === 0) {
     return undefined
@@ -132,9 +139,6 @@ export function OverviewPage() {
           peakValue: lifetimeTotals.peak_value || 0,
           currentStreak: lifetimeTotals.current_streak || 0,
         },
-        // FROM OVERVIEW API:
-        // TODO: Backend needs to include navidrome_id in top items for covers!
-        // For now, covers won't show because API doesn't include metadata
         total_listening_time: overview.total_listening_time || '0h 0m',
         top_artist: overview.top_artist || { name: 'N/A', plays: 0 },
         top_track: overview.top_track || { name: 'N/A', artist: 'N/A', plays: 0 },
@@ -187,27 +191,21 @@ export function OverviewPage() {
           <h1 className={VIKING_TYPOGRAPHY.heading.xl}>Overview</h1>
         </div>
 
-        {/* Time Range Filter */}
-        <div className="flex items-center gap-2">
-          <span className={VIKING_TYPOGRAPHY.label.default}>Time Range:</span>
-          <select
-            value={timeRange}
-            onChange={(e) => setTimeRange(e.target.value as any)}
-            className={cn(
-              "px-3 py-2 rounded-lg",
-              VIKING_TYPOGRAPHY.body.m,
-              VIKING_DESIGN.colors.card.elevated,
-              VIKING_DESIGN.colors.text.primary,
-              "border border-viking-border-default",
-              "focus:outline-none focus:ring-2 focus:ring-viking-purple",
-              VIKING_DESIGN.effects.transition.base
-            )}
-          >
-            <option value="week">Last 7 Days</option>
-            <option value="month">Last 30 Days</option>
-            <option value="year">Last Year</option>
-            <option value="all_time">All Time</option>
-          </select>
+        {/* Time Range Filter - Button Group (like Recent Listens) */}
+        <div className="flex gap-1 bg-viking-bg-tertiary p-1.5 rounded-lg border border-viking-border-default">
+          {PERIODS.map(({ id, label }) => (
+            <button
+              key={id}
+              onClick={() => setTimeRange(id as any)}
+              className={`text-xs font-semibold px-4 py-2 rounded-md transition-all uppercase tracking-wide whitespace-nowrap ${
+                timeRange === id
+                  ? "bg-gradient-to-r from-viking-purple to-viking-purple-dark text-white shadow-lg shadow-viking-purple/20"
+                  : "text-viking-text-tertiary hover:text-viking-text-secondary hover:bg-viking-bg-elevated"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
         </div>
       </div>
 
@@ -309,17 +307,14 @@ export function OverviewPage() {
 
       {/* ACTIVITY VISUALIZATION - 2/3 Chart + 1/3 Clock */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
-        {/* LISTENING ACTIVITY CHART (2/3) */}
+        {/* LISTENING ACTIVITY CHART (2/3) - Full Width with Axes */}
         <div className={cn(VIKING_DESIGN.components.card, "lg:col-span-2")}>
           <div className={VIKING_DESIGN.components.cardContent}>
-            <div className="flex items-center justify-between mb-4">
-              <h2 className={VIKING_TYPOGRAPHY.heading.m}>
-                <TrendingUp className="inline w-5 h-5 mr-2 text-viking-purple" />
-                Listening Activity
-              </h2>
-              <span className={VIKING_TYPOGRAPHY.label.inline}>Last 30 Days</span>
+            <div className="flex items-center mb-4">
+              <TrendingUp className="w-5 h-5 mr-2 text-viking-purple" />
+              <h2 className={VIKING_TYPOGRAPHY.heading.m}>Listening Activity</h2>
             </div>
-            <AreaChart data={stats.recent_activity} />
+            <AreaChartWithAxes data={stats.recent_activity} />
           </div>
         </div>
 
@@ -404,7 +399,6 @@ function HeroCard({ type, name, subtitle, plays, item, coverSize, className }: H
               VIKING_DESIGN.colors.card.elevated
             )}>
               <Music className="w-20 h-20 text-viking-text-tertiary opacity-30" />
-              {/* TODO: Backend needs to include navidrome_id in top items! */}
             </div>
           )}
         </div>
@@ -468,15 +462,43 @@ function MetricCard({ label, value, valueStr, unit, trend }: MetricCardProps) {
   )
 }
 
-// ===== AREA CHART =====
-function AreaChart({ data }: { data: Array<{ date: string; plays: number }> }) {
-  if (data.length === 0) return <div className="h-48 flex items-center justify-center text-viking-text-tertiary">No data</div>
+// ===== AREA CHART WITH AXES =====
+function AreaChartWithAxes({ data }: { data: Array<{ date: string; plays: number }> }) {
+  if (data.length === 0) {
+    return (
+      <div className="h-64 flex items-center justify-center text-viking-text-tertiary">
+        No data available
+      </div>
+    )
+  }
 
   const maxPlays = Math.max(...data.map(d => d.plays), 1)
+  const ySteps = 5
+  const yInterval = Math.ceil(maxPlays / ySteps)
+  const yMax = yInterval * ySteps
+
+  // Chart dimensions
+  const chartWidth = 100 // percentage
+  const chartHeight = 240
+  const paddingLeft = 40
+  const paddingRight = 10
+  const paddingTop = 10
+  const paddingBottom = 30
+  
+  const innerWidth = chartWidth - paddingLeft - paddingRight
+  const innerHeight = chartHeight - paddingTop - paddingBottom
+
+  // Format date for X-axis
+  const formatXAxisDate = (dateStr: string) => {
+    const d = new Date(dateStr)
+    const day = d.getDate()
+    const month = d.toLocaleString('en', { month: 'short' })
+    return `${day} ${month}`
+  }
 
   return (
-    <div className="relative h-48">
-      <svg viewBox="0 0 800 200" className="w-full h-full">
+    <div className="w-full" style={{ height: chartHeight }}>
+      <svg viewBox={`0 0 ${chartWidth} ${chartHeight}`} className="w-full h-full" preserveAspectRatio="none">
         <defs>
           <linearGradient id="areaGradient" x1="0%" y1="0%" x2="0%" y2="100%">
             <stop offset="0%" stopColor="rgb(99, 102, 241)" stopOpacity="0.3" />
@@ -484,56 +506,147 @@ function AreaChart({ data }: { data: Array<{ date: string; plays: number }> }) {
           </linearGradient>
         </defs>
         
+        {/* Y-axis labels and grid lines */}
+        {Array.from({ length: ySteps + 1 }, (_, i) => {
+          const value = yInterval * i
+          const y = paddingTop + innerHeight - (value / yMax) * innerHeight
+          
+          return (
+            <g key={i}>
+              {/* Grid line */}
+              <line
+                x1={paddingLeft}
+                y1={y}
+                x2={chartWidth - paddingRight}
+                y2={y}
+                stroke="rgb(71, 85, 105)"
+                strokeOpacity="0.2"
+                strokeWidth="0.5"
+              />
+              {/* Y-axis label */}
+              <text
+                x={paddingLeft - 5}
+                y={y}
+                textAnchor="end"
+                dominantBaseline="middle"
+                className="fill-viking-text-tertiary text-[3px] font-mono"
+              >
+                {value}
+              </text>
+            </g>
+          )
+        })}
+        
+        {/* X-axis labels */}
+        {data.map((item, i) => {
+          // Show every nth label to avoid crowding
+          const showLabel = data.length <= 7 || i % Math.ceil(data.length / 7) === 0 || i === data.length - 1
+          if (!showLabel) return null
+          
+          const x = paddingLeft + (i / (data.length - 1)) * innerWidth
+          const y = chartHeight - paddingBottom + 15
+          
+          return (
+            <text
+              key={i}
+              x={x}
+              y={y}
+              textAnchor="middle"
+              className="fill-viking-text-tertiary text-[3px]"
+            >
+              {formatXAxisDate(item.date)}
+            </text>
+          )
+        })}
+        
         {/* Area fill */}
         <path
-          d={generateAreaPath(data, maxPlays, 800, 200)}
+          d={generateAreaPath(data, yMax, paddingLeft, paddingTop, innerWidth, innerHeight)}
           fill="url(#areaGradient)"
         />
         
         {/* Line */}
         <path
-          d={generateLinePath(data, maxPlays, 800, 200)}
+          d={generateLinePath(data, yMax, paddingLeft, paddingTop, innerWidth, innerHeight)}
           fill="none"
           stroke="rgb(99, 102, 241)"
-          strokeWidth="2"
+          strokeWidth="1"
         />
         
         {/* Data points */}
         {data.map((item, i) => {
-          const x = (i / (data.length - 1)) * 800
-          const y = 200 - (item.plays / maxPlays) * 180
+          const x = paddingLeft + (i / (data.length - 1)) * innerWidth
+          const y = paddingTop + innerHeight - (item.plays / yMax) * innerHeight
           return (
             <circle
               key={i}
               cx={x}
               cy={y}
-              r="4"
+              r="1.5"
               fill="rgb(99, 102, 241)"
-              className="hover:r-6 transition-all cursor-pointer"
+              className="hover:r-2 transition-all cursor-pointer"
             >
-              <title>{item.date}: {item.plays} plays</title>
+              <title>{formatXAxisDate(item.date)}: {item.plays} plays</title>
             </circle>
           )
         })}
+        
+        {/* Y-axis line */}
+        <line
+          x1={paddingLeft}
+          y1={paddingTop}
+          x2={paddingLeft}
+          y2={chartHeight - paddingBottom}
+          stroke="rgb(71, 85, 105)"
+          strokeOpacity="0.3"
+          strokeWidth="0.5"
+        />
+        
+        {/* X-axis line */}
+        <line
+          x1={paddingLeft}
+          y1={chartHeight - paddingBottom}
+          x2={chartWidth - paddingRight}
+          y2={chartHeight - paddingBottom}
+          stroke="rgb(71, 85, 105)"
+          strokeOpacity="0.3"
+          strokeWidth="0.5"
+        />
       </svg>
     </div>
   )
 }
 
-function generateLinePath(data: Array<{ plays: number }>, max: number, width: number, height: number): string {
+function generateLinePath(
+  data: Array<{ plays: number }>, 
+  yMax: number,
+  paddingLeft: number,
+  paddingTop: number,
+  width: number, 
+  height: number
+): string {
   if (data.length === 0) return ''
   const points = data.map((d, i) => {
-    const x = (i / (data.length - 1)) * width
-    const y = height - (d.plays / max) * (height * 0.9)
+    const x = paddingLeft + (i / (data.length - 1)) * width
+    const y = paddingTop + height - (d.plays / yMax) * height
     return `${x},${y}`
   })
   return `M ${points.join(' L ')}`
 }
 
-function generateAreaPath(data: Array<{ plays: number }>, max: number, width: number, height: number): string {
+function generateAreaPath(
+  data: Array<{ plays: number }>, 
+  yMax: number,
+  paddingLeft: number,
+  paddingTop: number,
+  width: number, 
+  height: number
+): string {
   if (data.length === 0) return ''
-  const linePath = generateLinePath(data, max, width, height)
-  return `${linePath} L ${width},${height} L 0,${height} Z`
+  const linePath = generateLinePath(data, yMax, paddingLeft, paddingTop, width, height)
+  const bottomY = paddingTop + height
+  const rightX = paddingLeft + width
+  return `${linePath} L ${rightX},${bottomY} L ${paddingLeft},${bottomY} Z`
 }
 
 // ===== CLOCK HEATMAP =====
