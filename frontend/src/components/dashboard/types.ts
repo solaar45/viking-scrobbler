@@ -20,6 +20,8 @@ export interface RecentListen {
   duration: number
   releaseYear?: string | number
   genres?: string
+  originalFormat?: string
+  originalBitRate?: number
 }
 
 export interface DashboardStats {
