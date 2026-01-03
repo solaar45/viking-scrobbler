@@ -610,12 +610,12 @@ export function RecentListensPage() {
                         <th className="table-head-dense text-left w-[140px]">Artist</th>
                         <th className="table-head-dense text-left w-[140px]">Album</th>
                         <th className="table-head-dense text-left w-[55px]">Year</th>
-                        <th className="table-head-dense text-left w-[110px] border-r border-viking-border-subtle/30">Genre</th>
+                        <th className="table-head-dense text-left w-[110px] border-r border-viking-border-emphasis/50">Genre</th>
                         
                         {/* FILE METADATA GROUP */}
                         <th className="table-head-dense text-right w-[80px]">Bitrate</th>
                         <th className="table-head-dense text-center w-[70px]">Format</th>
-                        <th className="table-head-dense text-right w-[70px] border-r border-viking-border-subtle/30">Duration</th>
+                        <th className="table-head-dense text-right w-[70px] border-r border-viking-border-emphasis/50">Duration</th>
                         
                         {/* USAGE METADATA GROUP */}
                         <th className="table-head-dense text-left w-[100px]">Player</th>
@@ -653,7 +653,7 @@ export function RecentListensPage() {
                             <td className="table-cell-dense table-cell-secondary w-[55px]">
                               {item.releaseYear ?? "—"}
                             </td>
-                            <td className="table-cell-dense table-cell-secondary w-[110px] truncate font-medium text-emerald-400 border-r border-viking-border-subtle/30">
+                            <td className="table-cell-dense table-cell-secondary w-[110px] truncate font-medium text-emerald-400 border-r border-viking-border-emphasis/50">
                               {item.genres}
                             </td>
                             
@@ -678,7 +678,7 @@ export function RecentListensPage() {
                                 <span className="text-viking-text-tertiary text-xs">—</span>
                               )}
                             </td>
-                            <td className="table-cell-dense table-cell-secondary w-[70px] text-right border-r border-viking-border-subtle/30">
+                            <td className="table-cell-dense table-cell-secondary w-[70px] text-right border-r border-viking-border-emphasis/50">
                               {formatDuration(item.duration)}
                             </td>
                             
