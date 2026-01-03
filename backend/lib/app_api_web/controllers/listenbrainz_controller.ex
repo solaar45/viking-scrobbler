@@ -9,7 +9,7 @@ defmodule AppApiWeb.ListenBrainzController do
   """
 
   use AppApiWeb, :controller
-  alias AppApi.{Repo, Listen, Stats}
+  alias AppApi.{Repo, Listen, Stats, PlayerSessionCache}
   alias AppApiWeb.TokenController
   import Ecto.Query
   require Logger
@@ -335,20 +335,22 @@ defmodule AppApiWeb.ListenBrainzController do
   # ============================================================================
 
   defp process_live_scrobbles(conn, payload, user_name) when is_list(payload) do
-    # Extract player info from User-Agent as fallback
-    user_agent_info = extract_player_info_from_user_agent(conn)
+    # STEP 1: Get player info BEFORE inserting listens
+    player_info = get_player_info_sync(user_name)
+    
+    Logger.info("🎮 Player info for #{user_name}: #{inspect(player_info)}")
     
     listens =
       Enum.map(payload, fn listen_data ->
         track_metadata = listen_data["track_metadata"] || %{}
         base_additional_info = track_metadata["additional_info"] || %{}
         
-        # Initially use User-Agent info (will be updated by Navidrome API)
+        # Use discovered player info
         enriched_additional_info = 
           base_additional_info
-          |> Map.put("media_player", user_agent_info.player_name)
-          |> maybe_put("player_client", user_agent_info.client)
-          |> maybe_put("player_platform", user_agent_info.platform)
+          |> Map.put("media_player", player_info.player)
+          |> maybe_put("player_client", player_info.client)
+          |> maybe_put("player_platform", player_info.platform)
 
         %{
           listened_at: parse_timestamp(listen_data["listened_at"]),
@@ -369,7 +371,7 @@ defmodule AppApiWeb.ListenBrainzController do
       {count, _} when count > 0 ->
         Logger.info("✅ Scrobbled #{count} tracks for #{user_name}")
 
-        # Real-time enrichment: metadata + player info
+        # Async enrichment: metadata (genres, bitrate, format)
         listens_to_enrich =
           Listen
           |> where([l], l.user_name == ^user_name)
@@ -379,7 +381,7 @@ defmodule AppApiWeb.ListenBrainzController do
 
         Task.start(fn ->
           Enum.each(listens_to_enrich, fn listen ->
-            # Enrich metadata (genres, etc.)
+            # Enrich metadata (genres, bitrate, format, etc.)
             case AppApi.NavidromeIntegration.enrich_listen_from_navidrome(listen) do
               {:ok, _} ->
                 Logger.debug("✅ Enriched from Navidrome: #{listen.track_name}")
@@ -388,9 +390,6 @@ defmodule AppApiWeb.ListenBrainzController do
                 Logger.debug("⚠️ Navidrome failed, trying MusicBrainz: #{listen.track_name}")
                 Task.start(fn -> AppApi.GenreEnrichment.enrich_listen(listen) end)
             end
-            
-            # Enrich player info from Navidrome getNowPlaying API
-            enrich_player_info_async(listen)
 
             :timer.sleep(150)
           end)
@@ -414,141 +413,58 @@ defmodule AppApiWeb.ListenBrainzController do
     end
   end
 
-  # Async player info enrichment from Navidrome getNowPlaying API
-  defp enrich_player_info_async(listen) do
-    Task.start(fn ->
-      case AppApi.NavidromeIntegration.fetch_player_info_for_listen(listen) do
-        {:ok, player_info} ->
-          # Reload listen from DB to get latest state (including Navidrome enrichment)
-          fresh_listen = Repo.get!(Listen, listen.id)
-          current_additional_info = fresh_listen.additional_info || %{}
+  # Get player info synchronously (with cache fallback)
+  defp get_player_info_sync(user_name) do
+    # Try to get current player from Navidrome getNowPlaying
+    case fetch_player_from_navidrome(user_name) do
+      {:ok, player_info} ->
+        # Cache for future requests
+        PlayerSessionCache.put_player(user_name, player_info)
+        player_info
+      
+      {:error, _reason} ->
+        # Fallback to cached session
+        case PlayerSessionCache.get_player(user_name) do
+          {:ok, cached_info} ->
+            Logger.debug("🎮 Using cached player: #{cached_info.player}")
+            cached_info
           
-          # Merge player info with existing additional_info (preserves originalBitRate, etc.)
-          updated_additional_info =
-            current_additional_info
-            |> Map.put("media_player", player_info.player)
-            |> maybe_put("player_client", player_info.client)
-            |> maybe_put("player_platform", player_info.platform)
-          
-          changeset =
-            fresh_listen
-            |> Ecto.Changeset.change(%{
-              additional_info: updated_additional_info
-            })
-          
-          case Repo.update(changeset) do
-            {:ok, _} ->
-              Logger.info("🎮 Updated player info: #{player_info.player}")
-            {:error, reason} ->
-              Logger.error("Failed to update player info: #{inspect(reason)}")
-          end
-          
-        {:error, reason} ->
-          Logger.debug("⚠️ Could not fetch player info: #{inspect(reason)}")
-      end
-    end)
+          {:error, _} ->
+            Logger.debug("⚠️ No player info available, using Unknown Client")
+            %{player: "Unknown Client", client: nil, platform: nil}
+        end
+    end
   end
 
-  # Extract player information from User-Agent header (fallback)
-  defp extract_player_info_from_user_agent(conn) do
-    user_agent = get_req_header(conn, "user-agent") |> List.first()
+  # Fetch player info from Navidrome getNowPlaying API
+  defp fetch_player_from_navidrome(user_name) do
+    # Create a dummy listen just to get navidrome config
+    dummy_listen = %Listen{user_name: user_name, additional_info: %{}}
     
-    # DEBUG: Log User-Agent for troubleshooting
-    Logger.debug("🔍 User-Agent: #{inspect(user_agent)}")
-    
-    player_name = parse_player_from_user_agent(user_agent)
-    {client, platform} = parse_client_and_platform(user_agent)
-    
-    %{
-      player_name: player_name,
-      client: client,
-      platform: platform,
-      user_agent: user_agent
-    }
-  end
-  
-  # Parse player name from User-Agent header
-  defp parse_player_from_user_agent(nil), do: "Unknown"
-  defp parse_player_from_user_agent(user_agent) do
-    cond do
-      String.contains?(user_agent, "Feishin") ->
-        extract_client_with_version(user_agent, "Feishin")
+    case AppApi.NavidromeIntegration.resolve_navidrome_config(dummy_listen) do
+      {:ok, navidrome_config} ->
+        case AppApi.NavidromeIntegration.get_now_playing(
+          navidrome_config.url,
+          navidrome_config.username,
+          navidrome_config.password
+        ) do
+          {:ok, player_info} ->
+            # Parse player name from Navidrome format
+            parsed = AppApi.NavidromeIntegration.parse_player_name(player_info.player_name)
+            Logger.info("🎮 Found active player: #{parsed.player}")
+            {:ok, parsed}
+          
+          error ->
+            Logger.debug("⚠️ getNowPlaying failed: #{inspect(error)}")
+            error
+        end
       
-      String.contains?(user_agent, "Amperfy") ->
-        extract_client_with_version(user_agent, "Amperfy")
-      
-      String.contains?(user_agent, "Symfonium") ->
-        extract_client_with_version(user_agent, "Symfonium")
-      
-      String.contains?(user_agent, "Sonixd") ->
-        extract_client_with_version(user_agent, "Sonixd")
-      
-      String.contains?(user_agent, "Sublime") ->
-        extract_client_with_version(user_agent, "Sublime")
-      
-      String.contains?(user_agent, "Tempo") ->
-        extract_client_with_version(user_agent, "Tempo")
-      
-      String.contains?(user_agent, "Subtracks") ->
-        extract_client_with_version(user_agent, "Subtracks")
-      
-      String.contains?(user_agent, "Ultrasonic") ->
-        extract_client_with_version(user_agent, "Ultrasonic")
-      
-      String.contains?(user_agent, "iSub") ->
-        extract_client_with_version(user_agent, "iSub")
-      
-      String.contains?(user_agent, "play:Sub") ->
-        "play:Sub"
-      
-      String.contains?(user_agent, "Navidrome") ->
-        "Navidrome Web"
-      
-      String.contains?(user_agent, "Mozilla") or String.contains?(user_agent, "Chrome") ->
-        "Web Browser"
-      
-      true ->
-        "Unknown Client"
+      error ->
+        Logger.debug("⚠️ No Navidrome config: #{inspect(error)}")
+        error
     end
   end
-  
-  # Extract client name with version
-  defp extract_client_with_version(user_agent, client_name) do
-    case Regex.run(~r/#{client_name}[\/\s]+([\d\.]+)/i, user_agent) do
-      [_, version] -> "#{client_name} #{version}"
-      _ -> client_name
-    end
-  end
-  
-  # Parse client type and platform from User-Agent
-  defp parse_client_and_platform(nil), do: {nil, nil}
-  defp parse_client_and_platform(user_agent) do
-    platform = cond do
-      String.contains?(user_agent, "Windows") -> "Windows"
-      String.contains?(user_agent, "Macintosh") or String.contains?(user_agent, "Mac OS") -> "macOS"
-      String.contains?(user_agent, "Linux") -> "Linux"
-      String.contains?(user_agent, "Android") -> "Android"
-      String.contains?(user_agent, "iOS") or String.contains?(user_agent, "iPhone") or String.contains?(user_agent, "iPad") -> "iOS"
-      true -> nil
-    end
-    
-    client = cond do
-      String.contains?(user_agent, "Feishin") -> "feishin"
-      String.contains?(user_agent, "Amperfy") -> "amperfy"
-      String.contains?(user_agent, "Symfonium") -> "symfonium"
-      String.contains?(user_agent, "Sonixd") -> "sonixd"
-      String.contains?(user_agent, "Sublime") -> "sublime"
-      String.contains?(user_agent, "Tempo") -> "tempo"
-      String.contains?(user_agent, "Subtracks") -> "subtracks"
-      String.contains?(user_agent, "Ultrasonic") -> "ultrasonic"
-      String.contains?(user_agent, "iSub") -> "isub"
-      String.contains?(user_agent, "play:Sub") -> "playsub"
-      true -> nil
-    end
-    
-    {client, platform}
-  end
-  
+
   # Helper to conditionally add keys to map
   defp maybe_put(map, _key, nil), do: map
   defp maybe_put(map, key, value), do: Map.put(map, key, value)
