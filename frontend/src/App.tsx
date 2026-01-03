@@ -1,5 +1,5 @@
 import { SidebarProvider, SidebarInset, SidebarTrigger } from '@/components/ui/sidebar'
-import { AppSidebar } from '@/components/app-sidebar'
+import { AppSidebar } from '@/components/AppSidebar'
 import { OverviewPage } from '@/components/OverviewPage'
 import { RecentListensPage } from '@/components/RecentListensPage'
 import { StatisticsPage } from '@/components/StatisticsPage'
