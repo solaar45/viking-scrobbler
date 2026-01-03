@@ -29,6 +29,13 @@ export interface RecentListen {
   duration: number
   releaseYear?: string | number
   genres?: string
+  additional_info?: {
+    navidrome_id?: string
+    originalBitRate?: number
+    originalFormat?: string
+    media_player?: string
+    [key: string]: any
+  }
 }
 
 export interface DashboardStats {
@@ -273,7 +280,7 @@ export default function DashboardContent() {
           ),
           releaseYear: listen.additional_info?.release_year ?? undefined,
           genres: listen.additional_info?.genres || "–",
-          // ✅ FIX: Übergib additional_info komplett!
+          // ✅ Pass complete additional_info including bitrate, format, player
           additional_info: listen.additional_info || {},
         })
       )
@@ -554,28 +561,37 @@ export default function DashboardContent() {
                         <th className="table-head-dense pl-6 text-left w-[50px]">
                           {/* Cover */}
                         </th>
-                        <th className="table-head-dense pl-6 text-left w-[22%]">
+                        <th className="table-head-dense pl-6 text-left w-[18%]">
                           Track
                         </th>
-                        <th className="table-head-dense text-left w-[14%]">
+                        <th className="table-head-dense text-left w-[12%]">
                           Artist
                         </th>
-                        <th className="table-head-dense text-left w-[14%]">
+                        <th className="table-head-dense text-left w-[12%]">
                           Album
                         </th>
-                        <th className="table-head-dense text-left w-[8%]">
+                        <th className="table-head-dense text-left w-[6%]">
                           Year
                         </th>
-                        <th className="table-head-dense text-left w-[12%]">
+                        <th className="table-head-dense text-left w-[10%]">
                           Genre
                         </th>
-                        <th className="table-head-dense text-right w-[10%]">
+                        <th className="table-head-dense text-right w-[6%]">
+                          Bitrate
+                        </th>
+                        <th className="table-head-dense text-left w-[6%]">
+                          Format
+                        </th>
+                        <th className="table-head-dense text-left w-[8%]">
+                          Player
+                        </th>
+                        <th className="table-head-dense text-right w-[8%]">
                           Date
                         </th>
-                        <th className="table-head-dense text-right w-[9%]">
+                        <th className="table-head-dense text-right w-[7%]">
                           Time
                         </th>
-                        <th className="table-head-dense text-right pr-6 w-[8%]">
+                        <th className="table-head-dense text-right pr-6 w-[7%]">
                           Duration
                         </th>
                       </tr>
