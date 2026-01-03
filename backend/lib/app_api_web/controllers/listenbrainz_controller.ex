@@ -335,20 +335,20 @@ defmodule AppApiWeb.ListenBrainzController do
   # ============================================================================
 
   defp process_live_scrobbles(conn, payload, user_name) when is_list(payload) do
-    # Extract player info from request
-    player_info = extract_player_info(conn)
+    # Extract player info from User-Agent as fallback
+    user_agent_info = extract_player_info_from_user_agent(conn)
     
     listens =
       Enum.map(payload, fn listen_data ->
         track_metadata = listen_data["track_metadata"] || %{}
         base_additional_info = track_metadata["additional_info"] || %{}
         
-        # Enrich additional_info with player information
+        # Initially use User-Agent info (will be updated by Navidrome API)
         enriched_additional_info = 
           base_additional_info
-          |> Map.put("media_player", player_info.player_name)
-          |> maybe_put("player_client", player_info.client)
-          |> maybe_put("player_platform", player_info.platform)
+          |> Map.put("media_player", user_agent_info.player_name)
+          |> maybe_put("player_client", user_agent_info.client)
+          |> maybe_put("player_platform", user_agent_info.platform)
 
         %{
           listened_at: parse_timestamp(listen_data["listened_at"]),
@@ -367,9 +367,9 @@ defmodule AppApiWeb.ListenBrainzController do
 
     case Repo.insert_all(Listen, listens) do
       {count, _} when count > 0 ->
-        Logger.info("✅ Scrobbled #{count} tracks for #{user_name} via #{player_info.player_name}")
+        Logger.info("✅ Scrobbled #{count} tracks for #{user_name}")
 
-        # Real-time metadata enrichment
+        # Real-time enrichment: metadata + player info
         listens_to_enrich =
           Listen
           |> where([l], l.user_name == ^user_name)
@@ -379,6 +379,7 @@ defmodule AppApiWeb.ListenBrainzController do
 
         Task.start(fn ->
           Enum.each(listens_to_enrich, fn listen ->
+            # Enrich metadata (genres, etc.)
             case AppApi.NavidromeIntegration.enrich_listen_from_navidrome(listen) do
               {:ok, _} ->
                 Logger.debug("✅ Enriched from Navidrome: #{listen.track_name}")
@@ -387,6 +388,9 @@ defmodule AppApiWeb.ListenBrainzController do
                 Logger.debug("⚠️ Navidrome failed, trying MusicBrainz: #{listen.track_name}")
                 Task.start(fn -> AppApi.GenreEnrichment.enrich_listen(listen) end)
             end
+            
+            # Enrich player info from Navidrome getNowPlaying API
+            enrich_player_info_async(listen)
 
             :timer.sleep(150)
           end)
@@ -410,18 +414,48 @@ defmodule AppApiWeb.ListenBrainzController do
     end
   end
 
-  # Extract player information from request headers and additional_info
-  defp extract_player_info(conn) do
+  # Async player info enrichment from Navidrome getNowPlaying API
+  defp enrich_player_info_async(listen) do
+    Task.start(fn ->
+      case AppApi.NavidromeIntegration.fetch_player_info_for_listen(listen) do
+        {:ok, player_info} ->
+          # Update listen with accurate player info
+          current_additional_info = listen.additional_info || %{}
+          
+          updated_additional_info =
+            current_additional_info
+            |> Map.put("media_player", player_info.player)
+            |> maybe_put("player_client", player_info.client)
+            |> maybe_put("player_platform", player_info.platform)
+          
+          changeset =
+            listen
+            |> Ecto.Changeset.change(%{
+              additional_info: updated_additional_info
+            })
+          
+          case Repo.update(changeset) do
+            {:ok, _} ->
+              Logger.info("🎮 Updated player info: #{player_info.player}")
+            {:error, reason} ->
+              Logger.error("Failed to update player info: #{inspect(reason)}")
+          end
+          
+        {:error, reason} ->
+          Logger.debug("⚠️ Could not fetch player info: #{inspect(reason)}")
+      end
+    end)
+  end
+
+  # Extract player information from User-Agent header (fallback)
+  defp extract_player_info_from_user_agent(conn) do
     user_agent = get_req_header(conn, "user-agent") |> List.first()
     
-    # DEBUG: Log all request headers to see what Navidrome sends
-    Logger.info("🔍 DEBUG User-Agent: #{inspect(user_agent)}")
-    Logger.info("🔍 DEBUG All Headers: #{inspect(conn.req_headers)}")
+    # DEBUG: Log User-Agent for troubleshooting
+    Logger.debug("🔍 User-Agent: #{inspect(user_agent)}")
     
     player_name = parse_player_from_user_agent(user_agent)
     {client, platform} = parse_client_and_platform(user_agent)
-    
-    Logger.info("🎮 Detected Player: #{player_name} | Client: #{inspect(client)} | Platform: #{inspect(platform)}")
     
     %{
       player_name: player_name,
@@ -472,14 +506,12 @@ defmodule AppApiWeb.ListenBrainzController do
         "Web Browser"
       
       true ->
-        # Check if submission_client is in the format we expect from Navidrome
         "Unknown Client"
     end
   end
   
   # Extract client name with version
   defp extract_client_with_version(user_agent, client_name) do
-    # Try to extract version: "Feishin/0.5.0" or "Feishin [feishin/Windows]"
     case Regex.run(~r/#{client_name}[\/\s]+([\d\.]+)/i, user_agent) do
       [_, version] -> "#{client_name} #{version}"
       _ -> client_name
@@ -622,7 +654,6 @@ defmodule AppApiWeb.ListenBrainzController do
     tracknumber = base_info["tracknumber"] || listen.tracknumber
     discnumber = base_info["discnumber"] || listen.discnumber
 
-    # ✅ FIX: navidrome_id aus metadata in additional_info mergen
     navidrome_id = metadata["navidrome_id"] || base_info["navidrome_id"]
 
     merged_info =
@@ -632,7 +663,6 @@ defmodule AppApiWeb.ListenBrainzController do
       |> Map.put_new("discnumber", discnumber)
       |> Map.put("genres", genres)
       |> Map.put("release_year", release_year)
-      # ✅ Cover ID durchreichen!
       |> Map.put("navidrome_id", navidrome_id)
 
     %{
