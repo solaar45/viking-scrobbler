@@ -128,18 +128,13 @@ defmodule AppApi.BackfillPlayerInfo do
     
     if missing_only do
       # Only listens missing critical metadata
+      # Check for NULL additional_info OR missing any of the fields
       from(l in base_query,
         where: 
-          # Missing media_player OR bitrate OR format
-          fragment(
-            "(? IS NULL OR json_extract(?, '$.media_player') IS NULL OR " <>
-            "json_extract(?, '$.originalBitRate') IS NULL OR " <>
-            "json_extract(?, '$.originalFormat') IS NULL)",
-            l.additional_info,
-            l.additional_info,
-            l.additional_info,
-            l.additional_info
-          )
+          is_nil(l.additional_info) or
+          fragment("json_extract(?, '$.media_player')", l.additional_info) |> is_nil() or
+          fragment("json_extract(?, '$.originalBitRate')", l.additional_info) |> is_nil() or
+          fragment("json_extract(?, '$.originalFormat')", l.additional_info) |> is_nil()
       )
     else
       base_query
@@ -187,10 +182,7 @@ defmodule AppApi.BackfillPlayerInfo do
     missing_player = Repo.aggregate(
       from(l in Listen,
         where: l.user_name == ^user_name,
-        where: fragment(
-          "json_extract(?, '$.media_player') IS NULL",
-          l.additional_info
-        )
+        where: fragment("json_extract(?, '$.media_player')", l.additional_info) |> is_nil()
       ),
       :count
     )
@@ -198,10 +190,7 @@ defmodule AppApi.BackfillPlayerInfo do
     missing_bitrate = Repo.aggregate(
       from(l in Listen,
         where: l.user_name == ^user_name,
-        where: fragment(
-          "json_extract(?, '$.originalBitRate') IS NULL",
-          l.additional_info
-        )
+        where: fragment("json_extract(?, '$.originalBitRate')", l.additional_info) |> is_nil()
       ),
       :count
     )
@@ -209,10 +198,7 @@ defmodule AppApi.BackfillPlayerInfo do
     missing_format = Repo.aggregate(
       from(l in Listen,
         where: l.user_name == ^user_name,
-        where: fragment(
-          "json_extract(?, '$.originalFormat') IS NULL",
-          l.additional_info
-        )
+        where: fragment("json_extract(?, '$.originalFormat')", l.additional_info) |> is_nil()
       ),
       :count
     )
@@ -220,11 +206,7 @@ defmodule AppApi.BackfillPlayerInfo do
     missing_genres = Repo.aggregate(
       from(l in Listen,
         where: l.user_name == ^user_name,
-        where: fragment(
-          "? NOT LIKE '%genres%' OR ? = '{}'",
-          l.metadata,
-          l.metadata
-        )
+        where: fragment("? NOT LIKE '%genres%'", l.metadata) or l.metadata == "{}"
       ),
       :count
     )
