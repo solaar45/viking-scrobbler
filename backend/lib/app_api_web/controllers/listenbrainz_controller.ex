@@ -414,8 +414,14 @@ defmodule AppApiWeb.ListenBrainzController do
   defp extract_player_info(conn) do
     user_agent = get_req_header(conn, "user-agent") |> List.first()
     
+    # DEBUG: Log all request headers to see what Navidrome sends
+    Logger.info("🔍 DEBUG User-Agent: #{inspect(user_agent)}")
+    Logger.info("🔍 DEBUG All Headers: #{inspect(conn.req_headers)}")
+    
     player_name = parse_player_from_user_agent(user_agent)
     {client, platform} = parse_client_and_platform(user_agent)
+    
+    Logger.info("🎮 Detected Player: #{player_name} | Client: #{inspect(client)} | Platform: #{inspect(platform)}")
     
     %{
       player_name: player_name,
