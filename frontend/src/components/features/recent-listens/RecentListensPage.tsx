@@ -518,7 +518,7 @@ export function RecentListensPage() {
                 <MetricSegment
                   label="Daily Avg"
                   value={filtered?.avgPerDay}
-                  unit="t"
+                  unit="tracks"
                   loading={loading}
                   trend={
                     trends.avgPerDay !== undefined
@@ -539,7 +539,7 @@ export function RecentListensPage() {
                 <MetricSegment
                   label="Streak"
                   value={filtered?.currentStreak}
-                  unit="d"
+                  unit="days"
                   loading={loading}
                   trend={
                     trends.streak !== undefined
@@ -650,7 +650,7 @@ export function RecentListensPage() {
                             <td className="table-cell-dense table-cell-secondary w-[140px] truncate">
                               {item.album}
                             </td>
-                            <td className="table-cell-dense table-cell-secondary w-[55px]">
+                            <td className="table-cell-dense table-cell-secondary w-[55px] font-mono">
                               {item.releaseYear ?? "—"}
                             </td>
                             <td className="table-cell-dense table-cell-secondary w-[110px] truncate font-medium text-emerald-400 border-r border-viking-border-emphasis/50">
@@ -660,7 +660,7 @@ export function RecentListensPage() {
                             {/* FILE METADATA GROUP */}
                             <td className="table-cell-dense table-cell-secondary w-[80px] text-right">
                               {bitrate ? (
-                                <span className="text-xs font-semibold text-viking-text-tertiary">
+                                <span className="text-xs font-semibold text-viking-text-tertiary font-mono">
                                   {bitrate} kbps
                                 </span>
                               ) : (
@@ -678,7 +678,7 @@ export function RecentListensPage() {
                                 <span className="text-viking-text-tertiary text-xs">—</span>
                               )}
                             </td>
-                            <td className="table-cell-dense table-cell-secondary w-[70px] text-right border-r border-viking-border-emphasis/50">
+                            <td className="table-cell-dense table-cell-secondary w-[70px] text-right border-r border-viking-border-emphasis/50 font-mono">
                               {formatDuration(item.duration)}
                             </td>
                             
@@ -686,10 +686,10 @@ export function RecentListensPage() {
                             <td className="table-cell-dense table-cell-secondary w-[100px] truncate">
                               {player || "—"}
                             </td>
-                            <td className="table-cell-dense table-cell-secondary w-[90px] text-right">
+                            <td className="table-cell-dense table-cell-secondary w-[90px] text-right font-mono">
                               {formatDate(item.playedAt)}
                             </td>
-                            <td className="table-cell-dense table-cell-secondary w-[60px] text-right pr-6">
+                            <td className="table-cell-dense table-cell-secondary w-[60px] text-right pr-6 font-mono">
                               {formatTime(item.playedAt)}
                             </td>
                           </tr>
