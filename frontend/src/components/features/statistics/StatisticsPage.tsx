@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { TrendingUp, Users, Music, Disc, Guitar, Calendar, CalendarDays, Clock, Timer } from 'lucide-react'
-import { VIKING_DESIGN, cn } from '@/lib/design-tokens'
+import { VIKING_DESIGN, VIKING_TYPOGRAPHY, cn } from '@/lib/design-tokens'
 import { StatsTable } from '@/components/StatsTable'
 
 type StatType = 'artists' | 'tracks' | 'albums' | 'genres' | 'years' | 'dates' | 'times' | 'durations'
@@ -27,19 +27,20 @@ export function StatisticsPage() {
       <div className={VIKING_DESIGN.layouts.header.wrapper}>
         <div className={VIKING_DESIGN.layouts.header.title}>
           <TrendingUp className="w-6 h-6 text-viking-purple" />
-          <h1 className={VIKING_DESIGN.typography.title.page}>Statistics</h1>
+          <h1 className={VIKING_TYPOGRAPHY.heading.xl}>Statistics</h1>
         </div>
 
-        {/* Time Range Filter - ANALOG RECENT LISTENS */}
+        {/* Time Range Filter */}
         <div className="flex items-center gap-2">
-          <span className={cn("text-sm font-medium", VIKING_DESIGN.colors.text.secondary)}>
+          <span className={VIKING_TYPOGRAPHY.label.default}>
             Time Range:
           </span>
           <select
             value={timeRange}
             onChange={(e) => setTimeRange(e.target.value as TimeRange)}
             className={cn(
-              "px-3 py-2 rounded-lg text-sm font-medium",
+              "px-3 py-2 rounded-lg",
+              VIKING_TYPOGRAPHY.body.m,
               VIKING_DESIGN.colors.card.elevated,
               VIKING_DESIGN.colors.text.primary,
               "border border-viking-border-default",
@@ -82,7 +83,7 @@ export function StatisticsPage() {
               )}
             >
               <span className="text-2xl">{config.emoji}</span>
-              <span className="text-xs font-semibold text-center leading-tight">
+              <span className={VIKING_TYPOGRAPHY.label.inline}>
                 {config.label}
               </span>
             </button>
