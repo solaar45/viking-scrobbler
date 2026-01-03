@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react"
-import { Activity, RefreshCw, ChevronDown } from "lucide-react"
+import { Activity, RefreshCw, ChevronLeft, ChevronRight } from "lucide-react"
 import { RecentListen } from "./types"
 
 interface DateTimeFormats {
@@ -67,6 +67,39 @@ function formatDuration(sec: number) {
   return `${m}:${s.toString().padStart(2, "0")}`
 }
 
+// Format color mapping with grouped variations
+function getFormatBadgeColor(format: string | undefined): string {
+  if (!format) return "bg-gray-500"
+  
+  const fmt = format.toUpperCase()
+  
+  // Group 1: Standard Lossy (Blue tones)
+  if (fmt === "MP3") return "bg-blue-500"
+  if (fmt === "AAC") return "bg-blue-400"
+  if (fmt === "M4A") return "bg-blue-500/90" // Blue-medium
+  if (fmt === "OGG" || fmt === "VORBIS") return "bg-blue-600"
+  
+  // Group 2: High-Efficiency Lossy (Orange tones)
+  if (fmt === "OPUS") return "bg-orange-500"
+  if (fmt === "WMA") return "bg-orange-400"
+  
+  // Group 3: Lossless (Green tones)
+  if (fmt === "FLAC") return "bg-green-500"
+  if (fmt === "ALAC") return "bg-green-400"
+  if (fmt === "APE") return "bg-green-600"
+  if (fmt === "WAVPACK" || fmt === "WV") return "bg-green-500/90" // Green-medium
+  if (fmt === "TTA") return "bg-green-600/90"
+  
+  // Group 4: Uncompressed (Purple tones)
+  if (fmt === "WAV") return "bg-purple-500"
+  if (fmt === "AIFF" || fmt === "AIF") return "bg-purple-400"
+  if (fmt === "PCM") return "bg-purple-600"
+  if (fmt === "DSD" || fmt === "DSF" || fmt === "DFF") return "bg-purple-500/90" // Purple-medium
+  
+  // Unknown format
+  return "bg-gray-500"
+}
+
 interface RecentListensProps {
   recent: RecentListen[]
   period: string
@@ -80,7 +113,8 @@ export default function RecentListens({
   periods,
   onRefresh,
 }: RecentListensProps) {
-  const [displayCount, setDisplayCount] = useState(25)
+  const [currentPage, setCurrentPage] = useState(1)
+  const [pageSize, setPageSize] = useState(25)
 
   const filteredRecent = useMemo(() => {
     if (period === "all_time") return recent
@@ -98,9 +132,20 @@ export default function RecentListens({
     })
   }, [recent, period, periods])
 
-  const visibleRecent = filteredRecent.slice(0, displayCount)
-  const hasMore = filteredRecent.length > displayCount
-  const remainingCount = filteredRecent.length - displayCount
+  // Pagination calculations
+  const totalPages = Math.ceil(filteredRecent.length / pageSize)
+  const startIndex = (currentPage - 1) * pageSize
+  const endIndex = startIndex + pageSize
+  const visibleRecent = filteredRecent.slice(startIndex, endIndex)
+
+  // Reset to page 1 when filters change
+  useMemo(() => {
+    setCurrentPage(1)
+  }, [period, pageSize])
+
+  const goToPage = (page: number) => {
+    setCurrentPage(Math.max(1, Math.min(page, totalPages)))
+  }
 
   return (
     <>
@@ -122,13 +167,13 @@ export default function RecentListens({
         </div>
         <div className="flex items-center gap-3">
           <div className="text-xs font-semibold text-viking-text-tertiary uppercase tracking-wider text-right">
-            Showing {visibleRecent.length} of {filteredRecent.length} tracks
+            {filteredRecent.length} tracks total
           </div>
         </div>
       </div>
 
       {/* TABLE CARD */}
-      <div className="card-dense flex-1 min-h-[500px]">
+      <div className="card-dense flex-1 min-h-[500px] flex flex-col">
         <div className="flex-1 overflow-auto relative">
           {filteredRecent.length === 0 ? (
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-6">
@@ -155,66 +200,169 @@ export default function RecentListens({
               </button>
             </div>
           ) : (
-            <>
-              <table className="table-dense">
-                <thead className="sticky top-0 z-10 backdrop-blur-sm">
-                  <tr>
-                    <th className="table-head-dense pl-6 text-left w-[22%]">Track</th>
-                    <th className="table-head-dense text-left w-[14%]">Artist</th>
-                    <th className="table-head-dense text-left w-[14%]">Album</th>
-                    <th className="table-head-dense text-left w-[8%]">Year</th>
-                    <th className="table-head-dense text-left w-[12%]">Genre</th>
-                    <th className="table-head-dense text-right w-[10%]">Date</th>
-                    <th className="table-head-dense text-right w-[9%]">Time</th>
-                    <th className="table-head-dense text-right pr-6 w-[8%]">Duration</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-viking-border-subtle">
-                  {visibleRecent.map((item) => (
+            <table className="table-dense table-auto w-full">
+              <thead className="sticky top-0 z-10 backdrop-blur-sm">
+                <tr>
+                  {/* Flexible columns - get most space */}
+                  <th className="table-head-dense pl-6 text-left w-auto min-w-[200px]">Track</th>
+                  <th className="table-head-dense text-left w-auto min-w-[120px]">Artist</th>
+                  <th className="table-head-dense text-left w-auto min-w-[120px]">Album</th>
+                  
+                  {/* Content-fit columns - minimal width */}
+                  <th className="table-head-dense text-left w-1 whitespace-nowrap">Year</th>
+                  <th className="table-head-dense text-left w-32">Genre</th>
+                  <th className="table-head-dense text-center w-1 whitespace-nowrap">Format</th>
+                  <th className="table-head-dense text-right w-1 whitespace-nowrap">Date</th>
+                  <th className="table-head-dense text-right w-1 whitespace-nowrap">Time</th>
+                  <th className="table-head-dense text-right pr-6 w-1 whitespace-nowrap">Duration</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-viking-border-subtle">
+                {visibleRecent.map((item) => {
+                  const format = item.originalFormat
+                  const bitrate = item.originalBitRate
+                  const formatColor = getFormatBadgeColor(format)
+                  
+                  return (
                     <tr key={item.id} className="table-row-dense">
-                      <td className="table-cell-dense table-cell-primary pl-6 truncate max-w-[200px]">
+                      {/* Flexible columns */}
+                      <td className="table-cell-dense table-cell-primary pl-6 w-auto min-w-[200px] truncate">
                         {item.track}
                       </td>
-                      <td className="table-cell-dense table-cell-secondary truncate max-w-[150px]">
+                      <td className="table-cell-dense table-cell-secondary w-auto min-w-[120px] truncate">
                         {item.artist}
                       </td>
-                      <td className="table-cell-dense table-cell-secondary truncate max-w-[150px]">
+                      <td className="table-cell-dense table-cell-secondary w-auto min-w-[120px] truncate">
                         {item.album}
                       </td>
-                      <td className="table-cell-dense table-cell-secondary truncate max-w-[80px]">
+                      
+                      {/* Content-fit columns */}
+                      <td className="table-cell-dense table-cell-secondary w-1 whitespace-nowrap">
                         {item.releaseYear ?? "—"}
                       </td>
-                      <td className="table-cell-dense table-cell-secondary truncate max-w-[140px] font-medium text-emerald-400">
+                      <td className="table-cell-dense table-cell-secondary w-32 truncate font-medium text-emerald-400">
                         {item.genres}
                       </td>
-                      <td className="table-cell-dense table-cell-secondary text-right truncate max-w-[150px]">
+                      <td className="table-cell-dense table-cell-secondary w-1 whitespace-nowrap text-center">
+                        {format ? (
+                          <div className="flex items-center justify-center gap-1.5">
+                            <span
+                              className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold text-white uppercase tracking-wider ${formatColor}`}
+                            >
+                              {format}
+                            </span>
+                            {bitrate && (
+                              <span className="text-[10px] font-semibold text-viking-text-tertiary">
+                                {bitrate}k
+                              </span>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-viking-text-tertiary text-xs">—</span>
+                        )}
+                      </td>
+                      <td className="table-cell-dense table-cell-secondary w-1 whitespace-nowrap text-right">
                         {formatDate(item.playedAt)}
                       </td>
-                      <td className="table-cell-dense table-cell-secondary text-right truncate max-w-[150px]">
+                      <td className="table-cell-dense table-cell-secondary w-1 whitespace-nowrap text-right">
                         {formatTime(item.playedAt)}
                       </td>
-                      <td className="table-cell-dense table-cell-secondary text-right pr-6 truncate max-w-[150px]">
+                      <td className="table-cell-dense table-cell-secondary w-1 whitespace-nowrap text-right pr-6">
                         {formatDuration(item.duration)}
                       </td>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-
-              {hasMore && (
-                <div className="sticky bottom-0 bg-gradient-to-t from-viking-bg-secondary via-viking-bg-secondary to-transparent pt-6 pb-4 flex justify-center border-t border-viking-border-subtle">
-                  <button
-                    onClick={() => setDisplayCount((prev) => prev + 25)}
-                    className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-viking-purple to-viking-purple-dark hover:from-viking-purple-dark hover:to-viking-purple text-white rounded-lg text-xs font-bold uppercase tracking-widest transition-all shadow-lg shadow-viking-purple/20 hover:shadow-xl hover:shadow-viking-purple/30"
-                  >
-                    <ChevronDown className="w-4 h-4" />
-                    Load 25 More ({remainingCount} remaining)
-                  </button>
-                </div>
-              )}
-            </>
+                  )
+                })}
+              </tbody>
+            </table>
           )}
         </div>
+
+        {/* PAGINATION FOOTER */}
+        {filteredRecent.length > 0 && (
+          <div className="border-t border-viking-border-subtle bg-viking-bg-secondary/50 backdrop-blur-sm">
+            <div className="px-6 py-4 flex items-center justify-between">
+              {/* Left: Page size selector */}
+              <div className="flex items-center gap-3">
+                <span className="text-xs font-semibold text-viking-text-tertiary uppercase tracking-wider">
+                  Show:
+                </span>
+                <div className="flex items-center gap-1">
+                  {[25, 50, 100, 200].map((size) => (
+                    <button
+                      key={size}
+                      onClick={() => setPageSize(size)}
+                      className={`px-3 py-1.5 rounded text-xs font-bold uppercase tracking-wider transition-all ${
+                        pageSize === size
+                          ? "bg-viking-purple text-white shadow-lg shadow-viking-purple/20"
+                          : "bg-viking-bg-tertiary text-viking-text-secondary hover:bg-viking-bg-elevated hover:text-viking-text-primary"
+                      }`}
+                    >
+                      {size}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Center: Page info */}
+              <div className="text-xs font-semibold text-viking-text-tertiary">
+                Page {currentPage} of {totalPages} • Showing {startIndex + 1}-
+                {Math.min(endIndex, filteredRecent.length)} of {filteredRecent.length}
+              </div>
+
+              {/* Right: Navigation */}
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => goToPage(currentPage - 1)}
+                  disabled={currentPage === 1}
+                  className="p-2 rounded bg-viking-bg-tertiary text-viking-text-secondary hover:bg-viking-bg-elevated hover:text-viking-text-primary disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                  aria-label="Previous page"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+
+                {/* Page numbers */}
+                <div className="flex items-center gap-1">
+                  {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                    let pageNum: number
+                    if (totalPages <= 5) {
+                      pageNum = i + 1
+                    } else if (currentPage <= 3) {
+                      pageNum = i + 1
+                    } else if (currentPage >= totalPages - 2) {
+                      pageNum = totalPages - 4 + i
+                    } else {
+                      pageNum = currentPage - 2 + i
+                    }
+
+                    return (
+                      <button
+                        key={pageNum}
+                        onClick={() => goToPage(pageNum)}
+                        className={`min-w-[32px] h-8 px-2 rounded text-xs font-bold transition-all ${
+                          currentPage === pageNum
+                            ? "bg-viking-purple text-white shadow-lg shadow-viking-purple/20"
+                            : "bg-viking-bg-tertiary text-viking-text-secondary hover:bg-viking-bg-elevated hover:text-viking-text-primary"
+                        }`}
+                      >
+                        {pageNum}
+                      </button>
+                    )
+                  })}
+                </div>
+
+                <button
+                  onClick={() => goToPage(currentPage + 1)}
+                  disabled={currentPage === totalPages}
+                  className="p-2 rounded bg-viking-bg-tertiary text-viking-text-secondary hover:bg-viking-bg-elevated hover:text-viking-text-primary disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                  aria-label="Next page"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </>
   )

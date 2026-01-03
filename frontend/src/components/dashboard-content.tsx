@@ -2,9 +2,10 @@
 
 import { useEffect, useState, useMemo, useRef } from "react"
 import { TooltipProvider } from "@/components/ui/tooltip"
-import { Activity, RefreshCw, ChevronDown, TrendingUp, TrendingDown } from "lucide-react"
+import { Activity, RefreshCw, ChevronLeft, ChevronRight, TrendingUp, TrendingDown } from "lucide-react"
 import { DashboardSkeleton } from "./DashboardSkeleton"
-import { ListenRow } from './ListenRow'
+import { StatsCover } from './StatsCover'
+import { getCoverUrl } from '@/lib/cover-utils'
 
 // --- TYPES ---
 export interface PeriodStats {
@@ -29,6 +30,13 @@ export interface RecentListen {
   duration: number
   releaseYear?: string | number
   genres?: string
+  additional_info?: {
+    navidrome_id?: string
+    originalBitRate?: number
+    originalFormat?: string
+    media_player?: string
+    [key: string]: any
+  }
 }
 
 export interface DashboardStats {
@@ -85,6 +93,38 @@ function calculateTrend(current?: number, lifetime?: number): number | undefined
   return (diff / lifetime) * 100
 }
 
+// Format color mapping with grouped variations
+function getFormatBadgeColor(format: string | undefined): string {
+  if (!format) return "bg-gray-500"
+  
+  const fmt = format.toUpperCase()
+  
+  // Group 1: Standard Lossy (Blue tones)
+  if (fmt === "MP3") return "bg-blue-500"
+  if (fmt === "AAC") return "bg-blue-400"
+  if (fmt === "M4A") return "bg-blue-500/90"
+  if (fmt === "OGG" || fmt === "VORBIS") return "bg-blue-600"
+  
+  // Group 2: High-Efficiency Lossy (Orange tones)
+  if (fmt === "OPUS") return "bg-orange-500"
+  if (fmt === "WMA") return "bg-orange-400"
+  
+  // Group 3: Lossless (Green tones)
+  if (fmt === "FLAC") return "bg-green-500"
+  if (fmt === "ALAC") return "bg-green-400"
+  if (fmt === "APE") return "bg-green-600"
+  if (fmt === "WAVPACK" || fmt === "WV") return "bg-green-500/90"
+  if (fmt === "TTA") return "bg-green-600/90"
+  
+  // Group 4: Uncompressed (Purple tones)
+  if (fmt === "WAV") return "bg-purple-500"
+  if (fmt === "AIFF" || fmt === "AIF") return "bg-purple-400"
+  if (fmt === "PCM") return "bg-purple-600"
+  if (fmt === "DSD" || fmt === "DSF" || fmt === "DFF") return "bg-purple-500/90"
+  
+  return "bg-gray-500"
+}
+
 // --- METRIC CARD ---
 type MetricSegmentProps = {
   label: string
@@ -139,12 +179,13 @@ function MetricSegment({
             <TrendingDown className="w-3 h-3 text-red-500" strokeWidth={2.5} />
           )}
           <span
-            className={`font-semibold ${trendPositive
-              ? "text-emerald-500"
-              : trendNegative
-                ? "text-red-500"
-                : "text-viking-text-tertiary"
-              }`}
+            className={`font-semibold ${
+              trendPositive
+                ? "text-emerald-500"
+                : trendNegative
+                  ? "text-red-500"
+                  : "text-viking-text-tertiary"
+            }`}
           >
             {trendPositive ? "+" : ""}
             {trendValue.toFixed(1)}%
@@ -162,7 +203,8 @@ export default function DashboardContent() {
   const [data, setData] = useState<DashboardStats | null>(null)
   const [loading, setLoading] = useState(false)
   const [username, setUsername] = useState<string>("viking_user")
-  const [displayCount, setDisplayCount] = useState(25)
+  const [currentPage, setCurrentPage] = useState(1)
+  const [pageSize, setPageSize] = useState(25)
   const [isConnected, setIsConnected] = useState(false)
   const socketRef = useRef<WebSocket | null>(null)
 
@@ -173,8 +215,12 @@ export default function DashboardContent() {
       setUsername(storedUsername)
     }
     fetchStats()
-    setDisplayCount(25)
   }, [period])
+
+  // Reset page when filters change
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [period, pageSize])
 
   // WebSocket Connection
   useEffect(() => {
@@ -273,7 +319,6 @@ export default function DashboardContent() {
           ),
           releaseYear: listen.additional_info?.release_year ?? undefined,
           genres: listen.additional_info?.genres || "–",
-          // ✅ FIX: Übergib additional_info komplett!
           additional_info: listen.additional_info || {},
         })
       )
@@ -339,10 +384,8 @@ export default function DashboardContent() {
     songs: calculateTrend(filtered?.uniqueTracks, lifetime?.uniqueTracks),
     albums: calculateTrend(filtered?.uniqueAlbums, lifetime?.uniqueAlbums),
     avgPerDay: calculateTrend(filtered?.avgPerDay, lifetime?.avgPerDay),
-    // für Tage / Streak eher Dummy: aktueller vs. lifetime-Max
     streak: calculateTrend(filtered?.currentStreak, lifetime?.currentStreak),
   }
-
 
   const filteredRecent = useMemo(() => {
     if (period === "all_time") return allRecent
@@ -360,9 +403,15 @@ export default function DashboardContent() {
     })
   }, [allRecent, period])
 
-  const visibleRecent = filteredRecent.slice(0, displayCount)
-  const hasMore = filteredRecent.length > displayCount
-  const remainingCount = filteredRecent.length - displayCount
+  // Pagination calculations
+  const totalPages = Math.ceil(filteredRecent.length / pageSize)
+  const startIndex = (currentPage - 1) * pageSize
+  const endIndex = startIndex + pageSize
+  const visibleRecent = filteredRecent.slice(startIndex, endIndex)
+
+  const goToPage = (page: number) => {
+    setCurrentPage(Math.max(1, Math.min(page, totalPages)))
+  }
 
   return (
     <TooltipProvider>
@@ -372,7 +421,7 @@ export default function DashboardContent() {
         <div className="flex flex-col gap-6 w-full animate-in fade-in duration-500">
           {/* OVERVIEW HEADER + 8×1 METRICS GRID */}
           <div className="flex flex-col gap-4">
-            {/* HEADER (abgelöst, wie Recent Listens) */}
+            {/* HEADER */}
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <span className="card-title-dense">Overview</span>
@@ -401,10 +450,11 @@ export default function DashboardContent() {
                   <button
                     key={id}
                     onClick={() => setPeriod(id)}
-                    className={`text-xs font-semibold px-4 py-2 rounded-md transition-all uppercase tracking-wide whitespace-nowrap ${period === id
-                      ? "bg-gradient-to-r from-viking-purple to-viking-purple-dark text-white shadow-lg shadow-viking-purple/20"
-                      : "text-viking-text-tertiary hover:text-viking-text-secondary hover:bg-viking-bg-elevated"
-                      }`}
+                    className={`text-xs font-semibold px-4 py-2 rounded-md transition-all uppercase tracking-wide whitespace-nowrap ${
+                      period === id
+                        ? "bg-gradient-to-r from-viking-purple to-viking-purple-dark text-white shadow-lg shadow-viking-purple/20"
+                        : "text-viking-text-tertiary hover:text-viking-text-secondary hover:bg-viking-bg-elevated"
+                    }`}
                   >
                     {label}
                   </button>
@@ -412,7 +462,7 @@ export default function DashboardContent() {
               </div>
             </div>
 
-            {/* 8×1 METRICS GRID – freischwebend */}
+            {/* 8×1 METRICS GRID */}
             <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-8 gap-4">
               <MetricSegment
                 label="Plays"
@@ -469,14 +519,12 @@ export default function DashboardContent() {
                 label="Top Day"
                 valueStr={filtered?.mostActiveDay}
                 loading={loading}
-              // kein sinnvoller %-Trend, daher ohne 3. Zeile
               />
               <MetricSegment
                 label="Best Day"
                 valueStr={formattedBestDay}
                 loading={loading}
               />
-
               <MetricSegment
                 label="Streak"
                 value={filtered?.currentStreak}
@@ -489,20 +537,16 @@ export default function DashboardContent() {
                 }
               />
             </div>
-
           </div>
 
-          {/* RECENT LISTENS HEADER – freischwebend, wie Overview */}
+          {/* RECENT LISTENS HEADER */}
           <div className="flex items-center justify-between">
-            {/* Linke Seite: Titel + Period + LIVE */}
             <div className="flex items-center gap-3">
               <h3 className="card-title-dense">Recent Listens</h3>
               <span className="text-viking-border-emphasis text-xl font-light">|</span>
-              {/* Period Label wie bei Overview */}
               <span className="text-xs font-semibold text-viking-text-tertiary uppercase tracking-wider">
                 {PERIODS.find((item) => item.id === period)?.label}
               </span>
-              {/* Live Badge */}
               <div className="badge-live">
                 <span className="relative flex h-2 w-2">
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
@@ -511,16 +555,15 @@ export default function DashboardContent() {
                 <span className="text-[10px] font-bold tracking-widest">LIVE</span>
               </div>
             </div>
-            {/* Rechte Seite: Showing X of Y */}
             <div className="flex items-center gap-3">
               <div className="text-xs font-semibold text-viking-text-tertiary uppercase tracking-wider text-right">
-                Showing {visibleRecent.length} of {filteredRecent.length} tracks
+                {filteredRecent.length} tracks total
               </div>
             </div>
           </div>
 
-          {/* RECENT LISTENS TABLE – Card nur für Tabelle */}
-          <div className="card-dense flex-1 min-h-[500px]">
+          {/* RECENT LISTENS TABLE */}
+          <div className="card-dense flex-1 min-h-[500px] flex flex-col">
             <div className="flex-1 overflow-auto relative">
               {filteredRecent.length === 0 ? (
                 <div className="absolute inset-0 flex flex-col items-center justify-center gap-6">
@@ -547,75 +590,213 @@ export default function DashboardContent() {
                   </button>
                 </div>
               ) : (
-                <>
-                  <table className="table-dense">
-                    <thead className="sticky top-0 z-10 backdrop-blur-sm">
-                      <tr>
-                        <th className="table-head-dense pl-6 text-left w-[50px]">
-                          {/* Cover */}
-                        </th>
-                        <th className="table-head-dense pl-6 text-left w-[22%]">
-                          Track
-                        </th>
-                        <th className="table-head-dense text-left w-[14%]">
-                          Artist
-                        </th>
-                        <th className="table-head-dense text-left w-[14%]">
-                          Album
-                        </th>
-                        <th className="table-head-dense text-left w-[8%]">
-                          Year
-                        </th>
-                        <th className="table-head-dense text-left w-[12%]">
-                          Genre
-                        </th>
-                        <th className="table-head-dense text-right w-[10%]">
-                          Date
-                        </th>
-                        <th className="table-head-dense text-right w-[9%]">
-                          Time
-                        </th>
-                        <th className="table-head-dense text-right pr-6 w-[8%]">
-                          Duration
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-viking-border-subtle">
-                      {visibleRecent.map((item) => (
-                        <ListenRow
-                          key={item.id}
-                          listen={item}
-                          formatDate={formatDate}
-                          formatTime={formatTime}
-                          formatDuration={formatDuration}
-                        />
-                      ))}
-                    </tbody>
-                  </table>
+                <table className="table-dense table-auto w-full">
+                  <thead className="sticky top-0 z-10 backdrop-blur-sm">
+                    <tr>
+                      <th className="table-head-dense pl-6 text-left w-[50px]">
+                        {/* Cover */}
+                      </th>
+                      <th className="table-head-dense text-left w-auto min-w-[200px]">Track</th>
+                      <th className="table-head-dense text-left w-auto min-w-[120px]">Artist</th>
+                      <th className="table-head-dense text-left w-auto min-w-[120px]">Album</th>
+                      <th className="table-head-dense text-left w-1 whitespace-nowrap">Year</th>
+                      <th className="table-head-dense text-left w-32">Genre</th>
+                      <th className="table-head-dense text-right w-1 whitespace-nowrap">Bitrate</th>
+                      <th className="table-head-dense text-center w-1 whitespace-nowrap">Format</th>
+                      <th className="table-head-dense text-left w-1 whitespace-nowrap">Player</th>
+                      <th className="table-head-dense text-right w-1 whitespace-nowrap">Date</th>
+                      <th className="table-head-dense text-right w-1 whitespace-nowrap">Time</th>
+                      <th className="table-head-dense text-right pr-6 w-1 whitespace-nowrap">Duration</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-viking-border-subtle">
+                    {visibleRecent.map((item) => {
+                      const format = item.additional_info?.originalFormat
+                      const bitrate = item.additional_info?.originalBitRate
+                      const player = item.additional_info?.media_player
+                      const formatColor = getFormatBadgeColor(format)
+                      const coverUrl = getCoverUrl({ additional_info: item.additional_info }, 80)
 
-                  {hasMore && (
-                    <div className="sticky bottom-0 bg-gradient-to-t from-viking-bg-secondary via-viking-bg-secondary to-transparent pt-6 pb-4 flex justify-center border-t border-viking-border-subtle">
-                      <button
-                        onClick={() => setDisplayCount((prev) => prev + 25)}
-                        className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-viking-purple to-viking-purple-dark hover:from-viking-purple-dark hover:to-viking-purple text-white rounded-lg text-xs font-bold uppercase tracking-widest transition-all shadow-lg shadow-viking-purple/20 hover:shadow-xl hover:shadow-viking-purple/30"
-                      >
-                        <ChevronDown className="w-4 h-4" />
-                        Load 25 More ({remainingCount} remaining)
-                      </button>
-                    </div>
-                  )}
-                </>
+                      return (
+                        <tr key={item.id} className="table-row-dense">
+                          {/* Cover */}
+                          <td className="table-cell-dense pl-6 w-[50px]">
+                            <StatsCover 
+                              coverUrl={coverUrl}
+                              name={item.artist}
+                              size="sm"
+                            />
+                          </td>
+                          
+                          {/* Track */}
+                          <td className="table-cell-dense table-cell-primary w-auto min-w-[200px] truncate">
+                            {item.track}
+                          </td>
+                          
+                          {/* Artist */}
+                          <td className="table-cell-dense table-cell-secondary w-auto min-w-[120px] truncate">
+                            {item.artist}
+                          </td>
+                          
+                          {/* Album */}
+                          <td className="table-cell-dense table-cell-secondary w-auto min-w-[120px] truncate">
+                            {item.album}
+                          </td>
+                          
+                          {/* Year */}
+                          <td className="table-cell-dense table-cell-secondary w-1 whitespace-nowrap">
+                            {item.releaseYear ?? "—"}
+                          </td>
+                          
+                          {/* Genre */}
+                          <td className="table-cell-dense table-cell-secondary w-32 truncate font-medium text-emerald-400">
+                            {item.genres}
+                          </td>
+                          
+                          {/* Bitrate */}
+                          <td className="table-cell-dense table-cell-secondary w-1 whitespace-nowrap text-right">
+                            {bitrate ? (
+                              <span className="text-xs font-semibold text-viking-text-tertiary">
+                                {bitrate} kbps
+                              </span>
+                            ) : (
+                              <span className="text-viking-text-tertiary text-xs">—</span>
+                            )}
+                          </td>
+                          
+                          {/* Format */}
+                          <td className="table-cell-dense table-cell-secondary w-1 whitespace-nowrap text-center">
+                            {format ? (
+                              <span
+                                className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold text-white uppercase tracking-wider ${formatColor}`}
+                              >
+                                {format}
+                              </span>
+                            ) : (
+                              <span className="text-viking-text-tertiary text-xs">—</span>
+                            )}
+                          </td>
+                          
+                          {/* Player */}
+                          <td className="table-cell-dense table-cell-secondary w-1 whitespace-nowrap">
+                            {player || "—"}
+                          </td>
+                          
+                          {/* Date */}
+                          <td className="table-cell-dense table-cell-secondary w-1 whitespace-nowrap text-right">
+                            {formatDate(item.playedAt)}
+                          </td>
+                          
+                          {/* Time */}
+                          <td className="table-cell-dense table-cell-secondary w-1 whitespace-nowrap text-right">
+                            {formatTime(item.playedAt)}
+                          </td>
+                          
+                          {/* Duration */}
+                          <td className="table-cell-dense table-cell-secondary w-1 whitespace-nowrap text-right pr-6">
+                            {formatDuration(item.duration)}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
               )}
             </div>
-          </div>
 
+            {/* PAGINATION FOOTER */}
+            {filteredRecent.length > 0 && (
+              <div className="border-t border-viking-border-subtle bg-viking-bg-secondary/50 backdrop-blur-sm">
+                <div className="px-6 py-4 flex items-center justify-between">
+                  {/* Left: Page size selector */}
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs font-semibold text-viking-text-tertiary uppercase tracking-wider">
+                      Show:
+                    </span>
+                    <div className="flex items-center gap-1">
+                      {[25, 50, 100, 200].map((size) => (
+                        <button
+                          key={size}
+                          onClick={() => setPageSize(size)}
+                          className={`px-3 py-1.5 rounded text-xs font-bold uppercase tracking-wider transition-all ${
+                            pageSize === size
+                              ? "bg-viking-purple text-white shadow-lg shadow-viking-purple/20"
+                              : "bg-viking-bg-tertiary text-viking-text-secondary hover:bg-viking-bg-elevated hover:text-viking-text-primary"
+                          }`}
+                        >
+                          {size}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Center: Page info */}
+                  <div className="text-xs font-semibold text-viking-text-tertiary">
+                    Page {currentPage} of {totalPages} • Showing {startIndex + 1}-
+                    {Math.min(endIndex, filteredRecent.length)} of {filteredRecent.length}
+                  </div>
+
+                  {/* Right: Navigation */}
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => goToPage(currentPage - 1)}
+                      disabled={currentPage === 1}
+                      className="p-2 rounded bg-viking-bg-tertiary text-viking-text-secondary hover:bg-viking-bg-elevated hover:text-viking-text-primary disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                      aria-label="Previous page"
+                    >
+                      <ChevronLeft className="w-4 h-4" />
+                    </button>
+
+                    {/* Page numbers */}
+                    <div className="flex items-center gap-1">
+                      {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                        let pageNum: number
+                        if (totalPages <= 5) {
+                          pageNum = i + 1
+                        } else if (currentPage <= 3) {
+                          pageNum = i + 1
+                        } else if (currentPage >= totalPages - 2) {
+                          pageNum = totalPages - 4 + i
+                        } else {
+                          pageNum = currentPage - 2 + i
+                        }
+
+                        return (
+                          <button
+                            key={pageNum}
+                            onClick={() => goToPage(pageNum)}
+                            className={`min-w-[32px] h-8 px-2 rounded text-xs font-bold transition-all ${
+                              currentPage === pageNum
+                                ? "bg-viking-purple text-white shadow-lg shadow-viking-purple/20"
+                                : "bg-viking-bg-tertiary text-viking-text-secondary hover:bg-viking-bg-elevated hover:text-viking-text-primary"
+                            }`}
+                          >
+                            {pageNum}
+                          </button>
+                        )
+                      })}
+                    </div>
+
+                    <button
+                      onClick={() => goToPage(currentPage + 1)}
+                      disabled={currentPage === totalPages}
+                      className="p-2 rounded bg-viking-bg-tertiary text-viking-text-secondary hover:bg-viking-bg-elevated hover:text-viking-text-primary disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                      aria-label="Next page"
+                    >
+                      <ChevronRight className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       )}
     </TooltipProvider>
   )
 }
 
-// --- FORMAT HELPERS WITH CUSTOM FORMATS ---
+// --- FORMAT HELPERS ---
 function getDateTimeFormats(): DateTimeFormats {
   const saved = localStorage.getItem("datetime_formats")
   if (saved) {
@@ -634,8 +815,6 @@ function getDateTimeFormats(): DateTimeFormats {
 function formatDate(iso: string) {
   if (!iso) return "-"
   const d = new Date(iso)
-
-  // Wenn Datum ungültig → früh raus
   if (isNaN(d.getTime())) return String(iso)
 
   const formats = getDateTimeFormats()
@@ -675,5 +854,4 @@ function formatDuration(sec: number) {
   if (!sec) return "0:00"
   const m = Math.floor(sec / 60)
   const s = sec % 60
-  return `${m}:${s.toString().padStart(2, "0")}`
-}
+  return `${m}:${s.toString().padStart(2, "0")}`}

@@ -9,7 +9,7 @@ defmodule AppApiWeb.ListenBrainzController do
   """
 
   use AppApiWeb, :controller
-  alias AppApi.{Repo, Listen, Stats}
+  alias AppApi.{Repo, Listen, Stats, PlayerSessionCache}
   alias AppApiWeb.TokenController
   import Ecto.Query
   require Logger
@@ -41,6 +41,8 @@ defmodule AppApiWeb.ListenBrainzController do
             process_live_scrobbles(conn, payload, user_name)
 
           "playing_now" ->
+            # Update cache when playing_now is received
+            update_player_cache_from_now_playing(user_name, payload)
             json(conn, %{status: "ok", message: "playing_now received"})
 
           "import" ->
@@ -335,9 +337,28 @@ defmodule AppApiWeb.ListenBrainzController do
   # ============================================================================
 
   defp process_live_scrobbles(conn, payload, user_name) when is_list(payload) do
+    # Extract first track info for player matching
+    first_track = List.first(payload)
+    track_metadata = first_track && (first_track["track_metadata"] || %{})
+    scrobble_track = track_metadata && track_metadata["track_name"]
+    scrobble_artist = track_metadata && track_metadata["artist_name"]
+    
+    # STEP 1: Get player info with track validation
+    player_info = get_player_info_validated(user_name, scrobble_track, scrobble_artist)
+    
+    Logger.info("🎮 Player info for #{user_name}: #{inspect(player_info)}")
+    
     listens =
       Enum.map(payload, fn listen_data ->
         track_metadata = listen_data["track_metadata"] || %{}
+        base_additional_info = track_metadata["additional_info"] || %{}
+        
+        # Use discovered player info
+        enriched_additional_info = 
+          base_additional_info
+          |> Map.put("media_player", player_info.player)
+          |> maybe_put("player_client", player_info.client)
+          |> maybe_put("player_platform", player_info.platform)
 
         %{
           listened_at: parse_timestamp(listen_data["listened_at"]),
@@ -347,7 +368,7 @@ defmodule AppApiWeb.ListenBrainzController do
           recording_mbid: get_in(track_metadata, ["additional_info", "recording_mbid"]),
           artist_mbid: get_in(track_metadata, ["additional_info", "artist_mbid"]),
           release_mbid: get_in(track_metadata, ["additional_info", "release_mbid"]),
-          additional_info: track_metadata["additional_info"] || %{},
+          additional_info: enriched_additional_info,
           user_name: user_name,
           inserted_at: DateTime.utc_now() |> DateTime.truncate(:second)
         }
@@ -358,7 +379,7 @@ defmodule AppApiWeb.ListenBrainzController do
       {count, _} when count > 0 ->
         Logger.info("✅ Scrobbled #{count} tracks for #{user_name}")
 
-        # Real-time metadata enrichment
+        # Async enrichment: metadata (genres, bitrate, format)
         listens_to_enrich =
           Listen
           |> where([l], l.user_name == ^user_name)
@@ -368,6 +389,7 @@ defmodule AppApiWeb.ListenBrainzController do
 
         Task.start(fn ->
           Enum.each(listens_to_enrich, fn listen ->
+            # Enrich metadata (genres, bitrate, format, etc.)
             case AppApi.NavidromeIntegration.enrich_listen_from_navidrome(listen) do
               {:ok, _} ->
                 Logger.debug("✅ Enriched from Navidrome: #{listen.track_name}")
@@ -398,6 +420,117 @@ defmodule AppApiWeb.ListenBrainzController do
         |> json(%{status: "error", message: "Failed to insert listens"})
     end
   end
+
+  # Update cache when playing_now is received (best time to capture player info)
+  defp update_player_cache_from_now_playing(user_name, payload) when is_list(payload) do
+    first_track = List.first(payload)
+    
+    if first_track do
+      track_metadata = first_track["track_metadata"] || %{}
+      track_name = track_metadata["track_name"]
+      artist_name = track_metadata["artist_name"]
+      
+      # Try to get player info from getNowPlaying
+      case fetch_player_from_navidrome_with_track(user_name, track_name, artist_name) do
+        {:ok, player_info} ->
+          PlayerSessionCache.put_player(user_name, player_info)
+          Logger.info("🎮 Updated cache from playing_now: #{player_info.player}")
+          :ok
+        
+        _ ->
+          :ok
+      end
+    end
+  end
+  
+  defp update_player_cache_from_now_playing(_, _), do: :ok
+
+  # Get player info with track validation (prevents delayed scrobble issues)
+  defp get_player_info_validated(user_name, scrobble_track, scrobble_artist) do
+    case fetch_player_from_navidrome_with_track(user_name, scrobble_track, scrobble_artist) do
+      {:ok, player_info} ->
+        # Fresh data, update cache
+        PlayerSessionCache.put_player(user_name, player_info)
+        player_info
+      
+      {:error, :track_mismatch} ->
+        # Delayed scrobble: use cached player (don't query getNowPlaying)
+        Logger.debug("⏱️  Delayed scrobble detected, using cached player")
+        
+        case PlayerSessionCache.get_player(user_name) do
+          {:ok, cached_info} ->
+            Logger.info("🎮 Found cached player: #{cached_info.player}")
+            cached_info
+          
+          {:error, _} ->
+            Logger.debug("⚠️ No cached player available")
+            %{player: "Unknown Client", client: nil, platform: nil}
+        end
+      
+      {:error, _reason} ->
+        # Other error: fallback to cache
+        case PlayerSessionCache.get_player(user_name) do
+          {:ok, cached_info} ->
+            Logger.debug("🎮 Using cached player: #{cached_info.player}")
+            cached_info
+          
+          {:error, _} ->
+            Logger.debug("⚠️ No player info available")
+            %{player: "Unknown Client", client: nil, platform: nil}
+        end
+    end
+  end
+
+  # Fetch player info from Navidrome and validate track match
+  defp fetch_player_from_navidrome_with_track(user_name, expected_track, expected_artist) do
+    # Create a dummy listen just to get navidrome config
+    dummy_listen = %Listen{user_name: user_name, additional_info: %{}}
+    
+    case AppApi.NavidromeIntegration.resolve_navidrome_config(dummy_listen) do
+      {:ok, navidrome_config} ->
+        case AppApi.NavidromeIntegration.get_now_playing(
+          navidrome_config.url,
+          navidrome_config.username,
+          navidrome_config.password
+        ) do
+          {:ok, now_playing_data} ->
+            # Validate: does getNowPlaying track match the scrobble?
+            now_playing_track = now_playing_data[:title] || now_playing_data[:track]
+            now_playing_artist = now_playing_data[:artist]
+            
+            track_matches = normalize_string(now_playing_track) == normalize_string(expected_track)
+            artist_matches = normalize_string(now_playing_artist) == normalize_string(expected_artist)
+            
+            if track_matches and artist_matches do
+              # Match! Use this player info
+              parsed = AppApi.NavidromeIntegration.parse_player_name(now_playing_data.player_name)
+              Logger.info("🎮 Found active player: #{parsed.player}")
+              {:ok, parsed}
+            else
+              # Mismatch: delayed scrobble
+              Logger.debug("⏱️  Track mismatch (delayed scrobble). Expected: #{expected_track}, Got: #{now_playing_track}")
+              {:error, :track_mismatch}
+            end
+          
+          error ->
+            Logger.debug("⚠️ getNowPlaying failed: #{inspect(error)}")
+            error
+        end
+      
+      error ->
+        Logger.debug("⚠️ No Navidrome config: #{inspect(error)}")
+        error
+    end
+  end
+  
+  # Normalize strings for comparison (case-insensitive, trim whitespace)
+  defp normalize_string(nil), do: ""
+  defp normalize_string(str) when is_binary(str), do: String.downcase(String.trim(str))
+  defp normalize_string(_), do: ""
+
+  # Helper to conditionally add keys to map
+  defp maybe_put(map, _key, nil), do: map
+  defp maybe_put(map, key, value), do: Map.put(map, key, value)
 
   defp format_listen(listen) do
     metadata =
@@ -502,7 +635,6 @@ defmodule AppApiWeb.ListenBrainzController do
     tracknumber = base_info["tracknumber"] || listen.tracknumber
     discnumber = base_info["discnumber"] || listen.discnumber
 
-    # ✅ FIX: navidrome_id aus metadata in additional_info mergen
     navidrome_id = metadata["navidrome_id"] || base_info["navidrome_id"]
 
     merged_info =
@@ -512,8 +644,9 @@ defmodule AppApiWeb.ListenBrainzController do
       |> Map.put_new("discnumber", discnumber)
       |> Map.put("genres", genres)
       |> Map.put("release_year", release_year)
-      # ✅ Cover ID durchreichen!
       |> Map.put("navidrome_id", navidrome_id)
+      |> maybe_put("originalBitRate", base_info["originalBitRate"])
+      |> maybe_put("originalFormat", base_info["originalFormat"])
 
     %{
       listened_at: listen.listened_at,

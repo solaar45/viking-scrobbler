@@ -13,6 +13,9 @@ interface ListenRowProps {
     genres?: string
     additional_info?: {
       navidrome_id?: string
+      originalBitRate?: number
+      originalFormat?: string
+      media_player?: string
       [key: string]: any
     }
   }
@@ -23,6 +26,17 @@ interface ListenRowProps {
 
 export function ListenRow({ listen, formatDate, formatTime, formatDuration }: ListenRowProps) {
   const coverUrl = getCoverUrl({ additional_info: listen.additional_info }, 80)
+  
+  // Format bitrate, format and player
+  const bitrate = listen.additional_info?.originalBitRate 
+    ? `${listen.additional_info.originalBitRate} kbps`
+    : "—"
+  
+  const format = listen.additional_info?.originalFormat
+    ? listen.additional_info.originalFormat.toUpperCase()
+    : "—"
+  
+  const player = listen.additional_info?.media_player || "—"
 
   return (
     <tr className="table-row-dense">
@@ -58,6 +72,21 @@ export function ListenRow({ listen, formatDate, formatTime, formatDuration }: Li
       {/* Genre */}
       <td className="table-cell-dense table-cell-secondary truncate max-w-[140px] font-medium text-emerald-400">
         {listen.genres}
+      </td>
+      
+      {/* Bitrate */}
+      <td className="table-cell-dense table-cell-secondary text-right truncate max-w-[100px]">
+        {bitrate}
+      </td>
+      
+      {/* Format */}
+      <td className="table-cell-dense table-cell-secondary truncate max-w-[80px] text-cyan-400">
+        {format}
+      </td>
+      
+      {/* Player */}
+      <td className="table-cell-dense table-cell-secondary truncate max-w-[120px]">
+        {player}
       </td>
       
       {/* Date */}

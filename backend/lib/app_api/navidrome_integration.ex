@@ -32,12 +32,173 @@ defmodule AppApi.NavidromeIntegration do
   end
 
   @doc """
+  Get currently playing track and player information from Navidrome.
+  Returns {:ok, %{player: \"Feishin [feishin/Windows]\", ...}} or {:error, reason}
+  """
+  def get_now_playing(navidrome_url, username, password) do
+    params = %{
+      "u" => username,
+      "p" => password,
+      "v" => "1.16.1",
+      "c" => "VikingScrobbler",
+      "f" => "json"
+    }
+
+    query_string = URI.encode_query(params)
+    url = "#{navidrome_url}/rest/getNowPlaying?#{query_string}"
+
+    case HTTPoison.get(url, [], recv_timeout: 3000) do
+      {:ok, %{status_code: 200, body: body}} ->
+        parse_now_playing_response(body, username)
+
+      {:ok, %{status_code: code}} ->
+        {:error, "HTTP #{code}"}
+
+      {:error, reason} ->
+        {:error, "Request failed: #{inspect(reason)}"}
+    end
+  end
+
+  @doc """
+  Parse player name from Navidrome format: \"Feishin [feishin/Windows]\"
+  Returns %{player: \"Feishin\", client: \"feishin\", platform: \"Windows\"}
+  """
+  def parse_player_name(nil), do: %{player: "Unknown", client: nil, platform: nil}
+
+  def parse_player_name(player_string) when is_binary(player_string) do
+    # Extract player name and details from format: "Feishin [feishin/Windows]"
+    case Regex.run(~r/^([^\[]+)\s*\[([^\/]+)\/([^\]]+)\]/, player_string) do
+      [_, player_name, client, platform] ->
+        %{
+          player: String.trim(player_name),
+          client: String.trim(client),
+          platform: String.trim(platform)
+        }
+
+      _ ->
+        # Fallback: just use the raw string
+        %{
+          player: String.trim(player_string),
+          client: nil,
+          platform: nil
+        }
+    end
+  end
+
+  @doc """
+  Resolve Navidrome configuration for a listen using hybrid approach.
+  Returns {:ok, %{url: ..., username: ..., password: ...}} or {:error, reason}
+  """
+  def resolve_navidrome_config(listen) do
+    user_name = listen.user_name
+
+    # Priority 1: DB Credentials
+    case get_db_credentials(user_name) do
+      {:ok, config} ->
+        Logger.debug("Using stored credentials for #{user_name}")
+        {:ok, config}
+
+      {:error, _} ->
+        # Priority 2: Auto-Discovery from origin_url
+        case auto_discover_from_listen(listen) do
+          {:ok, config} ->
+            Logger.info("✅ Auto-discovered Navidrome from origin_url")
+            # Speichere für zukünftige Verwendung
+            save_credentials(user_name, config.url, config.username, config.password, true)
+            {:ok, config}
+
+          {:error, _} ->
+            # Priority 3: Network Scan
+            case scan_network_for_navidrome(user_name) do
+              {:ok, config} ->
+                Logger.info("✅ Auto-discovered Navidrome via network scan")
+                {:ok, config}
+
+              {:error, _} ->
+                # Priority 4: ENV Variables
+                case get_env_credentials() do
+                  {:ok, config} ->
+                    Logger.debug("Using ENV credentials")
+                    {:ok, config}
+
+                  {:error, _} ->
+                    {:error, :no_navidrome_config}
+                end
+            end
+        end
+    end
+  end
+
+  defp parse_now_playing_response(body, target_username) do
+    case Jason.decode(body) do
+      {:ok, %{"subsonic-response" => %{"nowPlaying" => %{"entry" => entries}}}}
+      when is_list(entries) ->
+        # Find entry for target user
+        user_entry =
+          Enum.find(entries, fn entry ->
+            entry["username"] == target_username
+          end)
+
+        case user_entry do
+          nil ->
+            {:error, :no_active_session}
+
+          entry ->
+            player_info = %{
+              player_name: entry["playerName"] || "Unknown Player",
+              username: entry["username"],
+              minutes_ago: entry["minutesAgo"],
+              player_id: entry["playerId"],
+              artist: entry["artist"],
+              title: entry["title"]
+            }
+
+            {:ok, player_info}
+        end
+
+      {:ok, %{"subsonic-response" => %{"nowPlaying" => %{}}}} ->
+        {:error, :no_active_playback}
+
+      {:ok, _other} ->
+        {:error, :invalid_response}
+
+      {:error, reason} ->
+        {:error, {:json_decode, reason}}
+    end
+  end
+
+  @doc """
+  Fetch player info for a recent listen by checking Navidrome's now playing.
+  Returns player name string or nil if not found.
+  """
+  def fetch_player_info_for_listen(%Listen{} = listen) do
+    with {:ok, navidrome_config} <- resolve_navidrome_config(listen),
+         {:ok, player_info} <-
+           get_now_playing(
+             navidrome_config.url,
+             navidrome_config.username,
+             navidrome_config.password
+           ) do
+      # Verify this is the right track (match within last 2 minutes)
+      if player_info.minutes_ago <= 2 &&
+           String.downcase(player_info.artist || "") == String.downcase(listen.artist_name) &&
+           String.downcase(player_info.title || "") == String.downcase(listen.track_name) do
+        {:ok, parse_player_name(player_info.player_name)}
+      else
+        {:error, :track_mismatch}
+      end
+    else
+      error -> error
+    end
+  end
+
+  @doc """
   Batch enrich recent listens without genres for a specific user.
   Returns count of successfully enriched listens.
 
   ## Examples
 
-      iex> AppApi.NavidromeIntegration.enrich_recent_listens("viking_user", 50)
+      iex> AppApi.NavidromeIntegration.enrich_recent_listens(\"viking_user\", 50)
       42
   """
   def enrich_recent_listens(user_name, count \\ 50)
@@ -129,46 +290,6 @@ defmodule AppApi.NavidromeIntegration do
   end
 
   # === HYBRID CONFIG RESOLUTION ===
-
-  defp resolve_navidrome_config(listen) do
-    user_name = listen.user_name
-
-    # Priority 1: DB Credentials
-    case get_db_credentials(user_name) do
-      {:ok, config} ->
-        Logger.debug("Using stored credentials for #{user_name}")
-        {:ok, config}
-
-      {:error, _} ->
-        # Priority 2: Auto-Discovery from origin_url
-        case auto_discover_from_listen(listen) do
-          {:ok, config} ->
-            Logger.info("✅ Auto-discovered Navidrome from origin_url")
-            # Speichere für zukünftige Verwendung
-            save_credentials(user_name, config.url, config.username, config.password, true)
-            {:ok, config}
-
-          {:error, _} ->
-            # Priority 3: Network Scan
-            case scan_network_for_navidrome(user_name) do
-              {:ok, config} ->
-                Logger.info("✅ Auto-discovered Navidrome via network scan")
-                {:ok, config}
-
-              {:error, _} ->
-                # Priority 4: ENV Variables
-                case get_env_credentials() do
-                  {:ok, config} ->
-                    Logger.debug("Using ENV credentials")
-                    {:ok, config}
-
-                  {:error, _} ->
-                    {:error, :no_navidrome_config}
-                end
-            end
-        end
-    end
-  end
 
   # === PRIORITY 1: DATABASE CREDENTIALS ===
 
@@ -405,6 +526,7 @@ defmodule AppApi.NavidromeIntegration do
       "tracknumber" => song["track"],
       "discnumber" => song["discNumber"],
       "bitrate" => song["bitRate"],
+      "format" => song["suffix"],
       "path" => song["path"],
       "navidrome_id" => song["id"],
       "coverArt" => song["coverArt"]
@@ -427,10 +549,17 @@ defmodule AppApi.NavidromeIntegration do
     genres = navidrome_data["genres"]
 
     if genres && length(genres) > 0 do
-      current_metadata = parse_metadata(listen.metadata)
+      # CRITICAL: Reload from DB to get latest additional_info (includes media_player etc.)
+      fresh_listen = Repo.get!(Listen, listen.id)
+      
+      current_metadata = parse_metadata(fresh_listen.metadata)
+      current_additional_info = fresh_listen.additional_info || %{}
+
+      # INFO: Log what we're getting from Navidrome
+      Logger.info("🔍 Navidrome bitrate=#{inspect(navidrome_data["bitrate"])}, format=#{inspect(navidrome_data["format"])}")
 
       # Merge selected Navidrome fields into metadata (only when present)
-      extra =
+      extra_metadata =
         %{}
         |> maybe_put(navidrome_data, "genres", genres)
         |> maybe_put(navidrome_data, "year", navidrome_data["year"])
@@ -444,15 +573,24 @@ defmodule AppApi.NavidromeIntegration do
         |> maybe_put(navidrome_data, "coverArt", navidrome_data["coverArt"])
         |> Map.put("source", "navidrome_id3")
 
-      new_metadata = Map.merge(current_metadata, extra)
+      # Merge bitRate and format into additional_info (use maybe_put to skip nils)
+      updated_additional_info =
+        current_additional_info
+        |> maybe_put(navidrome_data, "originalBitRate", navidrome_data["bitrate"])
+        |> maybe_put(navidrome_data, "originalFormat", navidrome_data["format"])
+
+      Logger.info("🔍 Updated additional_info keys: #{inspect(Map.keys(updated_additional_info))}")
+
+      new_metadata = Map.merge(current_metadata, extra_metadata)
 
       changeset =
-        listen
+        fresh_listen
         |> Ecto.Changeset.change(%{
           metadata: Jason.encode!(new_metadata),
-          duration_ms: listen.duration_ms || navidrome_data["duration_ms"],
-          tracknumber: listen.tracknumber || navidrome_data["tracknumber"],
-          discnumber: listen.discnumber || navidrome_data["discnumber"]
+          additional_info: updated_additional_info,
+          duration_ms: fresh_listen.duration_ms || navidrome_data["duration_ms"],
+          tracknumber: fresh_listen.tracknumber || navidrome_data["tracknumber"],
+          discnumber: fresh_listen.discnumber || navidrome_data["discnumber"]
         })
 
       case Repo.update(changeset) do
