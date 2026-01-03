@@ -542,8 +542,11 @@ defmodule AppApi.NavidromeIntegration do
     genres = navidrome_data["genres"]
 
     if genres && length(genres) > 0 do
-      current_metadata = parse_metadata(listen.metadata)
-      current_additional_info = listen.additional_info || %{}
+      # CRITICAL: Reload from DB to get latest additional_info (includes media_player etc.)
+      fresh_listen = Repo.get!(Listen, listen.id)
+      
+      current_metadata = parse_metadata(fresh_listen.metadata)
+      current_additional_info = fresh_listen.additional_info || %{}
 
       # DEBUG: Log what we're getting from Navidrome
       Logger.debug("🔍 Navidrome data: bitrate=#{inspect(navidrome_data["bitrate"])}, format=#{inspect(navidrome_data["format"])}")
@@ -574,13 +577,13 @@ defmodule AppApi.NavidromeIntegration do
       new_metadata = Map.merge(current_metadata, extra_metadata)
 
       changeset =
-        listen
+        fresh_listen
         |> Ecto.Changeset.change(%{
           metadata: Jason.encode!(new_metadata),
           additional_info: updated_additional_info,
-          duration_ms: listen.duration_ms || navidrome_data["duration_ms"],
-          tracknumber: listen.tracknumber || navidrome_data["tracknumber"],
-          discnumber: listen.discnumber || navidrome_data["discnumber"]
+          duration_ms: fresh_listen.duration_ms || navidrome_data["duration_ms"],
+          tracknumber: fresh_listen.tracknumber || navidrome_data["tracknumber"],
+          discnumber: fresh_listen.discnumber || navidrome_data["discnumber"]
         })
 
       case Repo.update(changeset) do
