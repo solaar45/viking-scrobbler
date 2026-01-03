@@ -601,23 +601,26 @@ export function RecentListensPage() {
                     </button>
                   </div>
                 ) : (
-                  <table className="table-dense table-auto w-full">
+                  <table className="table-dense w-full">
                     <thead className="sticky top-0 z-10 backdrop-blur-sm">
                       <tr>
-                        <th className="table-head-dense pl-6 text-left w-[50px]">
-                          {/* Cover */}
-                        </th>
-                        <th className="table-head-dense text-left w-auto min-w-[200px]">Track</th>
-                        <th className="table-head-dense text-left w-auto min-w-[120px]">Artist</th>
-                        <th className="table-head-dense text-left w-auto min-w-[120px]">Album</th>
-                        <th className="table-head-dense text-left w-1 whitespace-nowrap">Year</th>
-                        <th className="table-head-dense text-left w-32">Genre</th>
-                        <th className="table-head-dense text-right w-1 whitespace-nowrap">Bitrate</th>
-                        <th className="table-head-dense text-center w-1 whitespace-nowrap">Format</th>
-                        <th className="table-head-dense text-left w-1 whitespace-nowrap">Player</th>
-                        <th className="table-head-dense text-right w-1 whitespace-nowrap">Date</th>
-                        <th className="table-head-dense text-right w-1 whitespace-nowrap">Time</th>
-                        <th className="table-head-dense text-right pr-6 w-1 whitespace-nowrap">Duration</th>
+                        {/* MUSIC INFO GROUP */}
+                        <th className="table-head-dense pl-6 text-left w-[50px]"></th>
+                        <th className="table-head-dense text-left w-[180px]">Track</th>
+                        <th className="table-head-dense text-left w-[140px]">Artist</th>
+                        <th className="table-head-dense text-left w-[140px]">Album</th>
+                        <th className="table-head-dense text-left w-[55px]">Year</th>
+                        <th className="table-head-dense text-left w-[110px] border-r border-viking-border-subtle/30">Genre</th>
+                        
+                        {/* FILE METADATA GROUP */}
+                        <th className="table-head-dense text-right w-[80px]">Bitrate</th>
+                        <th className="table-head-dense text-center w-[70px]">Format</th>
+                        <th className="table-head-dense text-right w-[70px] border-r border-viking-border-subtle/30">Duration</th>
+                        
+                        {/* USAGE METADATA GROUP */}
+                        <th className="table-head-dense text-left w-[100px]">Player</th>
+                        <th className="table-head-dense text-right w-[90px]">Date</th>
+                        <th className="table-head-dense text-right w-[60px] pr-6">Time</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-viking-border-subtle">
@@ -630,7 +633,7 @@ export function RecentListensPage() {
 
                         return (
                           <tr key={item.id} className="table-row-dense">
-                            {/* Cover */}
+                            {/* MUSIC INFO GROUP */}
                             <td className="table-cell-dense pl-6 w-[50px]">
                               <StatsCover 
                                 coverUrl={coverUrl}
@@ -638,34 +641,24 @@ export function RecentListensPage() {
                                 size="sm"
                               />
                             </td>
-                            
-                            {/* Track */}
-                            <td className="table-cell-dense table-cell-primary w-auto min-w-[200px] truncate">
+                            <td className="table-cell-dense table-cell-primary w-[180px] truncate">
                               {item.track}
                             </td>
-                            
-                            {/* Artist */}
-                            <td className="table-cell-dense table-cell-secondary w-auto min-w-[120px] truncate">
+                            <td className="table-cell-dense table-cell-secondary w-[140px] truncate">
                               {item.artist}
                             </td>
-                            
-                            {/* Album */}
-                            <td className="table-cell-dense table-cell-secondary w-auto min-w-[120px] truncate">
+                            <td className="table-cell-dense table-cell-secondary w-[140px] truncate">
                               {item.album}
                             </td>
-                            
-                            {/* Year */}
-                            <td className="table-cell-dense table-cell-secondary w-1 whitespace-nowrap">
+                            <td className="table-cell-dense table-cell-secondary w-[55px]">
                               {item.releaseYear ?? "—"}
                             </td>
-                            
-                            {/* Genre */}
-                            <td className="table-cell-dense table-cell-secondary w-32 truncate font-medium text-emerald-400">
+                            <td className="table-cell-dense table-cell-secondary w-[110px] truncate font-medium text-emerald-400 border-r border-viking-border-subtle/30">
                               {item.genres}
                             </td>
                             
-                            {/* Bitrate */}
-                            <td className="table-cell-dense table-cell-secondary w-1 whitespace-nowrap text-right">
+                            {/* FILE METADATA GROUP */}
+                            <td className="table-cell-dense table-cell-secondary w-[80px] text-right">
                               {bitrate ? (
                                 <span className="text-xs font-semibold text-viking-text-tertiary">
                                   {bitrate} kbps
@@ -674,9 +667,7 @@ export function RecentListensPage() {
                                 <span className="text-viking-text-tertiary text-xs">—</span>
                               )}
                             </td>
-                            
-                            {/* Format */}
-                            <td className="table-cell-dense table-cell-secondary w-1 whitespace-nowrap text-center">
+                            <td className="table-cell-dense table-cell-secondary w-[70px] text-center">
                               {format ? (
                                 <span
                                   className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold text-white uppercase tracking-wider ${formatColor}`}
@@ -687,25 +678,19 @@ export function RecentListensPage() {
                                 <span className="text-viking-text-tertiary text-xs">—</span>
                               )}
                             </td>
+                            <td className="table-cell-dense table-cell-secondary w-[70px] text-right border-r border-viking-border-subtle/30">
+                              {formatDuration(item.duration)}
+                            </td>
                             
-                            {/* Player */}
-                            <td className="table-cell-dense table-cell-secondary w-1 whitespace-nowrap">
+                            {/* USAGE METADATA GROUP */}
+                            <td className="table-cell-dense table-cell-secondary w-[100px] truncate">
                               {player || "—"}
                             </td>
-                            
-                            {/* Date */}
-                            <td className="table-cell-dense table-cell-secondary w-1 whitespace-nowrap text-right">
+                            <td className="table-cell-dense table-cell-secondary w-[90px] text-right">
                               {formatDate(item.playedAt)}
                             </td>
-                            
-                            {/* Time */}
-                            <td className="table-cell-dense table-cell-secondary w-1 whitespace-nowrap text-right">
+                            <td className="table-cell-dense table-cell-secondary w-[60px] text-right pr-6">
                               {formatTime(item.playedAt)}
-                            </td>
-                            
-                            {/* Duration */}
-                            <td className="table-cell-dense table-cell-secondary w-1 whitespace-nowrap text-right pr-6">
-                              {formatDuration(item.duration)}
                             </td>
                           </tr>
                         )
