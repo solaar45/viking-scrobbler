@@ -1,31 +1,15 @@
 import { useEffect, useState } from 'react'
 import { BarChart3, Music, Users, Disc, Clock, TrendingUp, ArrowRight } from 'lucide-react'
 import { VIKING_DESIGN, VIKING_TYPOGRAPHY, cn } from '@/lib/design-tokens'
-import { StatsCover } from '@/components/StatsCover'
-import { getCoverUrl } from '@/lib/cover-utils'
 
 interface DashboardStats {
   total_plays: number
   unique_artists: number
   unique_albums: number
   total_listening_time: string
-  top_artist: { 
-    name: string
-    plays: number
-    additional_info?: { navidrome_id?: string }
-  }
-  top_track: { 
-    name: string
-    artist: string
-    plays: number
-    additional_info?: { navidrome_id?: string }
-  }
-  top_album: { 
-    name: string
-    artist: string
-    plays: number
-    additional_info?: { navidrome_id?: string }
-  }
+  top_artist: { name: string; plays: number }
+  top_track: { name: string; artist: string; plays: number }
+  top_album: { name: string; artist: string; plays: number }
   recent_activity: Array<{ date: string; plays: number }>
 }
 
@@ -45,62 +29,22 @@ export function OverviewPage() {
       if (!resp.ok) throw new Error(`Failed to load overview: ${resp.status}`)
       const body = await resp.json()
 
-      console.log('🎵 Overview API Response:', body)
-
       // Ensure recent_activity dates are ISO strings for the chart
       const recent = (body.recent_activity || []).map((r: any) => ({
         date: r.date && r.date.length ? new Date(r.date).toISOString() : new Date().toISOString(),
         plays: r.plays || 0
       }))
 
-      const statsData: DashboardStats = {
+      setStats({
         total_plays: body.total_plays || 0,
         unique_artists: body.unique_artists || 0,
         unique_albums: body.unique_albums || 0,
         total_listening_time: body.total_listening_time || '0h 0m',
-        top_artist: {
-          name: body.top_artist?.name || 'N/A',
-          plays: body.top_artist?.plays || 0,
-          additional_info: body.top_artist?.additional_info || undefined
-        },
-        top_track: {
-          name: body.top_track?.name || 'N/A',
-          artist: body.top_track?.artist || 'N/A',
-          plays: body.top_track?.plays || 0,
-          additional_info: body.top_track?.additional_info || undefined
-        },
-        top_album: {
-          name: body.top_album?.name || 'N/A',
-          artist: body.top_album?.artist || 'N/A',
-          plays: body.top_album?.plays || 0,
-          additional_info: body.top_album?.additional_info || undefined
-        },
+        top_artist: body.top_artist || { name: 'N/A', plays: 0 },
+        top_track: body.top_track || { name: 'N/A', artist: 'N/A', plays: 0 },
+        top_album: body.top_album || { name: 'N/A', artist: 'N/A', plays: 0 },
         recent_activity: recent
-      }
-
-      // Debug cover URLs
-      console.log('🎨 Top Artist Cover:', {
-        name: statsData.top_artist.name,
-        hasAdditionalInfo: !!statsData.top_artist.additional_info,
-        navidromeId: statsData.top_artist.additional_info?.navidrome_id,
-        coverUrl: getCoverUrl({ additional_info: statsData.top_artist.additional_info }, 240)
       })
-
-      console.log('🎨 Top Track Cover:', {
-        name: statsData.top_track.name,
-        hasAdditionalInfo: !!statsData.top_track.additional_info,
-        navidromeId: statsData.top_track.additional_info?.navidrome_id,
-        coverUrl: getCoverUrl({ additional_info: statsData.top_track.additional_info }, 240)
-      })
-
-      console.log('🎨 Top Album Cover:', {
-        name: statsData.top_album.name,
-        hasAdditionalInfo: !!statsData.top_album.additional_info,
-        navidromeId: statsData.top_album.additional_info?.navidrome_id,
-        coverUrl: getCoverUrl({ additional_info: statsData.top_album.additional_info }, 240)
-      })
-
-      setStats(statsData)
     } catch (error) {
       console.error('Failed to load overview stats', error)
     } finally {
@@ -190,7 +134,6 @@ export function OverviewPage() {
           medal="🥇"
           name={stats.top_artist.name}
           plays={stats.top_artist.plays}
-          additional_info={stats.top_artist.additional_info}
         />
         <TopCard
           type="track"
@@ -198,7 +141,6 @@ export function OverviewPage() {
           name={stats.top_track.name}
           subtitle={stats.top_track.artist}
           plays={stats.top_track.plays}
-          additional_info={stats.top_track.additional_info}
         />
         <TopCard
           type="album"
@@ -206,7 +148,6 @@ export function OverviewPage() {
           name={stats.top_album.name}
           subtitle={stats.top_album.artist}
           plays={stats.top_album.plays}
-          additional_info={stats.top_album.additional_info}
         />
       </div>
 
@@ -267,19 +208,15 @@ interface TopCardProps {
   name: string
   subtitle?: string
   plays: number
-  additional_info?: { navidrome_id?: string }
 }
 
-function TopCard({ type, medal, name, subtitle, plays, additional_info }: TopCardProps) {
+function TopCard({ type, medal, name, subtitle, plays }: TopCardProps) {
   const typeIcons = {
     artist: Users,
     track: Music,
     album: Disc,
   }
   const Icon = typeIcons[type]
-  
-  // Get cover URL if available
-  const coverUrl = getCoverUrl({ additional_info }, 180)
 
   return (
     <div className={cn(VIKING_DESIGN.components.card, VIKING_DESIGN.effects.transition.base, "hover:shadow-lg")}>
@@ -291,18 +228,9 @@ function TopCard({ type, medal, name, subtitle, plays, additional_info }: TopCar
           <span className="text-3xl">{medal}</span>
         </div>
         <div className="flex items-center gap-3">
-          {/* Cover or Icon */}
-          {coverUrl ? (
-            <StatsCover
-              coverUrl={coverUrl}
-              name={name}
-              size="lg"
-            />
-          ) : (
-            <div className={cn("p-2 rounded-lg", VIKING_DESIGN.colors.card.elevated)}>
-              <Icon className="w-5 h-5 text-viking-purple" />
-            </div>
-          )}
+          <div className={cn("p-2 rounded-lg", VIKING_DESIGN.colors.card.elevated)}>
+            <Icon className="w-5 h-5 text-viking-purple" />
+          </div>
           <div className="flex-1 min-w-0">
             <p className={cn(VIKING_TYPOGRAPHY.body.l, "font-semibold truncate")}>
               {name}
