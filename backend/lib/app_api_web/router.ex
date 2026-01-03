@@ -40,16 +40,20 @@ defmodule AppApiWeb.Router do
     # Metadata Enrichment
     get("/enrichment/scan", EnrichmentController, :scan)
     post("/enrichment/start", EnrichmentController, :start)
+    
+    # Player Info Backfill
+    get("/enrichment/scan-player-info", EnrichmentController, :scan_player_info)
+    post("/enrichment/backfill-player-info", EnrichmentController, :backfill_player_info)
 
-    # ═══════════════════════════════════════════════════════════
+    # ═══════════════════════════════════════════════════════════════
     # COVER ART PROXY (ID3 ONLY)
-    # ═══════════════════════════════════════════════════════════
+    # ═══════════════════════════════════════════════════════════════
     get "/covers/:navidrome_id", CoverController, :show_by_navidrome_id
     get "/listens/:listen_id/cover", CoverController, :show_by_listen_id
 
-    # ═══════════════════════════════════════════════════════════
+    # ═══════════════════════════════════════════════════════════════
     # STATS ENDPOINTS
-    # ═══════════════════════════════════════════════════════════
+    # ═══════════════════════════════════════════════════════════════
 
     get "/stats/overview", StatsController, :overview
     get "/stats/top-artists", StatsController, :top_artists
