@@ -1,6 +1,6 @@
 import { Clock } from 'lucide-react'
 import { VIKING_DESIGN } from '@/lib/design-tokens'
-import DashboardContent from './dashboard-content'
+import DashboardContent from './DashboardContent'
 
 export function RecentListensPage() {
   return (
