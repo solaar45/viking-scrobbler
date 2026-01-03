@@ -6,7 +6,7 @@ import { Activity, RefreshCw, ChevronLeft, ChevronRight, TrendingUp, TrendingDow
 import { DashboardSkeleton } from "@/components/layout"
 import { StatsCover } from '@/components/StatsCover'
 import { getCoverUrl } from '@/lib/cover-utils'
-import { VIKING_DESIGN } from '@/lib/design-tokens'
+import { VIKING_DESIGN, VIKING_TYPOGRAPHY } from '@/lib/design-tokens'
 
 // --- TYPES ---
 export interface PeriodStats {
@@ -156,15 +156,15 @@ function MetricSegment({
     <div className="bg-viking-bg-secondary hover:bg-viking-bg-tertiary/50 rounded-lg px-5 py-4 min-h-[110px] transition-colors duration-200 cursor-default border border-viking-border-subtle/50">
 
       {/* Zeile 1: Titel */}
-      <div className="text-lg text-viking-text-secondary mb-3">{label}</div>
+      <div className={`${VIKING_TYPOGRAPHY.label.inline} mb-3`}>{label}</div>
 
-      {/* Zeile 2: Wert */}
+      {/* Zeile 2: Wert - NEW: Use display.l (36px, mono, semibold) */}
       <div className="flex items-baseline gap-1.5 mb-1.5">
-        <span className="font-mono text-4xl font-semibold text-white leading-none">
+        <span className={VIKING_TYPOGRAPHY.display.l}>
           {loading ? "..." : displayValue}
         </span>
         {unit && (
-          <span className="font-mono text-base font-semibold text-viking-text-tertiary">
+          <span className={VIKING_TYPOGRAPHY.data.s}>
             {unit}
           </span>
         )}
@@ -420,7 +420,7 @@ export function RecentListensPage() {
       <div className={VIKING_DESIGN.layouts.header.wrapper}>
         <div className={VIKING_DESIGN.layouts.header.title}>
           <Clock className="w-6 h-6 text-viking-purple" />
-          <h1 className={VIKING_DESIGN.typography.title.page}>Recent Listens</h1>
+          <h1 className={VIKING_TYPOGRAPHY.heading.xl}>Recent Listens</h1>
         </div>
       </div>
 
@@ -439,7 +439,7 @@ export function RecentListensPage() {
                   <span className="text-viking-border-emphasis text-xl font-light">
                     |
                   </span>
-                  <span className="text-xs font-semibold text-viking-text-tertiary uppercase tracking-wider">
+                  <span className={VIKING_TYPOGRAPHY.label.inline}>
                     {PERIODS.find((item) => item.id === period)?.label}
                   </span>
                   {isConnected && (
@@ -448,7 +448,7 @@ export function RecentListensPage() {
                         <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                         <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
                       </span>
-                      <span className="text-[10px] font-bold tracking-widest">
+                      <span className={VIKING_TYPOGRAPHY.label.badge}>
                         LIVE
                       </span>
                     </div>
@@ -555,7 +555,7 @@ export function RecentListensPage() {
               <div className="flex items-center gap-3">
                 <h3 className="card-title-dense">Recent Listens</h3>
                 <span className="text-viking-border-emphasis text-xl font-light">|</span>
-                <span className="text-xs font-semibold text-viking-text-tertiary uppercase tracking-wider">
+                <span className={VIKING_TYPOGRAPHY.label.inline}>
                   {PERIODS.find((item) => item.id === period)?.label}
                 </span>
                 <div className="badge-live">
@@ -563,11 +563,11 @@ export function RecentListensPage() {
                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                     <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
                   </span>
-                  <span className="text-[10px] font-bold tracking-widest">LIVE</span>
+                  <span className={VIKING_TYPOGRAPHY.label.badge}>LIVE</span>
                 </div>
               </div>
               <div className="flex items-center gap-3">
-                <div className="text-xs font-semibold text-viking-text-tertiary uppercase tracking-wider text-right">
+                <div className={VIKING_TYPOGRAPHY.label.inline}>
                   {filteredRecent.length} tracks total
                 </div>
               </div>
@@ -650,7 +650,8 @@ export function RecentListensPage() {
                             <td className="table-cell-dense table-cell-secondary w-[140px] truncate">
                               {item.album}
                             </td>
-                            <td className="table-cell-dense table-cell-secondary w-[55px] font-mono">
+                            {/* NEW: Use data.m for Year column */}
+                            <td className={`table-cell-dense w-[55px] ${VIKING_TYPOGRAPHY.data.m}`}>
                               {item.releaseYear ?? "—"}
                             </td>
                             <td className="table-cell-dense table-cell-secondary w-[110px] truncate font-medium text-emerald-400 border-r border-viking-border-emphasis/50">
@@ -658,9 +659,9 @@ export function RecentListensPage() {
                             </td>
                             
                             {/* FILE METADATA GROUP */}
-                            <td className="table-cell-dense table-cell-secondary w-[80px] text-right">
+                            <td className="table-cell-dense w-[80px] text-right">
                               {bitrate ? (
-                                <span className="text-xs font-semibold text-viking-text-tertiary font-mono">
+                                <span className={VIKING_TYPOGRAPHY.data.s}>
                                   {bitrate} kbps
                                 </span>
                               ) : (
@@ -670,7 +671,7 @@ export function RecentListensPage() {
                             <td className="table-cell-dense table-cell-secondary w-[70px] text-center">
                               {format ? (
                                 <span
-                                  className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold text-white uppercase tracking-wider ${formatColor}`}
+                                  className={`inline-flex items-center px-2 py-0.5 rounded ${VIKING_TYPOGRAPHY.label.badge} text-white ${formatColor}`}
                                 >
                                   {format}
                                 </span>
@@ -678,7 +679,8 @@ export function RecentListensPage() {
                                 <span className="text-viking-text-tertiary text-xs">—</span>
                               )}
                             </td>
-                            <td className="table-cell-dense table-cell-secondary w-[70px] text-right border-r border-viking-border-emphasis/50 font-mono">
+                            {/* NEW: Use data.m for Duration column */}
+                            <td className={`table-cell-dense w-[70px] text-right border-r border-viking-border-emphasis/50 ${VIKING_TYPOGRAPHY.data.m}`}>
                               {formatDuration(item.duration)}
                             </td>
                             
@@ -686,10 +688,12 @@ export function RecentListensPage() {
                             <td className="table-cell-dense table-cell-secondary w-[100px] truncate">
                               {player || "—"}
                             </td>
-                            <td className="table-cell-dense table-cell-secondary w-[90px] text-right font-mono">
+                            {/* NEW: Use data.m for Date column */}
+                            <td className={`table-cell-dense w-[90px] text-right ${VIKING_TYPOGRAPHY.data.m}`}>
                               {formatDate(item.playedAt)}
                             </td>
-                            <td className="table-cell-dense table-cell-secondary w-[60px] text-right pr-6 font-mono">
+                            {/* NEW: Use data.m for Time column */}
+                            <td className={`table-cell-dense w-[60px] text-right pr-6 ${VIKING_TYPOGRAPHY.data.m}`}>
                               {formatTime(item.playedAt)}
                             </td>
                           </tr>
@@ -706,7 +710,7 @@ export function RecentListensPage() {
                   <div className="px-6 py-4 flex items-center justify-between">
                     {/* Left: Page size selector */}
                     <div className="flex items-center gap-3">
-                      <span className="text-xs font-semibold text-viking-text-tertiary uppercase tracking-wider">
+                      <span className={VIKING_TYPOGRAPHY.label.inline}>
                         Show:
                       </span>
                       <div className="flex items-center gap-1">
@@ -727,7 +731,7 @@ export function RecentListensPage() {
                     </div>
 
                     {/* Center: Page info */}
-                    <div className="text-xs font-semibold text-viking-text-tertiary">
+                    <div className={VIKING_TYPOGRAPHY.body.s}>
                       Page {currentPage} of {totalPages} • Showing {startIndex + 1}-
                       {Math.min(endIndex, filteredRecent.length)} of {filteredRecent.length}
                     </div>
