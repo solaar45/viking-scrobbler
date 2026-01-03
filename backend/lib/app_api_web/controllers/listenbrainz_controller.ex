@@ -664,6 +664,8 @@ defmodule AppApiWeb.ListenBrainzController do
       |> Map.put("genres", genres)
       |> Map.put("release_year", release_year)
       |> Map.put("navidrome_id", navidrome_id)
+      |> maybe_put("originalBitRate", base_info["originalBitRate"])
+      |> maybe_put("originalFormat", base_info["originalFormat"])
 
     %{
       listened_at: listen.listened_at,
