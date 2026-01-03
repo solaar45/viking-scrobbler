@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { BarChart3, Music, Users, Disc, Clock, TrendingUp, ArrowRight } from 'lucide-react'
-import { VIKING_DESIGN, cn } from '@/lib/design-tokens'
+import { VIKING_DESIGN, VIKING_TYPOGRAPHY, cn } from '@/lib/design-tokens'
 
 interface DashboardStats {
   total_plays: number
@@ -59,7 +59,7 @@ export function OverviewPage() {
   if (!stats) {
     return (
       <div className={cn("flex items-center justify-center min-h-[400px]", VIKING_DESIGN.colors.text.tertiary)}>
-        <p>No data available</p>
+        <p className={VIKING_TYPOGRAPHY.body.m}>No data available</p>
       </div>
     )
   }
@@ -70,19 +70,20 @@ export function OverviewPage() {
       <div className={VIKING_DESIGN.layouts.header.wrapper}>
         <div className={VIKING_DESIGN.layouts.header.title}>
           <BarChart3 className="w-6 h-6 text-viking-purple" />
-          <h1 className={VIKING_DESIGN.typography.title.page}>Overview</h1>
+          <h1 className={VIKING_TYPOGRAPHY.heading.xl}>Overview</h1>
         </div>
 
-        {/* Time Range Filter - ANALOG RECENT LISTENS */}
+        {/* Time Range Filter */}
         <div className="flex items-center gap-2">
-          <span className={cn("text-sm font-medium", VIKING_DESIGN.colors.text.secondary)}>
+          <span className={VIKING_TYPOGRAPHY.label.default}>
             Time Range:
           </span>
           <select
             value={timeRange}
             onChange={(e) => setTimeRange(e.target.value as any)}
             className={cn(
-              "px-3 py-2 rounded-lg text-sm font-medium",
+              "px-3 py-2 rounded-lg",
+              VIKING_TYPOGRAPHY.body.m,
               VIKING_DESIGN.colors.card.elevated,
               VIKING_DESIGN.colors.text.primary,
               "border border-viking-border-default",
@@ -154,11 +155,11 @@ export function OverviewPage() {
       <div className={VIKING_DESIGN.components.card}>
         <div className={VIKING_DESIGN.components.cardContent}>
           <div className="flex items-center justify-between mb-4">
-            <h2 className={VIKING_DESIGN.typography.title.card}>
+            <h2 className={VIKING_TYPOGRAPHY.heading.m}>
               <TrendingUp className="inline w-5 h-5 mr-2 text-viking-purple" />
               Listening Activity
             </h2>
-            <span className={VIKING_DESIGN.typography.subtitle}>Last 30 Days</span>
+            <span className={VIKING_TYPOGRAPHY.label.inline}>Last 30 Days</span>
           </div>
           <SimpleLineChart data={stats.recent_activity} />
         </div>
@@ -188,8 +189,9 @@ function KPICard({ icon: Icon, title, value, iconColor }: KPICardProps) {
       <div className="p-6">
         <div className="flex items-center justify-between">
           <div>
-            <p className={cn(VIKING_DESIGN.typography.subtitle, "mb-2")}>{title}</p>
-            <p className="text-3xl font-bold text-viking-text-primary">{value}</p>
+            <p className={cn(VIKING_TYPOGRAPHY.label.inline, "mb-2")}>{title}</p>
+            {/* NEW: Use display.l for large stat numbers (36px, mono, semibold) */}
+            <p className={VIKING_TYPOGRAPHY.display.l}>{value}</p>
           </div>
           <div className={cn("p-3 rounded-lg", VIKING_DESIGN.colors.card.elevated)}>
             <Icon className={cn("w-8 h-8", iconColor)} />
@@ -220,7 +222,7 @@ function TopCard({ type, medal, name, subtitle, plays }: TopCardProps) {
     <div className={cn(VIKING_DESIGN.components.card, VIKING_DESIGN.effects.transition.base, "hover:shadow-lg")}>
       <div className="p-6">
         <div className="flex items-start justify-between mb-4">
-          <span className={VIKING_DESIGN.typography.subtitle}>
+          <span className={VIKING_TYPOGRAPHY.label.inline}>
             {type.toUpperCase()}
           </span>
           <span className="text-3xl">{medal}</span>
@@ -230,11 +232,11 @@ function TopCard({ type, medal, name, subtitle, plays }: TopCardProps) {
             <Icon className="w-5 h-5 text-viking-purple" />
           </div>
           <div className="flex-1 min-w-0">
-            <p className={cn("font-semibold truncate", VIKING_DESIGN.colors.text.primary)}>
+            <p className={cn(VIKING_TYPOGRAPHY.body.l, "font-semibold truncate")}>
               {name}
             </p>
             {subtitle && (
-              <p className={cn("text-sm truncate", VIKING_DESIGN.colors.text.tertiary)}>
+              <p className={cn(VIKING_TYPOGRAPHY.body.s, "truncate")}>
                 {subtitle}
               </p>
             )}
@@ -242,8 +244,9 @@ function TopCard({ type, medal, name, subtitle, plays }: TopCardProps) {
         </div>
         <div className="mt-4 pt-4 border-t border-viking-border-default">
           <div className="flex items-center justify-between">
-            <span className={VIKING_DESIGN.typography.helper}>Plays</span>
-            <span className={cn("font-mono font-bold", VIKING_DESIGN.colors.text.secondary)}>
+            <span className={VIKING_TYPOGRAPHY.body.s}>Plays</span>
+            {/* NEW: Use data.m for numeric values */}
+            <span className={VIKING_TYPOGRAPHY.data.m}>
               {plays.toLocaleString()}
             </span>
           </div>
@@ -293,7 +296,7 @@ function CompactTopList({ type }: CompactTopListProps) {
     <div className={VIKING_DESIGN.components.card}>
       <div className={VIKING_DESIGN.components.cardContent}>
         <div className="flex items-center justify-between mb-4">
-          <h3 className={VIKING_DESIGN.typography.title.card}>
+          <h3 className={VIKING_TYPOGRAPHY.heading.m}>
             <Icon className="inline w-5 h-5 mr-2 text-viking-purple" />
             Top {type === 'artists' ? 'Artists' : 'Tracks'}
           </h3>
@@ -305,8 +308,8 @@ function CompactTopList({ type }: CompactTopListProps) {
               window.dispatchEvent(new PopStateEvent('popstate'))
             }}
             className={cn(
-              "flex items-center gap-1 text-xs font-semibold",
-              VIKING_DESIGN.colors.text.tertiary,
+              VIKING_TYPOGRAPHY.interactive.button.ghost,
+              "flex items-center gap-1",
               "hover:text-viking-purple",
               VIKING_DESIGN.effects.transition.base
             )}
@@ -334,21 +337,22 @@ function CompactTopList({ type }: CompactTopListProps) {
                 )}
               >
                 <div className="flex items-center gap-3 flex-1 min-w-0">
-                  <span className={cn("font-mono text-xs", VIKING_DESIGN.colors.text.tertiary)}>
+                  <span className={VIKING_TYPOGRAPHY.data.s}>
                     {i + 1}.
                   </span>
                   <div className="min-w-0 flex-1">
-                    <p className={cn("font-semibold truncate", VIKING_DESIGN.colors.text.primary)}>
+                    <p className={cn(VIKING_TYPOGRAPHY.body.l, "font-semibold truncate")}>
                       {type === 'artists' ? item.name : item.track}
                     </p>
                     {type === 'tracks' && (
-                      <p className={cn("text-xs truncate", VIKING_DESIGN.colors.text.tertiary)}>
+                      <p className={cn(VIKING_TYPOGRAPHY.body.s, "truncate")}>
                         {item.artist}
                       </p>
                     )}
                   </div>
                 </div>
-                <span className={cn("font-mono text-sm font-bold ml-3", VIKING_DESIGN.colors.text.secondary)}>
+                {/* NEW: Use data.m for play counts */}
+                <span className={cn(VIKING_TYPOGRAPHY.data.m, "ml-3")}>
                   {item.plays}↻
                 </span>
               </div>
@@ -380,7 +384,7 @@ function SimpleLineChart({ data }: { data: Array<{ date: string; plays: number }
               />
             </div>
             {i % 5 === 0 && (
-              <span className={cn("text-xs", VIKING_DESIGN.colors.text.tertiary)}>
+              <span className={VIKING_TYPOGRAPHY.body.s}>
                 {new Date(item.date).getDate()}
               </span>
             )}
