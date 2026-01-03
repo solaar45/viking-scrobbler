@@ -78,26 +78,34 @@ export default {
         },
       },
 
-      // === TYPOGRAPHY ===
+      // === TYPOGRAPHY SCALE (Optimized for 16px base) ===
       fontSize: {
-        'xs': ['11px', { lineHeight: '1.5', letterSpacing: '0.01em' }],
-        'sm': ['13px', { lineHeight: '1.5' }],
-        'base': ['15px', { lineHeight: '1.6' }],  // Base = 15px
-        'lg': ['17px', { lineHeight: '1.6' }],
-        'xl': ['20px', { lineHeight: '1.5' }],
-        '2xl': ['24px', { lineHeight: '1.4' }],
-        '3xl': ['30px', { lineHeight: '1.3' }],
-        '4xl': ['36px', { lineHeight: '1.2' }],
-        '5xl': ['48px', { lineHeight: '1.1', letterSpacing: '-0.02em' }], // Stats Numbers
-        '6xl': ['60px', { lineHeight: '1', letterSpacing: '-0.03em' }],
+        // Caption & Micro
+        'xs': ['13px', { lineHeight: '1.5', letterSpacing: '0.01em' }],     // Labels, Meta
+        
+        // Body
+        'sm': ['15px', { lineHeight: '1.6' }],                              // Dense Tables, Secondary
+        'base': ['16px', { lineHeight: '1.6' }],                            // Default Body (UX Standard)
+        'lg': ['17px', { lineHeight: '1.6' }],                              // Emphasized Body
+        
+        // Headings
+        'xl': ['20px', { lineHeight: '1.5' }],                              // Card Titles, Subsections
+        '2xl': ['24px', { lineHeight: '1.4' }],                             // Section Titles
+        '3xl': ['30px', { lineHeight: '1.3' }],                             // Page Titles
+        
+        // Display (Stats/Hero Numbers)
+        '4xl': ['36px', { lineHeight: '1.2' }],                             // Large Stats
+        '5xl': ['48px', { lineHeight: '1.1', letterSpacing: '-0.02em' }],   // Hero Numbers
+        '6xl': ['60px', { lineHeight: '1', letterSpacing: '-0.03em' }],     // Extra Large Display
       },
 
+      // === FONT WEIGHTS (Streamlined) ===
       fontWeight: {
-        normal: '400',
-        medium: '500',
-        semibold: '600',
-        bold: '700',
-        // Removed: extrabold (800), black (900) for consistency
+        normal: '400',    // Body text, descriptions
+        medium: '500',    // Secondary emphasis, labels
+        semibold: '600',  // Headings, important text
+        bold: '700',      // Page titles, display numbers
+        // Removed: 800 (extrabold), 900 (black) - too heavy for data dashboards
       },
 
       // === ANIMATIONS ===
