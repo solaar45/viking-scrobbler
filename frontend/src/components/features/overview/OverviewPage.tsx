@@ -3,31 +3,28 @@ import { BarChart3, Music, Clock, TrendingUp, TrendingDown, Timer } from 'lucide
 import { VIKING_DESIGN, VIKING_TYPOGRAPHY, cn } from '@/lib/design-tokens'
 import { getCoverUrl } from '@/lib/cover-utils'
 
+interface PeriodStats {
+  totalScrobbles: number
+  uniqueArtists: number
+  uniqueTracks: number
+  uniqueAlbums: number
+  mostActiveDay: string | null
+  tracksOnMostActiveDay: number
+  avgPerDay: number
+  peakDay: string | null
+  peakValue: number
+  currentStreak: number
+}
+
 interface DashboardStats {
-  total_plays: number
-  unique_artists: number
-  unique_tracks: number
-  unique_albums: number
+  filtered: PeriodStats
+  lifetime: PeriodStats
   total_listening_time: string
-  avg_per_day: number
-  current_streak: number
-  peak_day: string | null
-  peak_value: number
-  most_active_day: string | null
   top_artist: { name: string; plays: number; additional_info?: any }
   top_track: { name: string; artist: string; plays: number; additional_info?: any }
   top_album: { name: string; artist: string; plays: number; additional_info?: any }
   recent_activity: Array<{ date: string; plays: number }>
   hourly_activity?: Array<{ hour: number; plays: number }>
-}
-
-interface LifetimeStats {
-  total_plays: number
-  unique_artists: number
-  unique_tracks: number
-  unique_albums: number
-  avg_per_day: number
-  current_streak: number
 }
 
 type TrendInfo = {
@@ -53,70 +50,103 @@ function getTrendLabel(timeRange: string): string {
   }
 }
 
+function formatDate(iso: string) {
+  if (!iso) return "—"
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return String(iso)
+  const day = String(d.getDate()).padStart(2, "0")
+  const month = String(d.getMonth() + 1).padStart(2, "0")
+  const year = d.getFullYear()
+  return `${day}.${month}.${year}`
+}
+
 export function OverviewPage() {
   const [stats, setStats] = useState<DashboardStats | null>(null)
-  const [lifetime, setLifetime] = useState<LifetimeStats | null>(null)
   const [loading, setLoading] = useState(true)
   const [timeRange, setTimeRange] = useState<'week' | 'month' | 'year' | 'all_time'>('all_time')
+  const [username, setUsername] = useState<string>('viking_user')
 
   useEffect(() => {
-    loadStats()
-  }, [timeRange])
+    const storedUsername = localStorage.getItem('username')
+    if (storedUsername) {
+      setUsername(storedUsername)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (username) {
+      loadStats()
+    }
+  }, [timeRange, username])
 
   const loadStats = async () => {
     setLoading(true)
     try {
-      // Filtered stats
-      const resp = await fetch(`/api/stats/overview?range=${timeRange}`)
-      if (!resp.ok) throw new Error(`Failed to load overview: ${resp.status}`)
-      const body = await resp.json()
+      // Filtered stats (same API as RecentListens)
+      const statsResponse = await fetch(`/1/stats/user/${username}/totals?range=${timeRange}`)
+      const statsJson = await statsResponse.json()
+      const totals = statsJson.payload || {}
       
-      console.log('📊 Overview API Response:', body)
+      console.log('📊 Overview Stats API Response:', totals)
 
       // Lifetime stats for trends
-      const lifetimeResp = await fetch(`/api/stats/overview?range=all_time`)
-      const lifetimeBody = lifetimeResp.ok ? await lifetimeResp.json() : null
+      const lifetimeResponse = await fetch(`/1/stats/user/${username}/totals?range=all_time`)
+      const lifetimeJson = await lifetimeResponse.json()
+      const lifetimeTotals = lifetimeJson.payload || {}
 
-      // Process recent activity
-      const recent = (body.recent_activity || []).map((r: any) => ({
-        date: r.date && r.date.length ? new Date(r.date).toISOString() : new Date().toISOString(),
-        plays: r.plays || 0
-      }))
+      // Mock data for top items (replace with real API)
+      const topArtist = { name: 'Top Artist', plays: 0 }
+      const topTrack = { name: 'Top Track', artist: 'Artist', plays: 0 }
+      const topAlbum = { name: 'Top Album', artist: 'Artist', plays: 0 }
 
-      // Mock hourly activity (replace with real API)
+      // Mock recent activity
+      const recent = Array.from({ length: 30 }, (_, i) => {
+        const date = new Date()
+        date.setDate(date.getDate() - (29 - i))
+        return {
+          date: date.toISOString(),
+          plays: Math.floor(Math.random() * 50) + 10
+        }
+      })
+
+      // Mock hourly activity
       const hourly = Array.from({ length: 24 }, (_, hour) => ({
         hour,
         plays: Math.floor(Math.random() * 50) + 10
       }))
 
       setStats({
-        total_plays: body.total_plays || 0,
-        unique_artists: body.unique_artists || 0,
-        unique_tracks: body.unique_tracks || 0,
-        unique_albums: body.unique_albums || 0,
-        total_listening_time: body.total_listening_time || '0h 0m',
-        avg_per_day: body.avg_per_day || 0,
-        current_streak: body.current_streak || 0,
-        peak_day: body.peak_day || null,
-        peak_value: body.peak_value || 0,
-        most_active_day: body.most_active_day || null,
-        top_artist: body.top_artist || { name: 'N/A', plays: 0 },
-        top_track: body.top_track || { name: 'N/A', artist: 'N/A', plays: 0 },
-        top_album: body.top_album || { name: 'N/A', artist: 'N/A', plays: 0 },
+        filtered: {
+          totalScrobbles: totals.total_listens || 0,
+          uniqueArtists: totals.unique_artists || 0,
+          uniqueTracks: totals.unique_tracks || 0,
+          uniqueAlbums: totals.unique_albums || 0,
+          mostActiveDay: totals.most_active_day || null,
+          tracksOnMostActiveDay: totals.tracks_on_most_active_day || 0,
+          avgPerDay: totals.avg_per_day || 0,
+          peakDay: totals.peak_day || null,
+          peakValue: totals.peak_value || 0,
+          currentStreak: totals.current_streak || 0,
+        },
+        lifetime: {
+          totalScrobbles: lifetimeTotals.total_listens || 0,
+          uniqueArtists: lifetimeTotals.unique_artists || 0,
+          uniqueTracks: lifetimeTotals.unique_tracks || 0,
+          uniqueAlbums: lifetimeTotals.unique_albums || 0,
+          mostActiveDay: lifetimeTotals.most_active_day || null,
+          tracksOnMostActiveDay: lifetimeTotals.tracks_on_most_active_day || 0,
+          avgPerDay: lifetimeTotals.avg_per_day || 0,
+          peakDay: lifetimeTotals.peak_day || null,
+          peakValue: lifetimeTotals.peak_value || 0,
+          currentStreak: lifetimeTotals.current_streak || 0,
+        },
+        total_listening_time: totals.total_listening_time || '0h 0m',
+        top_artist: topArtist,
+        top_track: topTrack,
+        top_album: topAlbum,
         recent_activity: recent,
         hourly_activity: hourly
       })
-
-      if (lifetimeBody) {
-        setLifetime({
-          total_plays: lifetimeBody.total_plays || 0,
-          unique_artists: lifetimeBody.unique_artists || 0,
-          unique_tracks: lifetimeBody.unique_tracks || 0,
-          unique_albums: lifetimeBody.unique_albums || 0,
-          avg_per_day: lifetimeBody.avg_per_day || 0,
-          current_streak: lifetimeBody.current_streak || 0,
-        })
-      }
     } catch (error) {
       console.error('Failed to load overview stats', error)
     } finally {
@@ -136,14 +166,21 @@ export function OverviewPage() {
     )
   }
 
+  const filtered = stats.filtered
+  const lifetime = stats.lifetime
   const trendLabel = getTrendLabel(timeRange)
+  
+  const formattedBestDay = filtered.peakDay && filtered.peakDay !== '' 
+    ? formatDate(filtered.peakDay) 
+    : filtered.peakDay ?? null
+
   const trends = {
-    plays: calculateTrend(stats.total_plays, lifetime?.total_plays),
-    artists: calculateTrend(stats.unique_artists, lifetime?.unique_artists),
-    tracks: calculateTrend(stats.unique_tracks, lifetime?.unique_tracks),
-    albums: calculateTrend(stats.unique_albums, lifetime?.unique_albums),
-    avgPerDay: calculateTrend(stats.avg_per_day, lifetime?.avg_per_day),
-    streak: calculateTrend(stats.current_streak, lifetime?.current_streak),
+    plays: calculateTrend(filtered.totalScrobbles, lifetime.totalScrobbles),
+    artists: calculateTrend(filtered.uniqueArtists, lifetime.uniqueArtists),
+    tracks: calculateTrend(filtered.uniqueTracks, lifetime.uniqueTracks),
+    albums: calculateTrend(filtered.uniqueAlbums, lifetime.uniqueAlbums),
+    avgPerDay: calculateTrend(filtered.avgPerDay, lifetime.avgPerDay),
+    streak: calculateTrend(filtered.currentStreak, lifetime.currentStreak),
   }
 
   return (
@@ -231,45 +268,45 @@ export function OverviewPage() {
         </div>
       </div>
 
-      {/* 8 KPI CARDS - Compact Grid */}
+      {/* 8 KPI CARDS - Compact Grid (SAME AS RECENT LISTENS) */}
       <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-8 gap-3">
         <MetricCard
           label="Plays"
-          value={stats.total_plays}
+          value={filtered.totalScrobbles}
           trend={trends.plays !== undefined ? { value: trends.plays, label: trendLabel } : undefined}
         />
         <MetricCard
           label="Artists"
-          value={stats.unique_artists}
+          value={filtered.uniqueArtists}
           trend={trends.artists !== undefined ? { value: trends.artists, label: trendLabel } : undefined}
         />
         <MetricCard
           label="Songs"
-          value={stats.unique_tracks}
+          value={filtered.uniqueTracks}
           trend={trends.tracks !== undefined ? { value: trends.tracks, label: trendLabel } : undefined}
         />
         <MetricCard
           label="Albums"
-          value={stats.unique_albums}
+          value={filtered.uniqueAlbums}
           trend={trends.albums !== undefined ? { value: trends.albums, label: trendLabel } : undefined}
         />
         <MetricCard
           label="Daily Avg"
-          value={stats.avg_per_day}
+          value={filtered.avgPerDay}
           unit="tracks"
           trend={trends.avgPerDay !== undefined ? { value: trends.avgPerDay, label: trendLabel } : undefined}
         />
         <MetricCard
           label="Top Day"
-          valueStr={stats.most_active_day}
+          valueStr={filtered.mostActiveDay}
         />
         <MetricCard
           label="Best Day"
-          valueStr={stats.peak_day}
+          valueStr={formattedBestDay}
         />
         <MetricCard
           label="Streak"
-          value={stats.current_streak}
+          value={filtered.currentStreak}
           unit="days"
           trend={trends.streak !== undefined ? { value: trends.streak, label: trendLabel } : undefined}
         />
@@ -320,11 +357,8 @@ interface HeroCardProps {
 }
 
 function HeroCard({ type, name, subtitle, plays, item, coverSize, className }: HeroCardProps) {
-  // Pass complete item to getCoverUrl so it can extract artist/album names
   const coverUrl = getCoverUrl(item, coverSize)
   const typeLabels = { artist: 'TOP ARTIST', track: 'TOP TRACK', album: 'TOP ALBUM' }
-  
-  console.log(`🎨 Cover URL for ${type} "${name}":`, coverUrl)
 
   return (
     <div className={cn(
@@ -355,10 +389,6 @@ function HeroCard({ type, name, subtitle, plays, item, coverSize, className }: H
               alt={name}
               className="w-full h-full object-cover"
               loading="lazy"
-              onError={(e) => {
-                console.error(`❌ Failed to load cover for ${name}:`, coverUrl)
-                e.currentTarget.style.display = 'none'
-              }}
             />
           ) : (
             <div className={cn(
@@ -390,7 +420,7 @@ function HeroCard({ type, name, subtitle, plays, item, coverSize, className }: H
   )
 }
 
-// ===== METRIC CARD =====
+// ===== METRIC CARD (SAME AS RECENT LISTENS) =====
 interface MetricCardProps {
   label: string
   value?: number
@@ -475,7 +505,8 @@ function AreaChart({ data }: { data: Array<{ date: string; plays: number }> }) {
               <title>{item.date}: {item.plays} plays</title>
             </circle>
           )
-        })}      </svg>
+        })}
+      </svg>
     </div>
   )
 }
