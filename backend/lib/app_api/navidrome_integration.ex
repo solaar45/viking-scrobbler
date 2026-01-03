@@ -59,6 +59,76 @@ defmodule AppApi.NavidromeIntegration do
     end
   end
 
+  @doc """
+  Parse player name from Navidrome format: \"Feishin [feishin/Windows]\"
+  Returns %{player: \"Feishin\", client: \"feishin\", platform: \"Windows\"}
+  """
+  def parse_player_name(nil), do: %{player: "Unknown", client: nil, platform: nil}
+
+  def parse_player_name(player_string) when is_binary(player_string) do
+    # Extract player name and details from format: "Feishin [feishin/Windows]"
+    case Regex.run(~r/^([^\[]+)\s*\[([^\/]+)\/([^\]]+)\]/, player_string) do
+      [_, player_name, client, platform] ->
+        %{
+          player: String.trim(player_name),
+          client: String.trim(client),
+          platform: String.trim(platform)
+        }
+
+      _ ->
+        # Fallback: just use the raw string
+        %{
+          player: String.trim(player_string),
+          client: nil,
+          platform: nil
+        }
+    end
+  end
+
+  @doc """
+  Resolve Navidrome configuration for a listen using hybrid approach.
+  Returns {:ok, %{url: ..., username: ..., password: ...}} or {:error, reason}
+  """
+  def resolve_navidrome_config(listen) do
+    user_name = listen.user_name
+
+    # Priority 1: DB Credentials
+    case get_db_credentials(user_name) do
+      {:ok, config} ->
+        Logger.debug("Using stored credentials for #{user_name}")
+        {:ok, config}
+
+      {:error, _} ->
+        # Priority 2: Auto-Discovery from origin_url
+        case auto_discover_from_listen(listen) do
+          {:ok, config} ->
+            Logger.info("✅ Auto-discovered Navidrome from origin_url")
+            # Speichere für zukünftige Verwendung
+            save_credentials(user_name, config.url, config.username, config.password, true)
+            {:ok, config}
+
+          {:error, _} ->
+            # Priority 3: Network Scan
+            case scan_network_for_navidrome(user_name) do
+              {:ok, config} ->
+                Logger.info("✅ Auto-discovered Navidrome via network scan")
+                {:ok, config}
+
+              {:error, _} ->
+                # Priority 4: ENV Variables
+                case get_env_credentials() do
+                  {:ok, config} ->
+                    Logger.debug("Using ENV credentials")
+                    {:ok, config}
+
+                  {:error, _} ->
+                    {:error, :no_navidrome_config}
+                end
+            end
+        end
+    end
+  end
+
   defp parse_now_playing_response(body, target_username) do
     case Jason.decode(body) do
       {:ok, %{"subsonic-response" => %{"nowPlaying" => %{"entry" => entries}}}}
@@ -119,29 +189,6 @@ defmodule AppApi.NavidromeIntegration do
       end
     else
       error -> error
-    end
-  end
-
-  # Parse player name from Navidrome format: "Feishin [feishin/Windows]"
-  defp parse_player_name(nil), do: %{player: "Unknown", client: nil, platform: nil}
-
-  defp parse_player_name(player_string) when is_binary(player_string) do
-    # Extract player name and details from format: "Feishin [feishin/Windows]"
-    case Regex.run(~r/^([^\[]+)\s*\[([^\/]+)\/([^\]]+)\]/, player_string) do
-      [_, player_name, client, platform] ->
-        %{
-          player: String.trim(player_name),
-          client: String.trim(client),
-          platform: String.trim(platform)
-        }
-
-      _ ->
-        # Fallback: just use the raw string
-        %{
-          player: String.trim(player_string),
-          client: nil,
-          platform: nil
-        }
     end
   end
 
@@ -243,46 +290,6 @@ defmodule AppApi.NavidromeIntegration do
   end
 
   # === HYBRID CONFIG RESOLUTION ===
-
-  defp resolve_navidrome_config(listen) do
-    user_name = listen.user_name
-
-    # Priority 1: DB Credentials
-    case get_db_credentials(user_name) do
-      {:ok, config} ->
-        Logger.debug("Using stored credentials for #{user_name}")
-        {:ok, config}
-
-      {:error, _} ->
-        # Priority 2: Auto-Discovery from origin_url
-        case auto_discover_from_listen(listen) do
-          {:ok, config} ->
-            Logger.info("✅ Auto-discovered Navidrome from origin_url")
-            # Speichere für zukünftige Verwendung
-            save_credentials(user_name, config.url, config.username, config.password, true)
-            {:ok, config}
-
-          {:error, _} ->
-            # Priority 3: Network Scan
-            case scan_network_for_navidrome(user_name) do
-              {:ok, config} ->
-                Logger.info("✅ Auto-discovered Navidrome via network scan")
-                {:ok, config}
-
-              {:error, _} ->
-                # Priority 4: ENV Variables
-                case get_env_credentials() do
-                  {:ok, config} ->
-                    Logger.debug("Using ENV credentials")
-                    {:ok, config}
-
-                  {:error, _} ->
-                    {:error, :no_navidrome_config}
-                end
-            end
-        end
-    end
-  end
 
   # === PRIORITY 1: DATABASE CREDENTIALS ===
 
