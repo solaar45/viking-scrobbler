@@ -2,26 +2,13 @@
 
 import { useEffect, useState, useMemo, useRef } from "react"
 import { TooltipProvider } from "@/components/ui/tooltip"
-import { Activity, RefreshCw, ChevronLeft, ChevronRight, TrendingUp, TrendingDown, Clock } from "lucide-react"
+import { Activity, RefreshCw, ChevronLeft, ChevronRight, Clock } from "lucide-react"
 import { DashboardSkeleton } from "@/components/layout"
 import { StatsCover } from '@/components/StatsCover'
 import { getCoverUrl } from '@/lib/cover-utils'
 import { VIKING_DESIGN, VIKING_TYPOGRAPHY } from '@/lib/design-tokens'
 
 // --- TYPES ---
-export interface PeriodStats {
-  totalScrobbles: number
-  uniqueArtists: number
-  uniqueTracks: number
-  uniqueAlbums: number
-  mostActiveDay: string | null
-  tracksOnMostActiveDay: number
-  avgPerDay: number
-  peakDay: string | null
-  peakValue: number
-  currentStreak: number
-}
-
 export interface RecentListen {
   id: string
   track: string
@@ -40,12 +27,6 @@ export interface RecentListen {
   }
 }
 
-export interface DashboardStats {
-  filtered: PeriodStats
-  lifetime: PeriodStats
-  recent: RecentListen[]
-}
-
 interface DateTimeFormats {
   dateFormat: string
   timeFormat: string
@@ -57,42 +38,6 @@ const PERIODS = [
   { id: "year", label: "Last Year", days: 365 },
   { id: "all_time", label: "All Time", days: null },
 ]
-
-type TrendInfo = {
-  value?: number
-  label: string
-}
-
-function getTrendLabel(period: string): string {
-  const item = PERIODS.find((p) => p.id === period)
-  if (!item) return "last period"
-
-  switch (item.id) {
-    case "week":
-      return "last week"
-    case "month":
-      return "last month"
-    case "year":
-      return "last year"
-    case "all_time":
-      return "lifetime"
-    default:
-      return "last period"
-  }
-}
-
-// Simple Dummy-Trend: vergleicht filtered mit lifetime
-function calculateTrend(current?: number, lifetime?: number): number | undefined {
-  if (
-    current === undefined ||
-    lifetime === undefined ||
-    lifetime === 0
-  ) {
-    return undefined
-  }
-  const diff = current - lifetime
-  return (diff / lifetime) * 100
-}
 
 // Format color mapping with grouped variations
 function getFormatBadgeColor(format: string | undefined): string {
@@ -126,87 +71,14 @@ function getFormatBadgeColor(format: string | undefined): string {
   return "bg-gray-500"
 }
 
-// --- METRIC CARD ---
-type MetricSegmentProps = {
-  label: string
-  value?: number
-  valueStr?: string | null
-  unit?: string
-  loading?: boolean
-  trend?: TrendInfo
-}
-
-function MetricSegment({
-  label,
-  value,
-  valueStr,
-  unit,
-  loading,
-  trend,
-}: MetricSegmentProps) {
-  const displayValue =
-    valueStr ?? (typeof value === "number" ? value.toLocaleString() : "0")
-
-  const trendValue = trend?.value
-  const trendLabel = trend?.label ?? "last period"
-  const trendPositive = trendValue !== undefined && trendValue > 0
-  const trendNegative = trendValue !== undefined && trendValue < 0
-
-  return (
-    <div className="bg-viking-bg-secondary hover:bg-viking-bg-tertiary/50 rounded-lg px-5 py-4 min-h-[110px] transition-colors duration-200 cursor-default border border-viking-border-subtle/50">
-
-      {/* Zeile 1: Titel */}
-      <div className={`${VIKING_TYPOGRAPHY.label.inline} mb-3`}>{label}</div>
-
-      {/* Zeile 2: Wert - NEW: Use display.l (36px, mono, semibold) */}
-      <div className="flex items-baseline gap-1.5 mb-1.5">
-        <span className={VIKING_TYPOGRAPHY.display.l}>
-          {loading ? "..." : displayValue}
-        </span>
-        {unit && (
-          <span className={VIKING_TYPOGRAPHY.data.s}>
-            {unit}
-          </span>
-        )}
-      </div>
-
-      {/* Zeile 3: Trend */}
-      {trendValue !== undefined && (
-        <div className="flex items-center gap-1.5 text-[11px]">
-          {trendPositive && (
-            <TrendingUp className="w-3 h-3 text-emerald-500" strokeWidth={2.5} />
-          )}
-          {trendNegative && (
-            <TrendingDown className="w-3 h-3 text-red-500" strokeWidth={2.5} />
-          )}
-          <span
-            className={`font-semibold ${
-              trendPositive
-                ? "text-emerald-500"
-                : trendNegative
-                  ? "text-red-500"
-                  : "text-viking-text-tertiary"
-            }`}
-          >
-            {trendPositive ? "+" : ""}
-            {trendValue.toFixed(1)}%
-          </span>
-          <span className="text-viking-text-tertiary">from {trendLabel}</span>
-        </div>
-      )}
-    </div>
-  )
-}
-
 // --- MAIN COMPONENT ---
 export function RecentListensPage() {
   const [period, setPeriod] = useState<string>("all_time")
-  const [data, setData] = useState<DashboardStats | null>(null)
+  const [allRecent, setAllRecent] = useState<RecentListen[]>([])
   const [loading, setLoading] = useState(false)
   const [username, setUsername] = useState<string>("viking_user")
   const [currentPage, setCurrentPage] = useState(1)
   const [pageSize, setPageSize] = useState(25)
-  const [isConnected, setIsConnected] = useState(false)
   const socketRef = useRef<WebSocket | null>(null)
 
   // Initial Data Fetch + Refetch bei Period-Wechsel
@@ -215,8 +87,8 @@ export function RecentListensPage() {
     if (storedUsername) {
       setUsername(storedUsername)
     }
-    fetchStats()
-  }, [period])
+    fetchRecentListens()
+  }, [])
 
   // Reset page when filters change
   useEffect(() => {
@@ -233,7 +105,6 @@ export function RecentListensPage() {
 
     socket.onopen = () => {
       console.log("✅ WebSocket connected")
-      setIsConnected(true)
 
       const joinMessage = JSON.stringify({
         topic: `scrobbles:${username}`,
@@ -251,25 +122,23 @@ export function RecentListensPage() {
 
       if (message.event === "new_scrobble") {
         console.log("🎵 New scrobble detected!", message.payload)
-        fetchStatsComplete()
+        fetchRecentListens()
       }
     }
 
     socket.onerror = (error) => {
       console.error("❌ WebSocket error:", error)
-      setIsConnected(false)
     }
 
     socket.onclose = () => {
       console.log("🔌 WebSocket disconnected")
-      setIsConnected(false)
     }
 
     socketRef.current = socket
 
     const handleFormatChange = () => {
       console.log("📅 DateTime format changed, forcing re-render")
-      setData((prev) => (prev ? { ...prev } : null))
+      setAllRecent((prev) => [...prev])
     }
 
     window.addEventListener("datetime-format-changed", handleFormatChange)
@@ -283,25 +152,10 @@ export function RecentListensPage() {
     }
   }, [username])
 
-  // Vollständiger Stats-Fetch
-  async function fetchStatsComplete() {
-    console.log("🔄 Fetching complete stats...")
+  async function fetchRecentListens() {
+    setLoading(true)
     try {
-      const statsResponse = await fetch(
-        `/1/stats/user/${username}/totals?range=${period}`
-      )
-      const statsJson = await statsResponse.json()
-      const totals = statsJson.payload || {}
-
-      const lifetimeResponse = await fetch(
-        `/1/stats/user/${username}/totals?range=all_time`
-      )
-      const lifetimeJson = await lifetimeResponse.json()
-      const lifetimeTotals = lifetimeJson.payload || {}
-
-      const recentResponse = await fetch(
-        `/1/user/${username}/recent-listens?count=500`
-      )
+      const recentResponse = await fetch(`/1/user/${username}/recent-listens?count=500`)
       const recentJson = await recentResponse.json()
 
       const recentListens = (recentJson.payload?.listens || []).map(
@@ -324,68 +178,13 @@ export function RecentListensPage() {
         })
       )
 
-      const dashboardData: DashboardStats = {
-        filtered: {
-          totalScrobbles: totals.total_listens || 0,
-          uniqueArtists: totals.unique_artists || 0,
-          uniqueTracks: totals.unique_tracks || 0,
-          uniqueAlbums: totals.unique_albums || 0,
-          mostActiveDay: totals.most_active_day || null,
-          tracksOnMostActiveDay: totals.tracks_on_most_active_day || 0,
-          avgPerDay: totals.avg_per_day || 0,
-          peakDay: totals.peak_day || null,
-          peakValue: totals.peak_value || 0,
-          currentStreak: totals.current_streak || 0,
-        },
-        lifetime: {
-          totalScrobbles: lifetimeTotals.total_listens || 0,
-          uniqueArtists: lifetimeTotals.unique_artists || 0,
-          uniqueTracks: lifetimeTotals.unique_tracks || 0,
-          uniqueAlbums: lifetimeTotals.unique_albums || 0,
-          mostActiveDay: lifetimeTotals.most_active_day || null,
-          tracksOnMostActiveDay:
-            lifetimeTotals.tracks_on_most_active_day || 0,
-          avgPerDay: lifetimeTotals.avg_per_day || 0,
-          peakDay: lifetimeTotals.peak_day || null,
-          peakValue: lifetimeTotals.peak_value || 0,
-          currentStreak: lifetimeTotals.current_streak || 0,
-        },
-        recent: recentListens,
-      }
-
-      setData(dashboardData)
-      console.log("✅ Stats updated")
+      setAllRecent(recentListens)
+      console.log("✅ Recent listens loaded")
     } catch (e) {
-      console.error("Failed to load stats", e)
+      console.error("Failed to load recent listens", e)
+    } finally {
+      setLoading(false)
     }
-  }
-
-  async function fetchStats() {
-    setLoading(true)
-    await fetchStatsComplete()
-    setLoading(false)
-  }
-
-  const filtered = data?.filtered
-  const allRecent = data?.recent ?? []
-
-  const lifetime = data?.lifetime
-  const trendLabel = getTrendLabel(period)
-
-  const rawBestDay = filtered?.peakDay
-
-  const formattedBestDay =
-    rawBestDay && rawBestDay !== ""
-      ? formatDate(rawBestDay)
-      : rawBestDay ?? null
-
-  const trends = {
-    plays: calculateTrend(filtered?.totalScrobbles, lifetime?.totalScrobbles),
-    artists: calculateTrend(filtered?.uniqueArtists, lifetime?.uniqueArtists),
-    songs: calculateTrend(filtered?.uniqueTracks, lifetime?.uniqueTracks),
-    albums: calculateTrend(filtered?.uniqueAlbums, lifetime?.uniqueAlbums),
-    avgPerDay: calculateTrend(filtered?.avgPerDay, lifetime?.avgPerDay),
-    streak: calculateTrend(filtered?.currentStreak, lifetime?.currentStreak),
   }
 
   const filteredRecent = useMemo(() => {
@@ -422,6 +221,23 @@ export function RecentListensPage() {
           <Clock className="w-6 h-6 text-viking-purple" />
           <h1 className={VIKING_TYPOGRAPHY.heading.xl}>Recent Listens</h1>
         </div>
+
+        {/* Period Filter */}
+        <div className="flex gap-1 bg-viking-bg-tertiary p-1.5 rounded-lg border border-viking-border-default">
+          {PERIODS.map(({ id, label }) => (
+            <button
+              key={id}
+              onClick={() => setPeriod(id)}
+              className={`text-xs font-semibold px-4 py-2 rounded-md transition-all uppercase tracking-wide whitespace-nowrap ${
+                period === id
+                  ? "bg-gradient-to-r from-viking-purple to-viking-purple-dark text-white shadow-lg shadow-viking-purple/20"
+                  : "text-viking-text-tertiary hover:text-viking-text-secondary hover:bg-viking-bg-elevated"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* MAIN CONTENT */}
@@ -430,149 +246,6 @@ export function RecentListensPage() {
           <DashboardSkeleton />
         ) : (
           <div className="flex flex-col gap-6 w-full animate-in fade-in duration-500">
-            {/* OVERVIEW HEADER + 8×1 METRICS GRID */}
-            <div className="flex flex-col gap-4">
-              {/* HEADER */}
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <span className="card-title-dense">Overview</span>
-                  <span className="text-viking-border-emphasis text-xl font-light">
-                    |
-                  </span>
-                  <span className={VIKING_TYPOGRAPHY.label.inline}>
-                    {PERIODS.find((item) => item.id === period)?.label}
-                  </span>
-                  {isConnected && (
-                    <div className="badge-live">
-                      <span className="relative flex h-2 w-2">
-                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                        <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-                      </span>
-                      <span className={VIKING_TYPOGRAPHY.label.badge}>
-                        LIVE
-                      </span>
-                    </div>
-                  )}
-                </div>
-
-                {/* Period Filter */}
-                <div className="flex gap-1 bg-viking-bg-tertiary p-1.5 rounded-lg border border-viking-border-default">
-                  {PERIODS.map(({ id, label }) => (
-                    <button
-                      key={id}
-                      onClick={() => setPeriod(id)}
-                      className={`text-xs font-semibold px-4 py-2 rounded-md transition-all uppercase tracking-wide whitespace-nowrap ${
-                        period === id
-                          ? "bg-gradient-to-r from-viking-purple to-viking-purple-dark text-white shadow-lg shadow-viking-purple/20"
-                          : "text-viking-text-tertiary hover:text-viking-text-secondary hover:bg-viking-bg-elevated"
-                      }`}
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* 8×1 METRICS GRID */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-8 gap-4">
-                <MetricSegment
-                  label="Plays"
-                  value={filtered?.totalScrobbles}
-                  loading={loading}
-                  trend={
-                    trends.plays !== undefined
-                      ? { value: trends.plays, label: trendLabel }
-                      : undefined
-                  }
-                />
-                <MetricSegment
-                  label="Artists"
-                  value={filtered?.uniqueArtists}
-                  loading={loading}
-                  trend={
-                    trends.artists !== undefined
-                      ? { value: trends.artists, label: trendLabel }
-                      : undefined
-                  }
-                />
-                <MetricSegment
-                  label="Songs"
-                  value={filtered?.uniqueTracks}
-                  loading={loading}
-                  trend={
-                    trends.songs !== undefined
-                      ? { value: trends.songs, label: trendLabel }
-                      : undefined
-                  }
-                />
-                <MetricSegment
-                  label="Albums"
-                  value={filtered?.uniqueAlbums}
-                  loading={loading}
-                  trend={
-                    trends.albums !== undefined
-                      ? { value: trends.albums, label: trendLabel }
-                      : undefined
-                  }
-                />
-                <MetricSegment
-                  label="Daily Avg"
-                  value={filtered?.avgPerDay}
-                  unit="tracks"
-                  loading={loading}
-                  trend={
-                    trends.avgPerDay !== undefined
-                      ? { value: trends.avgPerDay, label: trendLabel }
-                      : undefined
-                  }
-                />
-                <MetricSegment
-                  label="Top Day"
-                  valueStr={filtered?.mostActiveDay}
-                  loading={loading}
-                />
-                <MetricSegment
-                  label="Best Day"
-                  valueStr={formattedBestDay}
-                  loading={loading}
-                />
-                <MetricSegment
-                  label="Streak"
-                  value={filtered?.currentStreak}
-                  unit="days"
-                  loading={loading}
-                  trend={
-                    trends.streak !== undefined
-                      ? { value: trends.streak, label: trendLabel }
-                      : undefined
-                  }
-                />
-              </div>
-            </div>
-
-            {/* RECENT LISTENS HEADER */}
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <h3 className="card-title-dense">Recent Listens</h3>
-                <span className="text-viking-border-emphasis text-xl font-light">|</span>
-                <span className={VIKING_TYPOGRAPHY.label.inline}>
-                  {PERIODS.find((item) => item.id === period)?.label}
-                </span>
-                <div className="badge-live">
-                  <span className="relative flex h-2 w-2">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-                  </span>
-                  <span className={VIKING_TYPOGRAPHY.label.badge}>LIVE</span>
-                </div>
-              </div>
-              <div className="flex items-center gap-3">
-                <div className={VIKING_TYPOGRAPHY.label.inline}>
-                  {filteredRecent.length} tracks total
-                </div>
-              </div>
-            </div>
-
             {/* RECENT LISTENS TABLE */}
             <div className="card-dense flex-1 min-h-[500px] flex flex-col">
               <div className="flex-1 overflow-auto relative">
@@ -593,7 +266,7 @@ export function RecentListensPage() {
                       </p>
                     </div>
                     <button
-                      onClick={() => fetchStats()}
+                      onClick={() => fetchRecentListens()}
                       className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-viking-purple to-viking-purple-dark hover:from-viking-purple-dark hover:to-viking-purple text-white rounded-lg text-xs font-bold uppercase tracking-widest transition-all shadow-lg shadow-viking-purple/20 hover:shadow-xl hover:shadow-viking-purple/30"
                     >
                       <RefreshCw className="w-4 h-4" />
@@ -650,7 +323,6 @@ export function RecentListensPage() {
                             <td className="table-cell-dense table-cell-secondary w-[140px] truncate">
                               {item.album}
                             </td>
-                            {/* NEW: Use data.m for Year column */}
                             <td className={`table-cell-dense w-[55px] ${VIKING_TYPOGRAPHY.data.m}`}>
                               {item.releaseYear ?? "—"}
                             </td>
@@ -679,7 +351,6 @@ export function RecentListensPage() {
                                 <span className="text-viking-text-tertiary text-xs">—</span>
                               )}
                             </td>
-                            {/* NEW: Use data.m for Duration column */}
                             <td className={`table-cell-dense w-[70px] text-right border-r border-viking-border-emphasis/50 ${VIKING_TYPOGRAPHY.data.m}`}>
                               {formatDuration(item.duration)}
                             </td>
@@ -688,11 +359,9 @@ export function RecentListensPage() {
                             <td className="table-cell-dense table-cell-secondary w-[100px] truncate">
                               {player || "—"}
                             </td>
-                            {/* NEW: Use data.m for Date column */}
                             <td className={`table-cell-dense w-[90px] text-right ${VIKING_TYPOGRAPHY.data.m}`}>
                               {formatDate(item.playedAt)}
                             </td>
-                            {/* NEW: Use data.m for Time column */}
                             <td className={`table-cell-dense w-[60px] text-right pr-6 ${VIKING_TYPOGRAPHY.data.m}`}>
                               {formatTime(item.playedAt)}
                             </td>
@@ -855,4 +524,5 @@ function formatDuration(sec: number) {
   if (!sec) return "0:00"
   const m = Math.floor(sec / 60)
   const s = sec % 60
-  return `${m}:${s.toString().padStart(2, "0")}`}
+  return `${m}:${s.toString().padStart(2, "0")}`
+}
