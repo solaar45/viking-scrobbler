@@ -3,6 +3,10 @@ set -e
 
 echo "🔧 Viking Scrobbler Setup"
 
+# === FIX: Verzeichnis ZUERST erstellen! ===
+# Wichtig: Muss VOR jedem Schreibzugriff auf /app/data passieren
+mkdir -p /app/data
+
 # === SECRET_KEY_BASE ===
 SECRET_FILE="/app/data/.secret_key_base"
 
@@ -23,7 +27,7 @@ export SECRET_KEY_BASE
 export DATABASE_PATH="${DATABASE_PATH:-/app/data/viking.db}"
 echo "📦 Database: $DATABASE_PATH"
 
-# Data-Ordner erstellen
+# Data-Ordner nochmals sicherstellen (falls DATABASE_PATH anders ist)
 mkdir -p "$(dirname "$DATABASE_PATH")"
 
 echo "🚀 Starting Viking Scrobbler with SECRET_KEY_BASE set..."
