@@ -522,6 +522,7 @@ defmodule AppApi.NavidromeIntegration do
       "genres" => parse_genres(song["genre"]),
       "album" => song["album"],
       "year" => song["year"],
+      "origyear" => song["originalReleaseDate"],
       "duration_ms" => (song["duration"] || 0) * 1000,
       "tracknumber" => song["track"],
       "discnumber" => song["discNumber"],
@@ -551,17 +552,20 @@ defmodule AppApi.NavidromeIntegration do
     if genres && length(genres) > 0 do
       # CRITICAL: Reload from DB to get latest additional_info (includes media_player etc.)
       fresh_listen = Repo.get!(Listen, listen.id)
-      
+
       current_metadata = parse_metadata(fresh_listen.metadata)
       current_additional_info = fresh_listen.additional_info || %{}
 
       # INFO: Log what we're getting from Navidrome
-      Logger.info("🔍 Navidrome bitrate=#{inspect(navidrome_data["bitrate"])}, format=#{inspect(navidrome_data["format"])}")
+      Logger.info(
+        "🔍 Navidrome bitrate=#{inspect(navidrome_data["bitrate"])}, format=#{inspect(navidrome_data["format"])}"
+      )
 
       # Merge selected Navidrome fields into metadata (only when present)
       extra_metadata =
         %{}
         |> maybe_put(navidrome_data, "genres", genres)
+        |> maybe_put(navidrome_data, "origyear", navidrome_data["origyear"])
         |> maybe_put(navidrome_data, "year", navidrome_data["year"])
         |> maybe_put(navidrome_data, "album", navidrome_data["album"])
         |> maybe_put(navidrome_data, "duration_ms", navidrome_data["duration_ms"])
