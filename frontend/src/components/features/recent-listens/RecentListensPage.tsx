@@ -23,6 +23,11 @@ export interface RecentListen {
     originalBitRate?: number
     originalFormat?: string
     media_player?: string
+    metadata?: {
+      origyear?: string
+      year?: string | number
+      [key: string]: any
+    }
     [key: string]: any
   }
 }
@@ -69,6 +74,34 @@ function getFormatBadgeColor(format: string | undefined): string {
   if (fmt === "DSD" || fmt === "DSF" || fmt === "DFF") return "bg-purple-500/90"
   
   return "bg-gray-500"
+}
+
+/**
+ * Extract year from origyear or year field.
+ * origyear can be YYYY or YYYY-MM-DD format - we only want YYYY.
+ * Falls back to year if origyear is not present.
+ */
+function extractDisplayYear(listen: RecentListen): string {
+  const metadata = listen.additional_info?.metadata
+  
+  // Priority 1: origyear (extract YYYY only)
+  const origyear = metadata?.origyear
+  if (origyear && typeof origyear === 'string' && origyear.length >= 4) {
+    return origyear.slice(0, 4)
+  }
+  
+  // Priority 2: year field (from metadata)
+  const metaYear = metadata?.year
+  if (metaYear) {
+    return String(metaYear)
+  }
+  
+  // Priority 3: releaseYear (legacy top-level field)
+  if (listen.releaseYear) {
+    return String(listen.releaseYear)
+  }
+  
+  return "—"
 }
 
 // --- MAIN COMPONENT ---
@@ -159,23 +192,40 @@ export function RecentListensPage() {
       const recentJson = await recentResponse.json()
 
       const recentListens = (recentJson.payload?.listens || []).map(
-        (listen: any) => ({
-          id: listen.listened_at?.toString() || Math.random().toString(),
-          track: listen.track_name || "Unknown Track",
-          artist: listen.artist_name || "Unknown Artist",
-          album: listen.release_name || "Unknown Album",
-          playedAt: listen.listened_at
-            ? new Date(listen.listened_at * 1000).toISOString()
-            : new Date().toISOString(),
-          duration: Math.floor(
-            (listen.additional_info?.duration_ms ??
-              listen.additional_info?.extended?.duration_ms ??
-              0) / 1000
-          ),
-          releaseYear: listen.additional_info?.release_year ?? undefined,
-          genres: listen.additional_info?.genres || "–",
-          additional_info: listen.additional_info || {},
-        })
+        (listen: any) => {
+          // Parse metadata JSON string if present
+          let parsedMetadata = {}
+          if (listen.additional_info?.metadata) {
+            try {
+              parsedMetadata = typeof listen.additional_info.metadata === 'string'
+                ? JSON.parse(listen.additional_info.metadata)
+                : listen.additional_info.metadata
+            } catch (e) {
+              console.warn('Failed to parse metadata for listen:', listen.id, e)
+            }
+          }
+
+          return {
+            id: listen.listened_at?.toString() || Math.random().toString(),
+            track: listen.track_name || "Unknown Track",
+            artist: listen.artist_name || "Unknown Artist",
+            album: listen.release_name || "Unknown Album",
+            playedAt: listen.listened_at
+              ? new Date(listen.listened_at * 1000).toISOString()
+              : new Date().toISOString(),
+            duration: Math.floor(
+              (listen.additional_info?.duration_ms ??
+                listen.additional_info?.extended?.duration_ms ??
+                0) / 1000
+            ),
+            releaseYear: listen.additional_info?.release_year ?? undefined,
+            genres: listen.additional_info?.genres || "–",
+            additional_info: {
+              ...listen.additional_info,
+              metadata: parsedMetadata
+            },
+          }
+        }
       )
 
       setAllRecent(recentListens)
@@ -303,6 +353,7 @@ export function RecentListensPage() {
                         const player = item.additional_info?.media_player
                         const formatColor = getFormatBadgeColor(format)
                         const coverUrl = getCoverUrl({ additional_info: item.additional_info }, 80)
+                        const displayYear = extractDisplayYear(item)
 
                         return (
                           <tr key={item.id} className="table-row-dense">
@@ -324,7 +375,7 @@ export function RecentListensPage() {
                               {item.album}
                             </td>
                             <td className={`table-cell-dense w-[55px] ${VIKING_TYPOGRAPHY.data.m}`}>
-                              {item.releaseYear ?? "—"}
+                              {displayYear}
                             </td>
                             <td className="table-cell-dense table-cell-secondary w-[110px] truncate font-medium text-emerald-400 border-r border-viking-border-emphasis/50">
                               {item.genres}
