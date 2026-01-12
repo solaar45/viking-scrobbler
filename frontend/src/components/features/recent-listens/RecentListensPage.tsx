@@ -78,27 +78,36 @@ function getFormatBadgeColor(format: string | undefined): string {
 
 /**
  * Extract year from origyear or year field.
- * origyear can be YYYY or YYYY-MM-DD format - we only want YYYY.
- * Falls back to year if origyear is not present.
+ * Priority: origyear > year > releaseYear
+ * Always returns only YYYY (4 digits), even if source contains dates like YYYY-MM-DD.
  */
 function extractDisplayYear(listen: RecentListen): string {
   const metadata = listen.additional_info?.metadata
   
-  // Priority 1: origyear (extract YYYY only)
+  // Priority 1: origyear (extract YYYY only from any format)
   const origyear = metadata?.origyear
-  if (origyear && typeof origyear === 'string' && origyear.length >= 4) {
-    return origyear.slice(0, 4)
+  if (origyear) {
+    const origyearStr = String(origyear)
+    if (origyearStr.length >= 4) {
+      return origyearStr.slice(0, 4)
+    }
   }
   
-  // Priority 2: year field (from metadata)
+  // Priority 2: year field (extract YYYY only from any format)
   const metaYear = metadata?.year
   if (metaYear) {
-    return String(metaYear)
+    const yearStr = String(metaYear)
+    if (yearStr.length >= 4) {
+      return yearStr.slice(0, 4)
+    }
   }
   
   // Priority 3: releaseYear (legacy top-level field)
   if (listen.releaseYear) {
-    return String(listen.releaseYear)
+    const releaseYearStr = String(listen.releaseYear)
+    if (releaseYearStr.length >= 4) {
+      return releaseYearStr.slice(0, 4)
+    }
   }
   
   return "—"
