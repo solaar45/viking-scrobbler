@@ -47,32 +47,32 @@ const PERIODS = [
 // Format color mapping with grouped variations
 function getFormatBadgeColor(format: string | undefined): string {
   if (!format) return "bg-gray-500"
-  
+
   const fmt = format.toUpperCase()
-  
+
   // Group 1: Standard Lossy (Blue tones)
   if (fmt === "MP3") return "bg-blue-500"
   if (fmt === "AAC") return "bg-blue-400"
   if (fmt === "M4A") return "bg-blue-500/90"
   if (fmt === "OGG" || fmt === "VORBIS") return "bg-blue-600"
-  
+
   // Group 2: High-Efficiency Lossy (Orange tones)
   if (fmt === "OPUS") return "bg-orange-500"
   if (fmt === "WMA") return "bg-orange-400"
-  
+
   // Group 3: Lossless (Green tones)
   if (fmt === "FLAC") return "bg-green-500"
   if (fmt === "ALAC") return "bg-green-400"
   if (fmt === "APE") return "bg-green-600"
   if (fmt === "WAVPACK" || fmt === "WV") return "bg-green-500/90"
   if (fmt === "TTA") return "bg-green-600/90"
-  
+
   // Group 4: Uncompressed (Purple tones)
   if (fmt === "WAV") return "bg-purple-500"
   if (fmt === "AIFF" || fmt === "AIF") return "bg-purple-400"
   if (fmt === "PCM") return "bg-purple-600"
   if (fmt === "DSD" || fmt === "DSF" || fmt === "DFF") return "bg-purple-500/90"
-  
+
   return "bg-gray-500"
 }
 
@@ -83,33 +83,26 @@ function getFormatBadgeColor(format: string | undefined): string {
  */
 function extractDisplayYear(listen: RecentListen): string {
   const metadata = listen.additional_info?.metadata
-  
-  // Priority 1: origyear (extract YYYY only from any format)
-  const origyear = metadata?.origyear
-  if (origyear) {
-    const origyearStr = String(origyear)
-    if (origyearStr.length >= 4) {
-      return origyearStr.slice(0, 4)
-    }
+
+  // Priority 1: OrigYear (from MusicBrainz Enrichment)
+  if (metadata?.origyear) {
+    const val = String(metadata.origyear)
+    if (val.length >= 4) return val.slice(0, 4)
   }
-  
-  // Priority 2: year field (extract YYYY only from any format)
-  const metaYear = metadata?.year
-  if (metaYear) {
-    const yearStr = String(metaYear)
-    if (yearStr.length >= 4) {
-      return yearStr.slice(0, 4)
-    }
+
+  // Priority 2: Year (from Navidrome/Metadata)
+  // Check metadata.year first
+  if (metadata?.year) {
+    const val = String(metadata.year)
+    if (val.length >= 4) return val.slice(0, 4)
   }
-  
-  // Priority 3: releaseYear (legacy top-level field)
+
+  // Check legacy/top-level releaseYear
   if (listen.releaseYear) {
-    const releaseYearStr = String(listen.releaseYear)
-    if (releaseYearStr.length >= 4) {
-      return releaseYearStr.slice(0, 4)
-    }
+    const val = String(listen.releaseYear)
+    if (val.length >= 4) return val.slice(0, 4)
   }
-  
+
   return "—"
 }
 
@@ -287,11 +280,10 @@ export function RecentListensPage() {
             <button
               key={id}
               onClick={() => setPeriod(id)}
-              className={`text-xs font-semibold px-4 py-2 rounded-md transition-all uppercase tracking-wide whitespace-nowrap ${
-                period === id
+              className={`text-xs font-semibold px-4 py-2 rounded-md transition-all uppercase tracking-wide whitespace-nowrap ${period === id
                   ? "bg-gradient-to-r from-viking-purple to-viking-purple-dark text-white shadow-lg shadow-viking-purple/20"
                   : "text-viking-text-tertiary hover:text-viking-text-secondary hover:bg-viking-bg-elevated"
-              }`}
+                }`}
             >
               {label}
             </button>
@@ -343,12 +335,12 @@ export function RecentListensPage() {
                         <th className="table-head-dense text-left w-[140px]">Album</th>
                         <th className="table-head-dense text-left w-[55px]">Year</th>
                         <th className="table-head-dense text-left w-[110px] border-r border-viking-border-emphasis/50">Genre</th>
-                        
+
                         {/* FILE METADATA GROUP */}
                         <th className="table-head-dense text-right w-[80px]">Bitrate</th>
                         <th className="table-head-dense text-center w-[70px]">Format</th>
                         <th className="table-head-dense text-right w-[70px] border-r border-viking-border-emphasis/50">Duration</th>
-                        
+
                         {/* USAGE METADATA GROUP */}
                         <th className="table-head-dense text-left w-[100px]">Player</th>
                         <th className="table-head-dense text-right w-[90px]">Date</th>
@@ -368,7 +360,7 @@ export function RecentListensPage() {
                           <tr key={item.id} className="table-row-dense">
                             {/* MUSIC INFO GROUP */}
                             <td className="table-cell-dense pl-6 w-[50px]">
-                              <StatsCover 
+                              <StatsCover
                                 coverUrl={coverUrl}
                                 name={item.artist}
                                 size="sm"
@@ -389,7 +381,7 @@ export function RecentListensPage() {
                             <td className="table-cell-dense table-cell-secondary w-[110px] truncate font-medium text-emerald-400 border-r border-viking-border-emphasis/50">
                               {item.genres}
                             </td>
-                            
+
                             {/* FILE METADATA GROUP */}
                             <td className="table-cell-dense w-[80px] text-right">
                               {bitrate ? (
@@ -414,7 +406,7 @@ export function RecentListensPage() {
                             <td className={`table-cell-dense w-[70px] text-right border-r border-viking-border-emphasis/50 ${VIKING_TYPOGRAPHY.data.m}`}>
                               {formatDuration(item.duration)}
                             </td>
-                            
+
                             {/* USAGE METADATA GROUP */}
                             <td className="table-cell-dense table-cell-secondary w-[100px] truncate">
                               {player || "—"}
@@ -447,11 +439,10 @@ export function RecentListensPage() {
                           <button
                             key={size}
                             onClick={() => setPageSize(size)}
-                            className={`px-3 py-1.5 rounded text-xs font-bold uppercase tracking-wider transition-all ${
-                              pageSize === size
+                            className={`px-3 py-1.5 rounded text-xs font-bold uppercase tracking-wider transition-all ${pageSize === size
                                 ? "bg-viking-purple text-white shadow-lg shadow-viking-purple/20"
                                 : "bg-viking-bg-tertiary text-viking-text-secondary hover:bg-viking-bg-elevated hover:text-viking-text-primary"
-                            }`}
+                              }`}
                           >
                             {size}
                           </button>
@@ -494,11 +485,10 @@ export function RecentListensPage() {
                             <button
                               key={pageNum}
                               onClick={() => goToPage(pageNum)}
-                              className={`min-w-[32px] h-8 px-2 rounded text-xs font-bold transition-all ${
-                                currentPage === pageNum
+                              className={`min-w-[32px] h-8 px-2 rounded text-xs font-bold transition-all ${currentPage === pageNum
                                   ? "bg-viking-purple text-white shadow-lg shadow-viking-purple/20"
                                   : "bg-viking-bg-tertiary text-viking-text-secondary hover:bg-viking-bg-elevated hover:text-viking-text-primary"
-                              }`}
+                                }`}
                             >
                               {pageNum}
                             </button>

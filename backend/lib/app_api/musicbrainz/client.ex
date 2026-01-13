@@ -14,7 +14,7 @@ defmodule AppApi.MusicBrainz.Client do
   Returns: {:ok, metadata} | {:error, reason}
   """
   def fetch_recording(recording_mbid) when is_binary(recording_mbid) and recording_mbid != "" do
-    url = "#{@base_url}/recording/#{recording_mbid}?inc=artist-credits+releases+genres+tags+isrcs&fmt=json"
+    url = "#{@base_url}/recording/#{recording_mbid}?inc=artist-credits+releases+release-groups+genres+tags+isrcs&fmt=json"
     
     Logger.debug("Fetching MusicBrainz: #{url}")
     
@@ -38,7 +38,7 @@ defmodule AppApi.MusicBrainz.Client do
         {:error, "Request failed: #{inspect(reason)}"}
     end
   end
-  
+
   def fetch_recording(_), do: {:error, :invalid_mbid}
   
   @doc """
@@ -126,13 +126,65 @@ defmodule AppApi.MusicBrainz.Client do
   end
   
   defp parse_recording_data(data) do
+    original_release_date = extract_earliest_release_date(data)
+    origyear = original_release_date |> year_from_date()
+
     %{
       genres: extract_genres(data),
       tags: extract_tags(data),
-      release_year: extract_year(data),
+      # Keep existing field for compatibility, but align it with earliest release too
+      release_year: origyear,
+      original_release_date: original_release_date,
+      origyear: origyear,
       isrc: extract_isrc(data),
       label: extract_label(data)
     }
+  end
+
+  defp extract_earliest_release_date(data) do
+    releases = Map.get(data, "releases", [])
+    
+    # 1. Collect dates from releases
+    release_dates = 
+      releases
+      |> Enum.map(&Map.get(&1, "date"))
+      |> Enum.filter(&(is_binary(&1) and &1 != ""))
+      
+    # 2. Collect dates from release groups (first-release-date)
+    rg_dates =
+      releases
+      |> Enum.map(&get_in(&1, ["release-group", "first-release-date"]))
+      |> Enum.filter(&(is_binary(&1) and &1 != ""))
+      
+    # 3. Combine and find earliest
+    (release_dates ++ rg_dates)
+    |> Enum.sort_by(&date_sort_key/1)
+    |> List.first()
+  end
+
+  # Sort key that works for YYYY, YYYY-MM, YYYY-MM-DD
+  defp date_sort_key(date_str) when is_binary(date_str) do
+    parts = String.split(date_str, "-")
+    y = parts |> Enum.at(0) |> safe_int(9999)
+    m = parts |> Enum.at(1) |> safe_int(12)
+    d = parts |> Enum.at(2) |> safe_int(31)
+    {y, m, d}
+  end
+
+  defp safe_int(nil, fallback), do: fallback
+  defp safe_int(str, fallback) when is_binary(str) do
+    case Integer.parse(str) do
+      {i, _} -> i
+      _ -> fallback
+    end
+  end
+
+  defp year_from_date(nil), do: nil
+  defp year_from_date(date_str) when is_binary(date_str) do
+    date_str
+    |> String.split("-")
+    |> List.first()
+    |> parse_year()
   end
   
   defp parse_release_data(data) do
@@ -193,6 +245,12 @@ defmodule AppApi.MusicBrainz.Client do
     data
     |> Map.get("isrcs", [])
     |> List.first()
+    |>
+      case do
+        nil -> nil
+        %{"id" => id} -> id
+        _ -> nil
+      end
   end
   
   defp extract_label(data) do

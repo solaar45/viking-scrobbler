@@ -609,6 +609,14 @@ defmodule AppApiWeb.ListenBrainzController do
 
     release_year =
       cond do
+        # Priority 0: Origyear (MusicBrainz)
+        is_integer(metadata["origyear"]) ->
+          metadata["origyear"]
+
+        is_binary(metadata["origyear"]) and String.length(metadata["origyear"]) >= 4 ->
+           String.slice(metadata["origyear"], 0, 4)
+
+        # Priority 1: Year (Navidrome)
         is_integer(metadata["year"]) ->
           metadata["year"]
 
@@ -645,6 +653,8 @@ defmodule AppApiWeb.ListenBrainzController do
       |> Map.put("genres", genres)
       |> Map.put("release_year", release_year)
       |> Map.put("navidrome_id", navidrome_id)
+      # Pass full raw metadata so frontend can do its own logic too
+      |> Map.put("metadata", metadata)
       |> maybe_put("originalBitRate", base_info["originalBitRate"])
       |> maybe_put("originalFormat", base_info["originalFormat"])
 

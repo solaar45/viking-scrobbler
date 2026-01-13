@@ -63,29 +63,35 @@ defmodule AppApi.MusicBrainz.Enricher do
   
   # Private Helpers
   
+  defp enrich_via_search(%Listen{} = listen) do
+    case Client.search_recording(listen.artist_name, listen.track_name) do
+      {:ok, mbid} ->
+        case Client.fetch_recording(mbid) do
+          {:ok, mb_data} ->
+            update_listen_metadata(listen, mb_data, %{recording_mbid: mbid})
+          {:error, reason} ->
+            {:error, reason}
+        end
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
   defp enrich_from_recording(listen) do
     case Client.fetch_recording(listen.recording_mbid) do
-      {:ok, mb_data} ->
-        update_listen_metadata(listen, mb_data)
-      
-      {:error, reason} ->
-        Logger.warning("MusicBrainz fetch failed for #{listen.recording_mbid}: #{inspect(reason)}")
-        {:error, reason}
+      {:ok, data} -> update_listen_metadata(listen, data)
+      {:error, reason} -> {:error, reason}
     end
   end
-  
+
   defp enrich_from_release(listen) do
     case Client.fetch_release(listen.release_mbid) do
-      {:ok, mb_data} ->
-        update_listen_metadata(listen, mb_data)
-      
-      {:error, reason} ->
-        Logger.warning("MusicBrainz release fetch failed: #{inspect(reason)}")
-        {:error, reason}
+      {:ok, data} -> update_listen_metadata(listen, data)
+      {:error, reason} -> {:error, reason}
     end
   end
   
-  defp update_listen_metadata(listen, mb_data) do
+  defp update_listen_metadata(listen, mb_data, extra_fields \\ %{}) do
     # Parse existing metadata
     existing_metadata = case listen.metadata do
       str when is_binary(str) ->
@@ -106,7 +112,7 @@ defmodule AppApi.MusicBrainz.Enricher do
     
     # Update in database
     listen
-    |> Ecto.Changeset.change(metadata: metadata_json)
+    |> Ecto.Changeset.change(Map.merge(%{metadata: metadata_json}, extra_fields))
     |> Repo.update()
     |> case do
       {:ok, updated_listen} ->
