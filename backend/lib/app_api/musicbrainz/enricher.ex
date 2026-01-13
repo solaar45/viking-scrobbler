@@ -102,10 +102,33 @@ defmodule AppApi.MusicBrainz.Enricher do
       _ -> %{}
     end
     
-    # Merge with new data
-    updated_metadata = Map.merge(existing_metadata, mb_data, fn
-      _key, existing, new -> new || existing  # Prefer new data if not nil
-    end)
+    # Convert incoming atom keys to strings to ensure correct overriding
+    mb_data_str = stringify_keys(mb_data)
+    extra_fields_str = stringify_keys(extra_fields)
+    
+    # Merge with new data (Existing vs MusicBrainz)
+    # Rules:
+    # 1. Date fields: Always take from MusicBrainz if available (overwrites existing)
+    # 2. Other fields (genres, labels): Keep existing (File/Navidrome) unless empty/nil, then fallback to MusicBrainz
+    
+    forced_mb_fields = ["origyear", "original_release_date", "release_year"]
+
+    updated_metadata = 
+      existing_metadata
+      |> Map.merge(mb_data_str, fn key, existing_val, new_val -> 
+        if key in forced_mb_fields do
+          # Always prefer MusicBrainz for dates
+          new_val || existing_val
+        else
+          # For others, protect existing data if present
+          if is_value_present?(existing_val) do
+            existing_val
+          else
+            new_val
+          end
+        end
+      end)
+      |> Map.merge(extra_fields_str)
     
     # Encode back to JSON string
     metadata_json = Jason.encode!(updated_metadata)
@@ -124,4 +147,14 @@ defmodule AppApi.MusicBrainz.Enricher do
         {:error, :update_failed}
     end
   end
+
+  defp stringify_keys(map) do
+    Map.new(map, fn {k, v} -> {to_string(k), v} end)
+  end
+
+  defp is_value_present?(nil), do: false
+  defp is_value_present?(""), do: false
+  defp is_value_present?([]), do: false
+  defp is_value_present?(%{}), do: false
+  defp is_value_present?(_), do: true
 end

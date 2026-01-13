@@ -389,15 +389,22 @@ defmodule AppApiWeb.ListenBrainzController do
 
         Task.start(fn ->
           Enum.each(listens_to_enrich, fn listen ->
-            # Enrich metadata (genres, bitrate, format, etc.)
-            case AppApi.NavidromeIntegration.enrich_listen_from_navidrome(listen) do
-              {:ok, _} ->
-                Logger.debug("✅ Enriched from Navidrome: #{listen.track_name}")
+            # 1. Enrich metadata from Navidrome (Genres, basic metadata)
+            current_listen = 
+              case AppApi.NavidromeIntegration.enrich_listen_from_navidrome(listen) do
+                {:ok, updated_listen} ->
+                  Logger.debug("✅ Enriched from Navidrome: #{listen.track_name}")
+                  updated_listen
 
-              {:error, _} ->
-                Logger.debug("⚠️ Navidrome failed, trying MusicBrainz: #{listen.track_name}")
-                Task.start(fn -> AppApi.GenreEnrichment.enrich_listen(listen) end)
-            end
+                {:error, _} ->
+                  Logger.debug("⚠️ Navidrome failed: #{listen.track_name}")
+                  listen
+              end
+            
+            # 2. Enrich with MusicBrainz (Dates, Fallbacks)
+            # This ensures we get origyear/release-group dates even if Navidrome was successful
+            # The Enricher now respects protected fields (genres) so it's safe to call.
+            AppApi.MusicBrainz.Enricher.enrich_listen(current_listen)
 
             :timer.sleep(150)
           end)

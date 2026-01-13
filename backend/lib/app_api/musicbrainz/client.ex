@@ -136,6 +136,7 @@ defmodule AppApi.MusicBrainz.Client do
       release_year: origyear,
       original_release_date: original_release_date,
       origyear: origyear,
+      year: origyear,
       isrc: extract_isrc(data),
       label: extract_label(data)
     }
