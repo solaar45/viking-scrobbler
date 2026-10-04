@@ -14,8 +14,8 @@ defmodule AppApiWeb.StatsController do
 
     total_plays = Repo.aggregate(query, :count, :id)
 
-    unique_artists = Repo.one(from(l in query, select: count(l.artist_name, :distinct))) || 0
-    unique_albums = Repo.one(from(l in query, select: count(l.release_name, :distinct))) || 0
+    unique_artists = Repo.one(from(l in query, where: not is_nil(l.artist_name) and l.artist_name != "", select: fragment("count(distinct ?)", l.artist_name))) || 0
+    unique_albums = Repo.one(from(l in query, where: not is_nil(l.release_name) and l.release_name != "", select: fragment("count(distinct ?)", l.release_name))) || 0
 
     # Total listening time
     total_ms = Repo.one(from(l in query, select: sum(l.duration_ms))) || 0
@@ -25,6 +25,7 @@ defmodule AppApiWeb.StatsController do
     top_artist =
       Repo.one(
         from(l in query,
+          where: not is_nil(l.artist_name) and l.artist_name != "",
           group_by: l.artist_name,
           select: %{
             name: l.artist_name, 
@@ -40,6 +41,7 @@ defmodule AppApiWeb.StatsController do
     top_track =
       Repo.one(
         from(l in query,
+          where: not is_nil(l.track_name) and l.track_name != "",
           group_by: [l.track_name, l.artist_name],
           select: %{
             name: l.track_name, 
@@ -56,6 +58,7 @@ defmodule AppApiWeb.StatsController do
     top_album =
       Repo.one(
         from(l in query,
+          where: not is_nil(l.release_name) and l.release_name != "",
           group_by: [l.release_name, l.artist_name],
           select: %{
             name: l.release_name, 
@@ -112,15 +115,17 @@ defmodule AppApiWeb.StatsController do
     recent_activity =
       Repo.all(
         from(l in query,
+          where: not is_nil(l.listened_at),
           group_by: fragment("DATE(datetime(?, 'unixepoch'))", l.listened_at),
           select: %{
             date: fragment("DATE(datetime(?, 'unixepoch'))", l.listened_at),
             plays: count(l.id)
           },
-          order_by: [asc: fragment("DATE(datetime(?, 'unixepoch'))", l.listened_at)],
+          order_by: [desc: fragment("DATE(datetime(?, 'unixepoch'))", l.listened_at)],
           limit: 30
         )
       )
+      |> Enum.reverse()
 
     json(conn, %{
       total_plays: total_plays,
@@ -148,6 +153,7 @@ defmodule AppApiWeb.StatsController do
 
     stats_query =
       query
+      |> where([l], not is_nil(l.artist_name) and l.artist_name != "")
       |> group_by([l], l.artist_name)
       |> select([l], %{
         name: l.artist_name,
@@ -232,6 +238,7 @@ defmodule AppApiWeb.StatsController do
 
     stats_query =
       query
+      |> where([l], not is_nil(l.track_name) and l.track_name != "")
       |> group_by([l], [l.track_name, l.artist_name, l.release_name])
       |> select([l], %{
         track: l.track_name,
@@ -288,6 +295,7 @@ defmodule AppApiWeb.StatsController do
 
     stats_query =
       query
+      |> where([l], not is_nil(l.release_name) and l.release_name != "")
       |> group_by([l], [l.release_name, l.artist_name])
       |> select([l], %{
         album: l.release_name,
@@ -719,13 +727,16 @@ defmodule AppApiWeb.StatsController do
     end
   end
 
+  defp format_duration(%Decimal{} = d), do: format_duration(d |> Decimal.round() |> Decimal.to_integer())
+  defp format_duration(ms) when is_float(ms), do: format_duration(round(ms))
+
   defp format_duration(ms) when is_integer(ms) and ms > 0 do
     hours = div(ms, 3_600_000)
     minutes = div(rem(ms, 3_600_000), 60_000)
-    "#{hours}h #{String.pad_leading(to_string(minutes), 2, "0")}m"
+    "#{hours}h #{minutes}m"
   end
 
-  defp format_duration(_), do: "0h 00m"
+  defp format_duration(_), do: "0h 0m"
 
   defp avg_duration(durations) do
     valid_durations = Enum.filter(durations, fn d -> d != nil && d > 0 end)
