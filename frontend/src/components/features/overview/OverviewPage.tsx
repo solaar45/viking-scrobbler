@@ -191,6 +191,11 @@ export function OverviewPage() {
       const breakdown_by_hour = overview.breakdown_by_hour || []
       const breakdown_by_genre = overview.breakdown_by_genre || []
 
+      // Lifetime stats for trends
+      const lifetimeResponse = await fetch(`/1/stats/user/${username}/totals?range=all_time`)
+      const lifetimeJson = await lifetimeResponse.json()
+      const lifetimeTotals = lifetimeJson.payload || {}
+
       setStats({
         filtered: {
           totalScrobbles: totals.total_listens || 0,
