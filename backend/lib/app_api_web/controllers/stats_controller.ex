@@ -959,18 +959,11 @@ defmodule AppApiWeb.StatsController do
       from(l in Listen,
         where: l.artist_name == ^artist_name and not is_nil(l.artist_name) and l.artist_name != "",
         where: fragment(
-          "(json_extract(?, '$.navidrome_id') IS NOT NULL AND json_extract(?, '$.navidrome_id') != '') OR " <>
-          "(json_extract(?, '$.coverArt') IS NOT NULL AND json_extract(?, '$.coverArt') != '') OR " <>
-          "(json_extract(?, '$.navidrome_id') IS NOT NULL AND json_extract(?, '$.navidrome_id') != '') OR " <>
-          "(json_extract(?, '$.coverArt') IS NOT NULL AND json_extract(?, '$.coverArt') != '')",
-          l.metadata, l.metadata, l.metadata, l.metadata, l.additional_info, l.additional_info, l.additional_info, l.additional_info
+          "COALESCE(NULLIF(json_extract(?, '$.navidrome_id'), ''), NULLIF(json_extract(?, '$.coverArt'), ''), NULLIF(json_extract(?, '$.navidrome_id'), ''), NULLIF(json_extract(?, '$.coverArt'), '')) IS NOT NULL",
+          l.metadata, l.metadata, l.additional_info, l.additional_info
         ),
         select: fragment(
-          "COALESCE(" <>
-          "NULLIF(json_extract(?, '$.navidrome_id'), ''), " <>
-          "NULLIF(json_extract(?, '$.coverArt'), ''), " <>
-          "NULLIF(json_extract(?, '$.navidrome_id'), ''), " <>
-          "NULLIF(json_extract(?, '$.coverArt'), ''))",
+          "COALESCE(NULLIF(json_extract(?, '$.navidrome_id'), ''), NULLIF(json_extract(?, '$.coverArt'), ''), NULLIF(json_extract(?, '$.navidrome_id'), ''), NULLIF(json_extract(?, '$.coverArt'), ''))",
           l.metadata, l.metadata, l.additional_info, l.additional_info
         ),
         order_by: [desc: l.id],
@@ -987,18 +980,11 @@ defmodule AppApiWeb.StatsController do
       from(l in Listen,
         where: l.release_name == ^album_name and not is_nil(l.release_name) and l.release_name != "",
         where: fragment(
-          "(json_extract(?, '$.navidrome_id') IS NOT NULL AND json_extract(?, '$.navidrome_id') != '') OR " <>
-          "(json_extract(?, '$.coverArt') IS NOT NULL AND json_extract(?, '$.coverArt') != '') OR " <>
-          "(json_extract(?, '$.navidrome_id') IS NOT NULL AND json_extract(?, '$.navidrome_id') != '') OR " <>
-          "(json_extract(?, '$.coverArt') IS NOT NULL AND json_extract(?, '$.coverArt') != '')",
-          l.metadata, l.metadata, l.metadata, l.metadata, l.additional_info, l.additional_info, l.additional_info, l.additional_info
+          "COALESCE(NULLIF(json_extract(?, '$.navidrome_id'), ''), NULLIF(json_extract(?, '$.coverArt'), ''), NULLIF(json_extract(?, '$.navidrome_id'), ''), NULLIF(json_extract(?, '$.coverArt'), '')) IS NOT NULL",
+          l.metadata, l.metadata, l.additional_info, l.additional_info
         ),
         select: fragment(
-          "COALESCE(" <>
-          "NULLIF(json_extract(?, '$.navidrome_id'), ''), " <>
-          "NULLIF(json_extract(?, '$.coverArt'), ''), " <>
-          "NULLIF(json_extract(?, '$.navidrome_id'), ''), " <>
-          "NULLIF(json_extract(?, '$.coverArt'), ''))",
+          "COALESCE(NULLIF(json_extract(?, '$.navidrome_id'), ''), NULLIF(json_extract(?, '$.coverArt'), ''), NULLIF(json_extract(?, '$.navidrome_id'), ''), NULLIF(json_extract(?, '$.coverArt'), ''))",
           l.metadata, l.metadata, l.additional_info, l.additional_info
         ),
         order_by: [desc: l.id],
@@ -1023,18 +1009,11 @@ defmodule AppApiWeb.StatsController do
       from(l in Listen,
         where: l.track_name == ^track_name and not is_nil(l.track_name) and l.track_name != "",
         where: fragment(
-          "(json_extract(?, '$.navidrome_id') IS NOT NULL AND json_extract(?, '$.navidrome_id') != '') OR " <>
-          "(json_extract(?, '$.coverArt') IS NOT NULL AND json_extract(?, '$.coverArt') != '') OR " <>
-          "(json_extract(?, '$.navidrome_id') IS NOT NULL AND json_extract(?, '$.navidrome_id') != '') OR " <>
-          "(json_extract(?, '$.coverArt') IS NOT NULL AND json_extract(?, '$.coverArt') != '')",
-          l.metadata, l.metadata, l.metadata, l.metadata, l.additional_info, l.additional_info, l.additional_info, l.additional_info
+          "COALESCE(NULLIF(json_extract(?, '$.navidrome_id'), ''), NULLIF(json_extract(?, '$.coverArt'), ''), NULLIF(json_extract(?, '$.navidrome_id'), ''), NULLIF(json_extract(?, '$.coverArt'), '')) IS NOT NULL",
+          l.metadata, l.metadata, l.additional_info, l.additional_info
         ),
         select: fragment(
-          "COALESCE(" <>
-          "NULLIF(json_extract(?, '$.navidrome_id'), ''), " <>
-          "NULLIF(json_extract(?, '$.coverArt'), ''), " <>
-          "NULLIF(json_extract(?, '$.navidrome_id'), ''), " <>
-          "NULLIF(json_extract(?, '$.coverArt'), ''))",
+          "COALESCE(NULLIF(json_extract(?, '$.navidrome_id'), ''), NULLIF(json_extract(?, '$.coverArt'), ''), NULLIF(json_extract(?, '$.navidrome_id'), ''), NULLIF(json_extract(?, '$.coverArt'), ''))",
           l.metadata, l.metadata, l.additional_info, l.additional_info
         ),
         order_by: [desc: l.id],
