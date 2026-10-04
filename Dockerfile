@@ -52,7 +52,7 @@ RUN mix release
 #############################
 # STAGE 3: Runtime-Image
 #############################
-FROM alpine:3.19
+FROM alpine:3.24
 RUN apk add --no-cache libstdc++ ncurses-libs openssl
 WORKDIR /app
 

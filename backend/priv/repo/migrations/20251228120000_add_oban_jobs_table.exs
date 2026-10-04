@@ -2,10 +2,10 @@ defmodule AppApi.Repo.Migrations.AddObanJobsTable do
   use Ecto.Migration
 
   def up do
-    Oban.Migration.up(version: 12)
+    Oban.Migrations.up()
   end
 
   def down do
-    Oban.Migration.down(version: 1)
+    Oban.Migrations.down()
   end
 end
