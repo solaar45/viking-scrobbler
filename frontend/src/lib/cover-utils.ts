@@ -35,8 +35,14 @@ export function getCoverUrl(
   listen: ListenWithCover,
   size: number = 150
 ): string | undefined {
-  // Check additional_info for navidrome_id
-  const navidromeId = listen?.additional_info?.navidrome_id
+  // Check additional_info for navidrome_id or coverArt, or root properties
+  const navidromeId =
+    listen?.additional_info?.navidrome_id ||
+    listen?.additional_info?.coverArt ||
+    listen?.additional_info?.cover_art ||
+    listen?.navidrome_id ||
+    listen?.coverArt ||
+    listen?.cover_id
 
   if (!navidromeId) {
     return undefined  // No cover available -> StatsCover will show gradient

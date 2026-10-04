@@ -183,29 +183,13 @@ export function OverviewPage() {
 
       console.log(`🔍 Filtered to ${filteredListens.length} listens for ${timeRange}`)
 
-      // Aggregate player data from filtered listens
-      const breakdown_by_player = aggregateByPlayer(filteredListens)
-      console.log('📊 Player breakdown:', breakdown_by_player)
+      // Player, Hour, and Genre breakdowns (from backend API or fallback to recent listens)
+      const breakdown_by_player = (overview.breakdown_by_player && overview.breakdown_by_player.length > 0)
+        ? overview.breakdown_by_player
+        : aggregateByPlayer(filteredListens)
 
-      // Lifetime stats for trends
-      const lifetimeResponse = await fetch(`/1/stats/user/${username}/totals?range=all_time`)
-      const lifetimeJson = await lifetimeResponse.json()
-      const lifetimeTotals = lifetimeJson.payload || {}
-
-      // Mock breakdown data for hour and genre (will be replaced with real API data)
-      const breakdown_by_hour = [
-        { name: 'Morning (6-12)', plays: 234, share: '39.1%' },
-        { name: 'Afternoon (12-18)', plays: 189, share: '31.6%' },
-        { name: 'Evening (18-24)', plays: 145, share: '24.3%' },
-        { name: 'Night (0-6)', plays: 30, share: '5.0%' },
-      ]
-
-      const breakdown_by_genre = [
-        { name: 'Hip-Hop', plays: 312, share: '52.2%' },
-        { name: 'Jazz', plays: 156, share: '26.1%' },
-        { name: 'Electronic', plays: 78, share: '13.0%' },
-        { name: 'Rock', plays: 52, share: '8.7%' },
-      ]
+      const breakdown_by_hour = overview.breakdown_by_hour || []
+      const breakdown_by_genre = overview.breakdown_by_genre || []
 
       setStats({
         filtered: {
@@ -425,7 +409,14 @@ interface HeroCardProps {
 
 function HeroCard({ type, name, subtitle, plays, item, coverSize, className }: HeroCardProps) {
   const coverUrl = getCoverUrl(item, coverSize)
+  const [imageError, setImageError] = useState(false)
   const typeLabels = { artist: 'TOP ARTIST', track: 'TOP TRACK', album: 'TOP ALBUM' }
+
+  useEffect(() => {
+    setImageError(false)
+  }, [coverUrl])
+
+  const showCover = coverUrl && !imageError
 
   return (
     <div className={cn(
@@ -449,15 +440,14 @@ function HeroCard({ type, name, subtitle, plays, item, coverSize, className }: H
           )}
           style={{ width: coverSize, height: coverSize }}
         >
-          {coverUrl ? (
+          {showCover ? (
             <img 
               src={coverUrl} 
               alt={name}
               className="w-full h-full object-cover"
               loading="lazy"
-              onError={(e) => {
-                console.error(`❌ Failed to load cover for ${name}:`, coverUrl)
-                e.currentTarget.style.display = 'none'
+              onError={() => {
+                setImageError(true)
               }}
             />
           ) : (

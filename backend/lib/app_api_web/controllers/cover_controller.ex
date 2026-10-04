@@ -97,7 +97,11 @@ defmodule AppApiWeb.CoverController do
   # === PRIVATE HELPERS ===
 
   defp get_navidrome_config(user_name) do
-    case Repo.get_by(NavidromeCredential, user_name: user_name) do
+    cred =
+      Repo.get_by(NavidromeCredential, user_name: user_name) ||
+        Repo.one(from(c in NavidromeCredential, order_by: [desc: c.id], limit: 1))
+
+    case cred do
       nil ->
         {:error, :no_credentials}
 
@@ -151,15 +155,9 @@ defmodule AppApiWeb.CoverController do
   end
 
   defp send_placeholder(conn) do
-    # Return 1x1 transparent PNG as placeholder
-    placeholder = <<137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0,
-      1, 0, 0, 0, 1, 8, 6, 0, 0, 0, 31, 21, 196, 137, 0, 0, 0, 10, 73, 68, 65, 84, 120, 156,
-      99, 0, 1, 0, 0, 5, 0, 1, 13, 10, 45, 180, 0, 0, 0, 0, 73, 69, 78, 68, 174, 66, 96, 130>>
-
     conn
-    |> put_resp_header("content-type", "image/png")
     |> put_resp_header("cache-control", "public, max-age=60")
-    |> send_resp(200, placeholder)
+    |> send_resp(404, "Not Found")
   end
 
   defp parse_metadata(nil), do: %{}

@@ -548,7 +548,12 @@ defmodule AppApi.NavidromeIntegration do
   defp update_listen_with_navidrome_data(listen, navidrome_data) do
     genres = navidrome_data["genres"]
 
-    if genres && length(genres) > 0 do
+    has_info =
+      (genres && length(genres) > 0) ||
+      navidrome_data["navidrome_id"] ||
+      navidrome_data["coverArt"]
+
+    if has_info do
       # CRITICAL: Reload from DB to get latest additional_info (includes media_player etc.)
       fresh_listen = Repo.get!(Listen, listen.id)
       

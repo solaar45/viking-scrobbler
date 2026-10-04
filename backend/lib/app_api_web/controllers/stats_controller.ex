@@ -71,45 +71,36 @@ defmodule AppApiWeb.StatsController do
         )
       ) || %{name: "N/A", artist: "N/A", plays: 0, sample_listen_id: nil}
 
-    # Batch fetch navidrome_ids for all top items
-    sample_listen_ids = [
-      top_artist.sample_listen_id,
-      top_track.sample_listen_id,
-      top_album.sample_listen_id
-    ] |> Enum.filter(&(&1 != nil))
-
-    navidrome_ids = get_navidrome_ids_batch(sample_listen_ids)
-
-    # Add additional_info with navidrome_id to each top item
-    top_artist = 
-      if top_artist.sample_listen_id do
-        navidrome_id = Map.get(navidrome_ids, top_artist.sample_listen_id)
-        top_artist
-        |> Map.put(:additional_info, %{navidrome_id: navidrome_id})
-        |> Map.delete(:sample_listen_id)
-      else
-        Map.delete(top_artist, :sample_listen_id)
+    # Smart cover resolution for top items
+    top_artist_cover =
+      if top_artist.name != "N/A" do
+        resolve_cover_id_for_artist(top_artist.name)
       end
 
-    top_track = 
-      if top_track.sample_listen_id do
-        navidrome_id = Map.get(navidrome_ids, top_track.sample_listen_id)
-        top_track
-        |> Map.put(:additional_info, %{navidrome_id: navidrome_id})
-        |> Map.delete(:sample_listen_id)
-      else
-        Map.delete(top_track, :sample_listen_id)
+    top_track_cover =
+      if top_track.name != "N/A" do
+        resolve_cover_id_for_track(top_track.name, top_track.artist)
       end
 
-    top_album = 
-      if top_album.sample_listen_id do
-        navidrome_id = Map.get(navidrome_ids, top_album.sample_listen_id)
-        top_album
-        |> Map.put(:additional_info, %{navidrome_id: navidrome_id})
-        |> Map.delete(:sample_listen_id)
-      else
-        Map.delete(top_album, :sample_listen_id)
+    top_album_cover =
+      if top_album.name != "N/A" do
+        resolve_cover_id_for_album(top_album.name, top_album.artist)
       end
+
+    top_artist =
+      top_artist
+      |> Map.put(:additional_info, %{navidrome_id: top_artist_cover})
+      |> Map.delete(:sample_listen_id)
+
+    top_track =
+      top_track
+      |> Map.put(:additional_info, %{navidrome_id: top_track_cover})
+      |> Map.delete(:sample_listen_id)
+
+    top_album =
+      top_album
+      |> Map.put(:additional_info, %{navidrome_id: top_album_cover})
+      |> Map.delete(:sample_listen_id)
 
     # Recent activity (last 30 days)
     recent_activity =
@@ -127,6 +118,119 @@ defmodule AppApiWeb.StatsController do
       )
       |> Enum.reverse()
 
+    # ── BREAKDOWN BY PLAYER ──────────────────────────────────────
+    player_query =
+      from(l in query,
+        group_by: fragment("COALESCE(NULLIF(json_extract(?, '$.media_player'), ''), NULLIF(?, ''), 'Unknown Client')", l.additional_info, l.music_service),
+        select: %{
+          name: fragment("COALESCE(NULLIF(json_extract(?, '$.media_player'), ''), NULLIF(?, ''), 'Unknown Client')", l.additional_info, l.music_service),
+          plays: count(l.id)
+        },
+        order_by: [desc: count(l.id)]
+      )
+
+    player_stats = Repo.all(player_query)
+    total_player_plays = Enum.sum(Enum.map(player_stats, & &1.plays))
+
+    breakdown_by_player =
+      Enum.map(player_stats, fn p ->
+        share =
+          if total_player_plays > 0 do
+            "#{Float.round(p.plays / total_player_plays * 100, 1)}%"
+          else
+            "0.0%"
+          end
+
+        %{name: p.name, plays: p.plays, share: share}
+      end)
+
+    # ── BREAKDOWN BY HOUR (Morning / Afternoon / Evening / Night) ─
+    hour_buckets = [
+      {"Morning (6-12)", 6, 11},
+      {"Afternoon (12-18)", 12, 17},
+      {"Evening (18-24)", 18, 23},
+      {"Night (0-6)", 0, 5}
+    ]
+
+    hour_query =
+      from(l in query,
+        where: not is_nil(l.listened_at),
+        group_by: fragment("CAST(strftime('%H', datetime(?, 'unixepoch')) AS INTEGER)", l.listened_at),
+        select: %{
+          hour: fragment("CAST(strftime('%H', datetime(?, 'unixepoch')) AS INTEGER)", l.listened_at),
+          plays: count(l.id)
+        }
+      )
+
+    hour_counts =
+      Repo.all(hour_query)
+      |> Enum.map(fn %{hour: h, plays: p} -> {h, p} end)
+      |> Map.new()
+
+    total_hour_plays = Enum.sum(Map.values(hour_counts))
+
+    breakdown_by_hour =
+      Enum.map(hour_buckets, fn {label, min_h, max_h} ->
+        plays =
+          Enum.reduce(min_h..max_h, 0, fn h, acc ->
+            acc + Map.get(hour_counts, h, 0)
+          end)
+
+        share =
+          if total_hour_plays > 0 do
+            "#{Float.round(plays / total_hour_plays * 100, 1)}%"
+          else
+            "0.0%"
+          end
+
+        %{name: label, plays: plays, share: share}
+      end)
+
+    # ── BREAKDOWN BY GENRE ───────────────────────────────────────
+    genre_query =
+      from(l in query,
+        where: not is_nil(l.metadata) or not is_nil(l.additional_info),
+        select: %{metadata: l.metadata, additional_info: l.additional_info}
+      )
+
+    genres_list =
+      Repo.all(genre_query)
+      |> Enum.flat_map(fn l ->
+        meta = parse_metadata(l.metadata)
+        info = parse_metadata(l.additional_info)
+
+        raw =
+          meta["genres"] ||
+          meta["genre"] ||
+          info["genres"] ||
+          info["genre"] ||
+          []
+
+        case raw do
+          list when is_list(list) -> list
+          str when is_binary(str) and str != "" -> String.split(str, ~r/[,;]\s*/)
+          _ -> []
+        end
+      end)
+      |> Enum.map(&String.trim/1)
+      |> Enum.reject(&(&1 in ["", nil, "–", "Unknown"]))
+
+    genre_counts = Enum.frequencies(genres_list)
+    total_genre_plays = Enum.sum(Map.values(genre_counts))
+
+    breakdown_by_genre =
+      if total_genre_plays > 0 do
+        genre_counts
+        |> Enum.sort_by(fn {_genre, count} -> count end, :desc)
+        |> Enum.take(6)
+        |> Enum.map(fn {genre, plays} ->
+          share = "#{Float.round(plays / total_genre_plays * 100, 1)}%"
+          %{name: genre, plays: plays, share: share}
+        end)
+      else
+        []
+      end
+
     json(conn, %{
       total_plays: total_plays,
       unique_artists: unique_artists,
@@ -135,7 +239,10 @@ defmodule AppApiWeb.StatsController do
       top_artist: top_artist,
       top_track: top_track,
       top_album: top_album,
-      recent_activity: recent_activity
+      recent_activity: recent_activity,
+      breakdown_by_player: breakdown_by_player,
+      breakdown_by_hour: breakdown_by_hour,
+      breakdown_by_genre: breakdown_by_genre
     })
   end
 
@@ -160,7 +267,10 @@ defmodule AppApiWeb.StatsController do
         plays: count(l.id),
         last_played: max(l.listened_at),
         avg_per_day: fragment("ROUND(COUNT(*) * 1.0 / ?, 1)", ^get_days_for_range(range)),
-        sample_listen_id: max(l.id)
+        sample_listen_id: fragment(
+          "COALESCE(MAX(CASE WHEN (json_extract(?, '$.navidrome_id') IS NOT NULL AND json_extract(?, '$.navidrome_id') != '') OR (json_extract(?, '$.coverArt') IS NOT NULL AND json_extract(?, '$.coverArt') != '') THEN ? END), MAX(?))",
+          l.metadata, l.metadata, l.metadata, l.metadata, l.id, l.id
+        )
       })
       |> order_by([l], desc: count(l.id))
       |> limit(^limit)
@@ -202,7 +312,9 @@ defmodule AppApiWeb.StatsController do
             0.0
           end
 
-        navidrome_id = Map.get(navidrome_ids, artist.sample_listen_id)
+        navidrome_id =
+          Map.get(navidrome_ids, artist.sample_listen_id) ||
+          resolve_cover_id_for_artist(artist.name)
 
         artist
         |> Map.put(:rank, rank)
@@ -246,7 +358,10 @@ defmodule AppApiWeb.StatsController do
         album: l.release_name,
         plays: count(l.id),
         last_played: max(l.listened_at),
-        sample_listen_id: max(l.id)
+        sample_listen_id: fragment(
+          "COALESCE(MAX(CASE WHEN (json_extract(?, '$.navidrome_id') IS NOT NULL AND json_extract(?, '$.navidrome_id') != '') OR (json_extract(?, '$.coverArt') IS NOT NULL AND json_extract(?, '$.coverArt') != '') THEN ? END), MAX(?))",
+          l.metadata, l.metadata, l.metadata, l.metadata, l.id, l.id
+        )
       })
       |> order_by([l], desc: count(l.id))
       |> limit(^limit)
@@ -268,7 +383,9 @@ defmodule AppApiWeb.StatsController do
             0.0
           end
 
-        navidrome_id = Map.get(navidrome_ids, stat.sample_listen_id)
+        navidrome_id =
+          Map.get(navidrome_ids, stat.sample_listen_id) ||
+          resolve_cover_id_for_track(stat.track, stat.artist)
 
         stat
         |> Map.put(:rank, rank)
@@ -302,7 +419,10 @@ defmodule AppApiWeb.StatsController do
         artist: l.artist_name,
         plays: count(l.id),
         last_played: max(l.listened_at),
-        sample_listen_id: max(l.id)
+        sample_listen_id: fragment(
+          "COALESCE(MAX(CASE WHEN (json_extract(?, '$.navidrome_id') IS NOT NULL AND json_extract(?, '$.navidrome_id') != '') OR (json_extract(?, '$.coverArt') IS NOT NULL AND json_extract(?, '$.coverArt') != '') THEN ? END), MAX(?))",
+          l.metadata, l.metadata, l.metadata, l.metadata, l.id, l.id
+        )
       })
       |> order_by([l], desc: count(l.id))
       |> limit(^limit)
@@ -324,7 +444,9 @@ defmodule AppApiWeb.StatsController do
             0.0
           end
 
-        navidrome_id = Map.get(navidrome_ids, stat.sample_listen_id)
+        navidrome_id =
+          Map.get(navidrome_ids, stat.sample_listen_id) ||
+          resolve_cover_id_for_album(stat.album, stat.artist)
 
         stat
         |> Map.put(:rank, rank)
@@ -760,16 +882,10 @@ defmodule AppApiWeb.StatsController do
   defp day_name(_), do: "N/A"
 
   # ═══════════════════════════════════════════════════════════════
-  # NAVIDROME ID EXTRACTION (ID3 ONLY)
+  # ═══════════════════════════════════════════════════════════════
+  # NAVIDROME ID EXTRACTION & COVER RESOLUTION
   # ═══════════════════════════════════════════════════════════════
 
-  @doc """
-  Batch fetch navidrome_id from Listen records.
-  Returns map of listen_id -> navidrome_id.
-  
-  Only returns IDs from metadata (Navidrome ID3 tags).
-  No external sources.
-  """
   defp get_navidrome_ids_batch(listen_ids) when is_list(listen_ids) do
     if length(listen_ids) == 0 do
       %{}
@@ -777,11 +893,11 @@ defmodule AppApiWeb.StatsController do
       Repo.all(
         from(l in Listen,
           where: l.id in ^listen_ids,
-          select: %{id: l.id, metadata: l.metadata}
+          select: %{id: l.id, metadata: l.metadata, additional_info: l.additional_info}
         )
       )
       |> Enum.map(fn listen ->
-        navidrome_id = extract_navidrome_id(listen.metadata)
+        navidrome_id = extract_navidrome_id(listen.metadata, listen.additional_info)
         {listen.id, navidrome_id}
       end)
       |> Enum.filter(fn {_id, nav_id} -> nav_id != nil end)
@@ -825,8 +941,197 @@ defmodule AppApiWeb.StatsController do
 
   defp extract_year(_), do: nil
 
-  # Extract navidrome_id from metadata JSON
-  defp extract_navidrome_id(metadata) do
-    Map.get(parse_metadata(metadata), "navidrome_id")
+  # Extract navidrome_id from metadata or additional_info
+  defp extract_navidrome_id(metadata, additional_info \\ nil) do
+    meta_map = parse_metadata(metadata)
+    info_map = parse_metadata(additional_info)
+
+    meta_map["navidrome_id"] ||
+      meta_map["coverArt"] ||
+      meta_map["cover_art"] ||
+      info_map["navidrome_id"] ||
+      info_map["coverArt"] ||
+      info_map["cover_art"]
+  end
+
+  defp resolve_cover_id_for_artist(artist_name) do
+    case Repo.one(
+      from(l in Listen,
+        where: l.artist_name == ^artist_name and not is_nil(l.artist_name) and l.artist_name != "",
+        where: fragment(
+          "(json_extract(?, '$.navidrome_id') IS NOT NULL AND json_extract(?, '$.navidrome_id') != '') OR " <>
+          "(json_extract(?, '$.coverArt') IS NOT NULL AND json_extract(?, '$.coverArt') != '') OR " <>
+          "(json_extract(?, '$.navidrome_id') IS NOT NULL AND json_extract(?, '$.navidrome_id') != '') OR " <>
+          "(json_extract(?, '$.coverArt') IS NOT NULL AND json_extract(?, '$.coverArt') != '')",
+          l.metadata, l.metadata, l.metadata, l.metadata, l.additional_info, l.additional_info, l.additional_info, l.additional_info
+        ),
+        select: fragment(
+          "COALESCE(" <>
+          "NULLIF(json_extract(?, '$.navidrome_id'), ''), " <>
+          "NULLIF(json_extract(?, '$.coverArt'), ''), " <>
+          "NULLIF(json_extract(?, '$.navidrome_id'), ''), " <>
+          "NULLIF(json_extract(?, '$.coverArt'), ''))",
+          l.metadata, l.metadata, l.additional_info, l.additional_info
+        ),
+        order_by: [desc: l.id],
+        limit: 1
+      )
+    ) do
+      nil -> search_navidrome_for_cover(artist: artist_name)
+      cover_id -> cover_id
+    end
+  end
+
+  defp resolve_cover_id_for_album(album_name, artist_name) do
+    query =
+      from(l in Listen,
+        where: l.release_name == ^album_name and not is_nil(l.release_name) and l.release_name != "",
+        where: fragment(
+          "(json_extract(?, '$.navidrome_id') IS NOT NULL AND json_extract(?, '$.navidrome_id') != '') OR " <>
+          "(json_extract(?, '$.coverArt') IS NOT NULL AND json_extract(?, '$.coverArt') != '') OR " <>
+          "(json_extract(?, '$.navidrome_id') IS NOT NULL AND json_extract(?, '$.navidrome_id') != '') OR " <>
+          "(json_extract(?, '$.coverArt') IS NOT NULL AND json_extract(?, '$.coverArt') != '')",
+          l.metadata, l.metadata, l.metadata, l.metadata, l.additional_info, l.additional_info, l.additional_info, l.additional_info
+        ),
+        select: fragment(
+          "COALESCE(" <>
+          "NULLIF(json_extract(?, '$.navidrome_id'), ''), " <>
+          "NULLIF(json_extract(?, '$.coverArt'), ''), " <>
+          "NULLIF(json_extract(?, '$.navidrome_id'), ''), " <>
+          "NULLIF(json_extract(?, '$.coverArt'), ''))",
+          l.metadata, l.metadata, l.additional_info, l.additional_info
+        ),
+        order_by: [desc: l.id],
+        limit: 1
+      )
+
+    query =
+      if artist_name && artist_name != "" and artist_name != "N/A" do
+        where(query, [l], l.artist_name == ^artist_name)
+      else
+        query
+      end
+
+    case Repo.one(query) do
+      nil -> search_navidrome_for_cover(album: album_name, artist: artist_name)
+      cover_id -> cover_id
+    end
+  end
+
+  defp resolve_cover_id_for_track(track_name, artist_name) do
+    query =
+      from(l in Listen,
+        where: l.track_name == ^track_name and not is_nil(l.track_name) and l.track_name != "",
+        where: fragment(
+          "(json_extract(?, '$.navidrome_id') IS NOT NULL AND json_extract(?, '$.navidrome_id') != '') OR " <>
+          "(json_extract(?, '$.coverArt') IS NOT NULL AND json_extract(?, '$.coverArt') != '') OR " <>
+          "(json_extract(?, '$.navidrome_id') IS NOT NULL AND json_extract(?, '$.navidrome_id') != '') OR " <>
+          "(json_extract(?, '$.coverArt') IS NOT NULL AND json_extract(?, '$.coverArt') != '')",
+          l.metadata, l.metadata, l.metadata, l.metadata, l.additional_info, l.additional_info, l.additional_info, l.additional_info
+        ),
+        select: fragment(
+          "COALESCE(" <>
+          "NULLIF(json_extract(?, '$.navidrome_id'), ''), " <>
+          "NULLIF(json_extract(?, '$.coverArt'), ''), " <>
+          "NULLIF(json_extract(?, '$.navidrome_id'), ''), " <>
+          "NULLIF(json_extract(?, '$.coverArt'), ''))",
+          l.metadata, l.metadata, l.additional_info, l.additional_info
+        ),
+        order_by: [desc: l.id],
+        limit: 1
+      )
+
+    query =
+      if artist_name && artist_name != "" and artist_name != "N/A" do
+        where(query, [l], l.artist_name == ^artist_name)
+      else
+        query
+      end
+
+    case Repo.one(query) do
+      nil -> search_navidrome_for_cover(track: track_name, artist: artist_name)
+      cover_id -> cover_id
+    end
+  end
+
+  defp search_navidrome_for_cover(opts) do
+    case Repo.one(from(c in AppApi.NavidromeCredential, order_by: [desc: c.id], limit: 1)) do
+      nil ->
+        nil
+
+      cred ->
+        password = AppApi.NavidromeCredential.decrypt_token(cred)
+
+        if password do
+          query_param = opts[:album] || opts[:track] || opts[:artist] || ""
+
+          params = %{
+            "query" => query_param,
+            "u" => cred.username,
+            "p" => password,
+            "v" => "1.16.1",
+            "c" => "VikingScrobbler",
+            "f" => "json"
+          }
+
+          query_string = URI.encode_query(params)
+          url = "#{cred.url}/rest/search3?#{query_string}"
+
+          case HTTPoison.get(url, [], recv_timeout: 3000) do
+            {:ok, %{status_code: 200, body: body}} ->
+              case Jason.decode(body) do
+                {:ok, %{"subsonic-response" => %{"searchResult3" => result}}} ->
+                  album_cover =
+                    if opts[:album] do
+                      albums = result["album"] || []
+                      matched =
+                        Enum.find(albums, fn a ->
+                          String.downcase(a["name"] || "") == String.downcase(opts[:album])
+                        end) || List.first(albums)
+
+                      matched && (matched["coverArt"] || matched["id"])
+                    end
+
+                  song_cover =
+                    if opts[:track] || is_nil(album_cover) do
+                      songs = result["song"] || []
+                      matched =
+                        if opts[:track] do
+                          Enum.find(songs, fn s ->
+                            String.downcase(s["title"] || "") == String.downcase(opts[:track])
+                          end) || List.first(songs)
+                        else
+                          List.first(songs)
+                        end
+
+                      matched && (matched["coverArt"] || matched["id"])
+                    end
+
+                  artist_cover =
+                    if opts[:artist] && is_nil(album_cover) && is_nil(song_cover) do
+                      artists = result["artist"] || []
+                      matched =
+                        Enum.find(artists, fn a ->
+                          String.downcase(a["name"] || "") == String.downcase(opts[:artist])
+                        end) || List.first(artists)
+
+                      matched && (matched["coverArt"] || matched["artistImageUrl"] || matched["id"])
+                    end
+
+                  album_cover || song_cover || artist_cover
+
+                _ ->
+                  nil
+              end
+
+            _ ->
+              nil
+          end
+        else
+          nil
+        end
+    end
+  rescue
+    _ -> nil
   end
 end
