@@ -14,6 +14,7 @@ defmodule AppApi.Application do
        repos: Application.fetch_env!(:app_api, :ecto_repos), skip: skip_migrations?()},
       {DNSCluster, query: Application.get_env(:app_api, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: AppApi.PubSub},
+      {Oban, Application.fetch_env!(:app_api, Oban)},
       # Player session cache for tracking active listening sessions
       AppApi.PlayerSessionCache,
       # Start a worker by calling: AppApi.Worker.start_link(arg)

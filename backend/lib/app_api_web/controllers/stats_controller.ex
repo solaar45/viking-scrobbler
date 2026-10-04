@@ -14,17 +14,8 @@ defmodule AppApiWeb.StatsController do
 
     total_plays = Repo.aggregate(query, :count, :id)
 
-    # Calculate unique artists in Elixir (no COUNT DISTINCT in SQLite)
-    unique_artists =
-      Repo.all(from(l in query, select: l.artist_name))
-      |> Enum.uniq()
-      |> length()
-
-    # Calculate unique albums in Elixir
-    unique_albums =
-      Repo.all(from(l in query, select: l.release_name))
-      |> Enum.uniq()
-      |> length()
+    unique_artists = Repo.one(from(l in query, select: count(l.artist_name, :distinct))) || 0
+    unique_albums = Repo.one(from(l in query, select: count(l.release_name, :distinct))) || 0
 
     # Total listening time
     total_ms = Repo.one(from(l in query, select: sum(l.duration_ms))) || 0
@@ -360,17 +351,33 @@ defmodule AppApiWeb.StatsController do
 
     listens = Repo.all(query)
 
-    # Parse genres from JSONB metadata
+    # Parse genres from JSON metadata
     genre_stats =
       listens
       |> Enum.flat_map(fn listen ->
-        case listen.metadata do
-          %{"genres" => genres} when is_list(genres) ->
-            Enum.map(genres, &{&1, listen.duration_ms || 0, listen.listened_at})
+        metadata = parse_metadata(listen.metadata)
 
-          _ ->
-            []
-        end
+        raw_genres =
+          case metadata do
+            %{"genres" => genres} when is_list(genres) ->
+              genres
+
+            %{"genres" => genres} when is_binary(genres) and genres != "" ->
+              String.split(genres, ~r/[,;]\s*/)
+
+            %{"genre" => genre} when is_list(genre) ->
+              genre
+
+            %{"genre" => genre} when is_binary(genre) and genre != "" ->
+              String.split(genre, ~r/[,;]\s*/)
+
+            _ ->
+              []
+          end
+          |> Enum.map(&String.trim/1)
+          |> Enum.reject(&(&1 in ["", "-"]))
+
+        Enum.map(raw_genres, &{&1, listen.duration_ms || 0, listen.listened_at})
       end)
       |> Enum.group_by(
         fn {genre, _, _} -> genre end,
@@ -438,19 +445,20 @@ defmodule AppApiWeb.StatsController do
 
     year_stats =
       listens
-      |> Enum.filter(fn listen ->
-        case listen.metadata do
-          %{"release_year" => year} when is_integer(year) -> true
-          _ -> false
-        end
-      end)
       |> Enum.map(fn listen ->
-        year = get_in(listen.metadata, ["release_year"])
+        metadata = parse_metadata(listen.metadata)
+        year = extract_year(metadata)
         {year, listen.release_name, listen.artist_name, listen.listened_at}
       end)
+      |> Enum.filter(fn {year, _, _, _} -> is_integer(year) and year > 1000 end)
       |> Enum.group_by(fn {year, _, _, _} -> year end)
       |> Enum.map(fn {year, items} ->
-        albums = items |> Enum.map(fn {_, album, _, _} -> album end) |> Enum.uniq()
+        albums =
+          items
+          |> Enum.map(fn {_, album, _, _} -> album end)
+          |> Enum.reject(&is_nil/1)
+          |> Enum.uniq()
+
         listen_times = items |> Enum.map(fn {_, _, _, ts} -> ts end)
 
         top_album_data =
@@ -459,13 +467,23 @@ defmodule AppApiWeb.StatsController do
           |> Enum.max_by(fn {_, count} -> count end, fn -> {{nil, nil}, 0} end)
           |> elem(0)
 
-        {album_name, artist_name} = top_album_data
+        top_album_label =
+          case top_album_data do
+            {album_name, artist_name} when is_binary(album_name) and is_binary(artist_name) ->
+              "#{album_name} - #{artist_name}"
+
+            {album_name, _} when is_binary(album_name) ->
+              album_name
+
+            _ ->
+              "Unknown"
+          end
 
         %{
           year: year,
           plays: length(items),
           albums: length(albums),
-          top_album: "#{album_name} - #{artist_name}",
+          top_album: top_album_label,
           last_played: Enum.max(listen_times)
         }
       end)
@@ -760,21 +778,44 @@ defmodule AppApiWeb.StatsController do
     end
   end
 
-  # Extract navidrome_id from metadata JSON
-  defp extract_navidrome_id(nil), do: nil
-  defp extract_navidrome_id(""), do: nil
-  defp extract_navidrome_id("{}"), do: nil
+  # Parse metadata helper
+  defp parse_metadata(nil), do: %{}
+  defp parse_metadata(""), do: %{}
+  defp parse_metadata("{}"), do: %{}
 
-  defp extract_navidrome_id(metadata) when is_binary(metadata) do
+  defp parse_metadata(metadata) when is_binary(metadata) do
     case Jason.decode(metadata) do
-      {:ok, map} -> Map.get(map, "navidrome_id")
-      _ -> nil
+      {:ok, map} when is_map(map) -> map
+      _ -> %{}
     end
   end
 
-  defp extract_navidrome_id(metadata) when is_map(metadata) do
-    Map.get(metadata, "navidrome_id")
+  defp parse_metadata(metadata) when is_map(metadata), do: metadata
+  defp parse_metadata(_), do: %{}
+
+  # Extract release year from metadata
+  defp extract_year(metadata) when is_map(metadata) do
+    raw = metadata["release_year"] || metadata["year"] || metadata["mb_release_year"]
+
+    case raw do
+      year when is_integer(year) ->
+        year
+
+      year_str when is_binary(year_str) ->
+        case Integer.parse(String.slice(year_str, 0, 4)) do
+          {year, _} -> year
+          _ -> nil
+        end
+
+      _ ->
+        nil
+    end
   end
 
-  defp extract_navidrome_id(_), do: nil
+  defp extract_year(_), do: nil
+
+  # Extract navidrome_id from metadata JSON
+  defp extract_navidrome_id(metadata) do
+    Map.get(parse_metadata(metadata), "navidrome_id")
+  end
 end

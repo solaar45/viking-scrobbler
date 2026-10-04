@@ -128,21 +128,48 @@ defmodule AppApi.Listen do
   end
 
   @doc """
-  Filter by genres (stored in metadata JSONB)
+  Filter by genres (stored in metadata JSON for SQLite)
   Example: Listen.with_genres(query, ["Metal", "Progressive"])
   """
   def with_genres(query, genres) when is_list(genres) do
-    from l in query,
-      where: fragment("? @> ?", l.metadata, ^%{"genres" => genres})
+    conditions =
+      Enum.reduce(genres, false, fn genre, acc ->
+        dynamic(
+          [l],
+          ^acc or
+            fragment(
+              "EXISTS (SELECT 1 FROM json_each(json_extract(?, '$.genres')) WHERE value = ?)",
+              l.metadata,
+              ^genre
+            ) or
+            fragment(
+              "json_extract(?, '$.genre') = ?",
+              l.metadata,
+              ^genre
+            )
+        )
+      end)
+
+    from l in query, where: ^conditions
+  end
+
+  def with_genres(query, genre) when is_binary(genre) do
+    with_genres(query, [genre])
   end
 
   @doc """
-  Filter by release year (stored in metadata JSONB)
+  Filter by release year (stored in metadata JSON for SQLite)
   Example: Listen.by_year(query, 2012)
   """
   def by_year(query, year) when is_integer(year) do
     from l in query,
-      where: fragment("(?->>'release_year')::integer = ?", l.metadata, ^year)
+      where:
+        fragment(
+          "CAST(COALESCE(json_extract(?, '$.release_year'), json_extract(?, '$.year')) AS INTEGER) = ?",
+          l.metadata,
+          l.metadata,
+          ^year
+        )
   end
 
   @doc """

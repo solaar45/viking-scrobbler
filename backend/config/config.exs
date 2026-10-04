@@ -55,12 +55,17 @@ config :app_api,
 
 # Oban periodic jobs (enqueue cover caching + cleanup)
 config :app_api, Oban,
+  engine: Oban.Engines.Lite,
   repo: AppApi.Repo,
   queues: [default: 10, maintenance: 2],
-  plugins: [Oban.Plugins.Pruner, {Oban.Plugins.Cron, crontab: [
-    {"@hourly", AppApi.Workers.EnqueueMissingCoversWorker, args: %{}},
-    {"@daily", AppApi.Workers.CleanupCoverCacheWorker, args: %{}}
-  ]}]
+  plugins: [
+    Oban.Plugins.Pruner,
+    {Oban.Plugins.Cron,
+     crontab: [
+       {"@hourly", AppApi.Workers.EnqueueMissingCoversWorker, args: %{}},
+       {"@daily", AppApi.Workers.CleanupCoverCacheWorker, args: %{}}
+     ]}
+  ]
 
 # Alternativ für Production (runtime.exs):
 # config :app_api,
