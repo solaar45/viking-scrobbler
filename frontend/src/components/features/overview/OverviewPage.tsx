@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { BarChart3, Music, TrendingUp, TrendingDown } from 'lucide-react'
 import { VIKING_DESIGN, VIKING_TYPOGRAPHY, cn } from '@/lib/design-tokens'
 import { getCoverUrl } from '@/lib/cover-utils'
@@ -378,11 +378,36 @@ export function OverviewPage() {
       {/* ACTIVITY VISUALIZATION - 2/3 Chart + 1/3 Donut */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
         {/* LISTENING ACTIVITY CHART (2/3) - Full Width with Axes */}
-        <div className={cn(VIKING_DESIGN.components.card, "lg:col-span-2")}>
-          <div className={VIKING_DESIGN.components.cardContent}>
-            <div className="flex items-center mb-4">
-              <TrendingUp className="w-5 h-5 mr-2 text-viking-purple" />
-              <h2 className={VIKING_TYPOGRAPHY.heading.m}>Listening Activity</h2>
+        <div className={cn(VIKING_DESIGN.components.card, "lg:col-span-2 flex flex-col")}>
+          <div className={cn(VIKING_DESIGN.components.cardContent, "flex-1 flex flex-col justify-between")}>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
+              <div className="flex items-center">
+                <TrendingUp className="w-5 h-5 mr-2 text-viking-purple" />
+                <h2 className={VIKING_TYPOGRAPHY.heading.m}>Listening Activity</h2>
+              </div>
+              {stats.recent_activity && stats.recent_activity.length > 0 && (
+                <div className="flex items-center gap-2 text-xs flex-wrap">
+                  <div className="px-2.5 py-1 rounded-md bg-viking-bg-tertiary border border-white/5 text-viking-text-secondary">
+                    <span className="text-viking-text-tertiary">Total: </span>
+                    <span className="font-semibold text-white">
+                      {stats.recent_activity.reduce((acc, curr) => acc + curr.plays, 0).toLocaleString()}
+                    </span>
+                  </div>
+                  <div className="px-2.5 py-1 rounded-md bg-viking-bg-tertiary border border-white/5 text-viking-text-secondary">
+                    <span className="text-viking-text-tertiary">Avg: </span>
+                    <span className="font-semibold text-white">
+                      {Math.round(stats.recent_activity.reduce((acc, curr) => acc + curr.plays, 0) / stats.recent_activity.length)}
+                      <span className="text-[10px] text-viking-text-tertiary">/d</span>
+                    </span>
+                  </div>
+                  <div className="px-2.5 py-1 rounded-md bg-viking-purple/10 border border-viking-purple/20 text-viking-purple">
+                    <span>Peak: </span>
+                    <span className="font-semibold">
+                      {Math.max(...stats.recent_activity.map(d => d.plays)).toLocaleString()}
+                    </span>
+                  </div>
+                </div>
+              )}
             </div>
             <AreaChartWithAxes data={stats.recent_activity} />
           </div>
@@ -526,47 +551,116 @@ function MetricCard({ label, value, valueStr, unit, trend }: MetricCardProps) {
 
 // ===== AREA CHART WITH AXES =====
 function AreaChartWithAxes({ data }: { data: Array<{ date: string; plays: number }> }) {
-  if (data.length === 0) {
+  const [hoverIndex, setHoverIndex] = useState<number | null>(null)
+  const svgRef = useRef<SVGSVGElement>(null)
+
+  if (!data || data.length === 0) {
     return (
-      <div className="h-64 flex items-center justify-center text-viking-text-tertiary">
-        No data available
+      <div className="h-[320px] flex items-center justify-center text-viking-text-tertiary">
+        No activity recorded for this period
       </div>
     )
   }
 
   const maxPlays = Math.max(...data.map(d => d.plays), 1)
-  const ySteps = 5
-  const yInterval = Math.ceil(maxPlays / ySteps)
+  const peakIndex = data.findIndex(d => d.plays === maxPlays)
+  const ySteps = 4
+  const yInterval = Math.max(1, Math.ceil(maxPlays / ySteps))
   const yMax = yInterval * ySteps
 
   const chartWidth = 800
-  const chartHeight = 240
-  const paddingLeft = 50
+  const chartHeight = 300
+  const paddingLeft = 45
   const paddingRight = 20
-  const paddingTop = 20
+  const paddingTop = 25
   const paddingBottom = 40
   
   const innerWidth = chartWidth - paddingLeft - paddingRight
   const innerHeight = chartHeight - paddingTop - paddingBottom
 
+  const points = data.map((d, i) => {
+    const x = paddingLeft + (data.length > 1 ? (i / (data.length - 1)) * innerWidth : innerWidth / 2)
+    const y = paddingTop + innerHeight - (d.plays / yMax) * innerHeight
+    return { x, y, plays: d.plays, date: d.date, index: i }
+  })
+
+  // Format dates for X-axis
   const formatXAxisDate = (dateStr: string) => {
-    const d = new Date(dateStr)
+    if (!dateStr) return ''
+    if (dateStr.length === 7) {
+      const [year, month] = dateStr.split('-')
+      const d = new Date(parseInt(year, 10), parseInt(month, 10) - 1, 1)
+      return d.toLocaleString('en', { month: 'short' }) + (year !== new Date().getFullYear().toString() ? ` '${year.slice(2)}` : '')
+    }
+    const d = new Date(dateStr + 'T00:00:00')
     const day = d.getDate()
     const month = d.toLocaleString('en', { month: 'short' })
     return `${day} ${month}`
   }
 
+  // Format dates for Tooltip
+  const formatTooltipDate = (dateStr: string) => {
+    if (!dateStr) return ''
+    if (dateStr.length === 7) {
+      const [year, month] = dateStr.split('-')
+      const d = new Date(parseInt(year, 10), parseInt(month, 10) - 1, 1)
+      return d.toLocaleString('en', { month: 'long', year: 'numeric' })
+    }
+    const d = new Date(dateStr + 'T00:00:00')
+    return d.toLocaleDateString('en', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })
+  }
+
+  // Handle hover tracking
+  const handleMouseMove = (e: React.MouseEvent<SVGSVGElement>) => {
+    if (!svgRef.current || points.length === 0) return
+    const rect = svgRef.current.getBoundingClientRect()
+    const svgX = ((e.clientX - rect.left) / rect.width) * chartWidth
+    
+    let closestIdx = 0
+    let minDiff = Infinity
+    for (let i = 0; i < points.length; i++) {
+      const diff = Math.abs(points[i].x - svgX)
+      if (diff < minDiff) {
+        minDiff = diff
+        closestIdx = i
+      }
+    }
+    setHoverIndex(closestIdx)
+  }
+
+  const handleMouseLeave = () => {
+    setHoverIndex(null)
+  }
+
+  const activePoint = hoverIndex !== null ? points[hoverIndex] : null
+
   return (
-    <div className="w-full h-64">
-      <svg viewBox={`0 0 ${chartWidth} ${chartHeight}`} className="w-full h-full">
+    <div className="w-full h-[300px] md:h-[320px] relative select-none">
+      <svg 
+        ref={svgRef}
+        viewBox={`0 0 ${chartWidth} ${chartHeight}`} 
+        className="w-full h-full cursor-crosshair overflow-visible"
+        onMouseMove={handleMouseMove}
+        onMouseLeave={handleMouseLeave}
+      >
         <defs>
-          <linearGradient id="areaGradient" x1="0%" y1="0%" x2="0%" y2="100%">
-            <stop offset="0%" stopColor="rgb(99, 102, 241)" stopOpacity="0.3" />
-            <stop offset="100%" stopColor="rgb(99, 102, 241)" stopOpacity="0.05" />
+          <linearGradient id="vikingAreaGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stopColor="rgb(168, 85, 247)" stopOpacity="0.45" />
+            <stop offset="60%" stopColor="rgb(99, 102, 241)" stopOpacity="0.12" />
+            <stop offset="100%" stopColor="rgb(99, 102, 241)" stopOpacity="0.0" />
           </linearGradient>
+          <linearGradient id="vikingLineGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stopColor="rgb(192, 132, 252)" />
+            <stop offset="50%" stopColor="rgb(168, 85, 247)" />
+            <stop offset="100%" stopColor="rgb(99, 102, 241)" />
+          </linearGradient>
+          <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+            <feGaussianBlur stdDeviation="3" result="blur" />
+            <feComposite in="SourceGraphic" in2="blur" operator="over" />
+          </filter>
         </defs>
         
-        {/* Y-axis labels and grid lines */}
+        {/* Y-axis grid lines and labels */}
         {Array.from({ length: ySteps + 1 }, (_, i) => {
           const value = yInterval * i
           const y = paddingTop + innerHeight - (value / yMax) * innerHeight
@@ -579,7 +673,8 @@ function AreaChartWithAxes({ data }: { data: Array<{ date: string; plays: number
                 x2={chartWidth - paddingRight}
                 y2={y}
                 stroke="rgb(71, 85, 105)"
-                strokeOpacity="0.2"
+                strokeOpacity={i === 0 ? "0.35" : "0.15"}
+                strokeDasharray={i === 0 ? "none" : "3 3"}
                 strokeWidth="1"
               />
               <text
@@ -588,7 +683,7 @@ function AreaChartWithAxes({ data }: { data: Array<{ date: string; plays: number
                 textAnchor="end"
                 dominantBaseline="middle"
                 className="fill-viking-text-tertiary"
-                style={{ fontSize: '12px', fontFamily: 'monospace' }}
+                style={{ fontSize: '11px', fontFamily: 'monospace' }}
               >
                 {value}
               </text>
@@ -598,10 +693,14 @@ function AreaChartWithAxes({ data }: { data: Array<{ date: string; plays: number
         
         {/* X-axis labels */}
         {data.map((item, i) => {
-          const showLabel = data.length <= 7 || i % Math.ceil(data.length / 7) === 0 || i === data.length - 1
+          const showLabel = 
+            data.length <= 7 || 
+            i % Math.ceil(data.length / 6) === 0 || 
+            i === data.length - 1
+
           if (!showLabel) return null
           
-          const x = paddingLeft + (i / (data.length - 1)) * innerWidth
+          const x = paddingLeft + (data.length > 1 ? (i / (data.length - 1)) * innerWidth : innerWidth / 2)
           const y = chartHeight - paddingBottom + 20
           
           return (
@@ -610,8 +709,7 @@ function AreaChartWithAxes({ data }: { data: Array<{ date: string; plays: number
               x={x}
               y={y}
               textAnchor="middle"
-              className="fill-viking-text-tertiary"
-              style={{ fontSize: '11px' }}
+              className="fill-viking-text-tertiary text-[11px]"
             >
               {formatXAxisDate(item.date)}
             </text>
@@ -620,90 +718,161 @@ function AreaChartWithAxes({ data }: { data: Array<{ date: string; plays: number
         
         {/* Area fill */}
         <path
-          d={generateAreaPath(data, yMax, paddingLeft, paddingTop, innerWidth, innerHeight)}
-          fill="url(#areaGradient)"
+          d={generateSmoothAreaPath(points, innerHeight, paddingTop)}
+          fill="url(#vikingAreaGradient)"
         />
         
         {/* Line */}
         <path
-          d={generateLinePath(data, yMax, paddingLeft, paddingTop, innerWidth, innerHeight)}
+          d={generateSmoothLinePath(points, innerHeight, paddingTop)}
           fill="none"
-          stroke="rgb(99, 102, 241)"
-          strokeWidth="2"
+          stroke="url(#vikingLineGradient)"
+          strokeWidth="2.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
         />
-        
-        {/* Data points */}
-        {data.map((item, i) => {
-          const x = paddingLeft + (i / (data.length - 1)) * innerWidth
-          const y = paddingTop + innerHeight - (item.plays / yMax) * innerHeight
-          return (
+
+        {/* Peak Point Indicator (when not hovering or when peak) */}
+        {peakIndex >= 0 && maxPlays > 0 && points[peakIndex] && (
+          <g>
             <circle
-              key={i}
-              cx={x}
-              cy={y}
+              cx={points[peakIndex].x}
+              cy={points[peakIndex].y}
               r="4"
-              fill="rgb(99, 102, 241)"
-              className="hover:r-6 transition-all cursor-pointer"
-            >
-              <title>{formatXAxisDate(item.date)}: {item.plays} plays</title>
-            </circle>
-          )
-        })}
-        
-        <line
-          x1={paddingLeft}
-          y1={paddingTop}
-          x2={paddingLeft}
-          y2={chartHeight - paddingBottom}
-          stroke="rgb(71, 85, 105)"
-          strokeOpacity="0.5"
-          strokeWidth="1"
-        />
-        
-        <line
-          x1={paddingLeft}
-          y1={chartHeight - paddingBottom}
-          x2={chartWidth - paddingRight}
-          y2={chartHeight - paddingBottom}
-          stroke="rgb(71, 85, 105)"
-          strokeOpacity="0.5"
-          strokeWidth="1"
-        />
+              fill="#c084fc"
+              stroke="#1e1b4b"
+              strokeWidth="2"
+            />
+          </g>
+        )}
+
+        {/* Small points when 7 or fewer items */}
+        {data.length <= 7 && points.map((p, i) => (
+          <circle
+            key={i}
+            cx={p.x}
+            cy={p.y}
+            r="3.5"
+            fill="rgb(168, 85, 247)"
+            stroke="#0f172a"
+            strokeWidth="1.5"
+          />
+        ))}
+
+        {/* Interactive Crosshair & Highlight Dot */}
+        {activePoint && (
+          <g>
+            {/* Vertical crosshair line */}
+            <line
+              x1={activePoint.x}
+              y1={paddingTop}
+              x2={activePoint.x}
+              y2={chartHeight - paddingBottom}
+              stroke="rgb(168, 85, 247)"
+              strokeOpacity="0.4"
+              strokeWidth="1.5"
+              strokeDasharray="3 3"
+            />
+            {/* Glowing outer aura */}
+            <circle
+              cx={activePoint.x}
+              cy={activePoint.y}
+              r="9"
+              fill="rgb(168, 85, 247)"
+              fillOpacity="0.3"
+            />
+            {/* Inner dot */}
+            <circle
+              cx={activePoint.x}
+              cy={activePoint.y}
+              r="4.5"
+              fill="#ffffff"
+              stroke="rgb(147, 51, 234)"
+              strokeWidth="2.5"
+            />
+          </g>
+        )}
       </svg>
+
+      {/* Floating HTML Tooltip */}
+      {activePoint && (
+        <div 
+          className={cn(
+            "pointer-events-none absolute z-20 px-3 py-2 rounded-lg",
+            "bg-viking-bg-secondary/95 backdrop-blur-md border border-white/10 shadow-xl shadow-purple-950/30",
+            "text-xs transition-transform duration-75"
+          )}
+          style={{
+            left: `${(activePoint.x / chartWidth) * 100}%`,
+            top: `${Math.max((activePoint.y / chartHeight) * 100, 18)}%`,
+            transform: `translate(-50%, ${activePoint.y < 70 ? '16px' : '-115%'})`
+          }}
+        >
+          <div className="font-medium text-viking-text-secondary whitespace-nowrap">
+            {formatTooltipDate(activePoint.date)}
+          </div>
+          <div className="flex items-center gap-2 mt-1 whitespace-nowrap">
+            <span className="w-2 h-2 rounded-full bg-viking-purple shrink-0" />
+            <span className="font-bold text-white text-sm">
+              {activePoint.plays}
+            </span>
+            <span className="text-viking-text-tertiary">
+              {activePoint.plays === 1 ? 'scrobble' : 'scrobbles'}
+            </span>
+            {activePoint.plays === maxPlays && maxPlays > 0 && (
+              <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 ml-1">
+                Peak
+              </span>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
 
-function generateLinePath(
-  data: Array<{ plays: number }>, 
-  yMax: number,
-  paddingLeft: number,
-  paddingTop: number,
-  width: number, 
-  height: number
+// Generate smooth cubic Bézier line path using Catmull-Rom formulation
+function generateSmoothLinePath(
+  points: Array<{ x: number; y: number }>,
+  height: number,
+  paddingTop: number
 ): string {
-  if (data.length === 0) return ''
-  const points = data.map((d, i) => {
-    const x = paddingLeft + (i / (data.length - 1)) * width
-    const y = paddingTop + height - (d.plays / yMax) * height
-    return `${x},${y}`
-  })
-  return `M ${points.join(' L ')}`
+  if (points.length === 0) return ''
+  if (points.length === 1) return `M ${points[0].x.toFixed(1)},${points[0].y.toFixed(1)}`
+  if (points.length === 2) return `M ${points[0].x.toFixed(1)},${points[0].y.toFixed(1)} L ${points[1].x.toFixed(1)},${points[1].y.toFixed(1)}`
+
+  const bottomY = paddingTop + height
+  const clampY = (val: number) => Math.min(Math.max(val, paddingTop - 10), bottomY)
+
+  let path = `M ${points[0].x.toFixed(1)},${points[0].y.toFixed(1)}`
+  for (let i = 0; i < points.length - 1; i++) {
+    const p0 = points[Math.max(0, i - 1)]
+    const p1 = points[i]
+    const p2 = points[i + 1]
+    const p3 = points[Math.min(points.length - 1, i + 2)]
+
+    const cp1x = p1.x + (p2.x - p0.x) / 6
+    const cp1y = clampY(p1.y + (p2.y - p0.y) / 6)
+    const cp2x = p2.x - (p3.x - p1.x) / 6
+    const cp2y = clampY(p2.y - (p3.y - p1.y) / 6)
+
+    path += ` C ${cp1x.toFixed(1)},${cp1y.toFixed(1)} ${cp2x.toFixed(1)},${cp2y.toFixed(1)} ${p2.x.toFixed(1)},${p2.y.toFixed(1)}`
+  }
+  return path
 }
 
-function generateAreaPath(
-  data: Array<{ plays: number }>, 
-  yMax: number,
-  paddingLeft: number,
-  paddingTop: number,
-  width: number, 
-  height: number
+// Generate closed area path from smooth line path
+function generateSmoothAreaPath(
+  points: Array<{ x: number; y: number }>,
+  height: number,
+  paddingTop: number
 ): string {
-  if (data.length === 0) return ''
-  const linePath = generateLinePath(data, yMax, paddingLeft, paddingTop, width, height)
+  if (points.length === 0) return ''
+  const linePath = generateSmoothLinePath(points, height, paddingTop)
   const bottomY = paddingTop + height
-  const rightX = paddingLeft + width
-  return `${linePath} L ${rightX},${bottomY} L ${paddingLeft},${bottomY} Z`
+  const rightX = points[points.length - 1].x
+  const leftX = points[0].x
+  return `${linePath} L ${rightX.toFixed(1)},${bottomY} L ${leftX.toFixed(1)},${bottomY} Z`
 }
 
 // ===== DONUT CHARTS TABBED (Tremor Donut Chart #3) =====

@@ -102,21 +102,8 @@ defmodule AppApiWeb.StatsController do
       |> Map.put(:additional_info, %{navidrome_id: top_album_cover})
       |> Map.delete(:sample_listen_id)
 
-    # Recent activity (last 30 days)
-    recent_activity =
-      Repo.all(
-        from(l in query,
-          where: not is_nil(l.listened_at),
-          group_by: fragment("DATE(datetime(?, 'unixepoch'))", l.listened_at),
-          select: %{
-            date: fragment("DATE(datetime(?, 'unixepoch'))", l.listened_at),
-            plays: count(l.id)
-          },
-          order_by: [desc: fragment("DATE(datetime(?, 'unixepoch'))", l.listened_at)],
-          limit: 30
-        )
-      )
-      |> Enum.reverse()
+    # Recent activity with zero-filling and adaptive range
+    recent_activity = generate_activity(query, range)
 
     # ── BREAKDOWN BY PLAYER ──────────────────────────────────────
     player_query =
@@ -881,7 +868,143 @@ defmodule AppApiWeb.StatsController do
   defp day_name("6"), do: "Sat"
   defp day_name(_), do: "N/A"
 
-  # ═══════════════════════════════════════════════════════════════
+  defp generate_activity(query, range) do
+    today = Date.utc_today()
+
+    case range do
+      "week" ->
+        start_date = Date.add(today, -6)
+        dates = Enum.map(0..6, fn i -> Date.add(start_date, i) |> Date.to_iso8601() end)
+
+        counts =
+          Repo.all(
+            from(l in query,
+              where: not is_nil(l.listened_at),
+              group_by: fragment("DATE(datetime(?, 'unixepoch'))", l.listened_at),
+              select: %{
+                date: fragment("DATE(datetime(?, 'unixepoch'))", l.listened_at),
+                plays: count(l.id)
+              }
+            )
+          )
+          |> Enum.map(&{&1.date, &1.plays})
+          |> Map.new()
+
+        Enum.map(dates, fn d -> %{date: d, plays: Map.get(counts, d, 0)} end)
+
+      "month" ->
+        start_date = Date.add(today, -29)
+        dates = Enum.map(0..29, fn i -> Date.add(start_date, i) |> Date.to_iso8601() end)
+
+        counts =
+          Repo.all(
+            from(l in query,
+              where: not is_nil(l.listened_at),
+              group_by: fragment("DATE(datetime(?, 'unixepoch'))", l.listened_at),
+              select: %{
+                date: fragment("DATE(datetime(?, 'unixepoch'))", l.listened_at),
+                plays: count(l.id)
+              }
+            )
+          )
+          |> Enum.map(&{&1.date, &1.plays})
+          |> Map.new()
+
+        Enum.map(dates, fn d -> %{date: d, plays: Map.get(counts, d, 0)} end)
+
+      "year" ->
+        current_year = today.year
+        current_month = today.month
+
+        months =
+          Enum.map(11..0, fn offset ->
+            m = current_month - offset
+            {y, m} = if m <= 0, do: {current_year - 1, m + 12}, else: {current_year, m}
+            "#{y}-#{String.pad_leading(to_string(m), 2, "0")}"
+          end)
+
+        counts =
+          Repo.all(
+            from(l in query,
+              where: not is_nil(l.listened_at),
+              group_by: fragment("strftime('%Y-%m', datetime(?, 'unixepoch'))", l.listened_at),
+              select: %{
+                date: fragment("strftime('%Y-%m', datetime(?, 'unixepoch'))", l.listened_at),
+                plays: count(l.id)
+              }
+            )
+          )
+          |> Enum.map(&{&1.date, &1.plays})
+          |> Map.new()
+
+        Enum.map(months, fn m -> %{date: m, plays: Map.get(counts, m, 0)} end)
+
+      "all_time" ->
+        earliest_ts = Repo.one(from(l in query, where: not is_nil(l.listened_at), select: min(l.listened_at)))
+
+        case earliest_ts && DateTime.from_unix(earliest_ts) do
+          {:ok, earliest_dt} ->
+            earliest_date = DateTime.to_date(earliest_dt)
+
+            if Date.diff(today, earliest_date) > 45 do
+              raw_months =
+                Repo.all(
+                  from(l in query,
+                    where: not is_nil(l.listened_at),
+                    group_by: fragment("strftime('%Y-%m', datetime(?, 'unixepoch'))", l.listened_at),
+                    select: %{
+                      date: fragment("strftime('%Y-%m', datetime(?, 'unixepoch'))", l.listened_at),
+                      plays: count(l.id)
+                    },
+                    order_by: [asc: fragment("strftime('%Y-%m', datetime(?, 'unixepoch'))", l.listened_at)]
+                  )
+                )
+
+              counts = Enum.map(raw_months, &{&1.date, &1.plays}) |> Map.new()
+              first_m = (List.first(raw_months) || %{date: "#{today.year}-#{String.pad_leading(to_string(today.month), 2, "0")}"}).date
+              [start_y, start_m] = String.split(first_m, "-") |> Enum.map(&String.to_integer/1)
+
+              total_months = max((today.year - start_y) * 12 + (today.month - start_m), 0)
+
+              all_months =
+                Enum.map(0..total_months, fn offset ->
+                  m_total = start_m + offset
+                  y = start_y + div(m_total - 1, 12)
+                  m = rem(m_total - 1, 12) + 1
+                  "#{y}-#{String.pad_leading(to_string(m), 2, "0")}"
+                end)
+
+              Enum.map(all_months, fn m -> %{date: m, plays: Map.get(counts, m, 0)} end)
+            else
+              start_date = Date.add(today, -29)
+              dates = Enum.map(0..29, fn i -> Date.add(start_date, i) |> Date.to_iso8601() end)
+
+              counts =
+                Repo.all(
+                  from(l in query,
+                    where: not is_nil(l.listened_at),
+                    group_by: fragment("DATE(datetime(?, 'unixepoch'))", l.listened_at),
+                    select: %{
+                      date: fragment("DATE(datetime(?, 'unixepoch'))", l.listened_at),
+                      plays: count(l.id)
+                    }
+                  )
+                )
+                |> Enum.map(&{&1.date, &1.plays})
+                |> Map.new()
+
+              Enum.map(dates, fn d -> %{date: d, plays: Map.get(counts, d, 0)} end)
+            end
+
+          _ ->
+            []
+        end
+
+      _ ->
+        []
+    end
+  end
+
   # ═══════════════════════════════════════════════════════════════
   # NAVIDROME ID EXTRACTION & COVER RESOLUTION
   # ═══════════════════════════════════════════════════════════════
