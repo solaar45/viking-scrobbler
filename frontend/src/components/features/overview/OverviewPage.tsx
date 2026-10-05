@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from 'react'
-import { BarChart3, Music, TrendingUp, TrendingDown } from 'lucide-react'
+import { BarChart3, Music, TrendingUp, TrendingDown, PieChart } from 'lucide-react'
 import { VIKING_DESIGN, VIKING_TYPOGRAPHY, cn } from '@/lib/design-tokens'
 import { getCoverUrl } from '@/lib/cover-utils'
 
@@ -375,52 +375,54 @@ export function OverviewPage() {
         />
       </div>
 
-      {/* ACTIVITY VISUALIZATION - 2/3 Chart + 1/3 Donut */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
-        {/* LISTENING ACTIVITY CHART (2/3) - Full Width with Axes */}
-        <div className={cn(VIKING_DESIGN.components.card, "lg:col-span-2 flex flex-col")}>
-          <div className={cn(VIKING_DESIGN.components.cardContent, "flex-1 flex flex-col justify-between")}>
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
-              <div className="flex items-center">
-                <TrendingUp className="w-5 h-5 mr-2 text-viking-purple" />
-                <h2 className={VIKING_TYPOGRAPHY.heading.m}>Listening Activity</h2>
+      {/* 1. HERO LISTENING ACTIVITY CHART (100% Full Width) */}
+      <div className={cn(VIKING_DESIGN.components.card, "w-full flex flex-col")}>
+        <div className={cn(VIKING_DESIGN.components.cardContent, "p-6")}>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 rounded-xl bg-viking-purple/15 text-viking-purple border border-viking-purple/20">
+                <TrendingUp className="w-5 h-5" />
               </div>
-              {stats.recent_activity && stats.recent_activity.length > 0 && (
-                <div className="flex items-center gap-2 text-xs flex-wrap">
-                  <div className="px-2.5 py-1 rounded-md bg-viking-bg-tertiary border border-white/5 text-viking-text-secondary">
-                    <span className="text-viking-text-tertiary">Total: </span>
-                    <span className="font-semibold text-white">
-                      {stats.recent_activity.reduce((acc, curr) => acc + curr.plays, 0).toLocaleString()}
-                    </span>
-                  </div>
-                  <div className="px-2.5 py-1 rounded-md bg-viking-bg-tertiary border border-white/5 text-viking-text-secondary">
-                    <span className="text-viking-text-tertiary">Avg: </span>
-                    <span className="font-semibold text-white">
-                      {Math.round(stats.recent_activity.reduce((acc, curr) => acc + curr.plays, 0) / stats.recent_activity.length)}
-                      <span className="text-[10px] text-viking-text-tertiary">/d</span>
-                    </span>
-                  </div>
-                  <div className="px-2.5 py-1 rounded-md bg-viking-purple/10 border border-viking-purple/20 text-viking-purple">
-                    <span>Peak: </span>
-                    <span className="font-semibold">
-                      {Math.max(...stats.recent_activity.map(d => d.plays)).toLocaleString()}
-                    </span>
-                  </div>
-                </div>
-              )}
+              <div>
+                <h2 className={cn(VIKING_TYPOGRAPHY.heading.m, "text-white")}>Listening Activity</h2>
+                <p className="text-xs text-slate-400">Scrobble trends & activity over time</p>
+              </div>
             </div>
-            <AreaChartWithAxes data={stats.recent_activity} />
+            {stats.recent_activity && stats.recent_activity.length > 0 && (
+              <div className="flex items-center gap-2 text-xs flex-wrap">
+                <div className="px-3 py-1.5 rounded-lg bg-slate-800/80 border border-slate-700/60 text-slate-300 shadow-sm flex items-center gap-1.5">
+                  <span className="text-slate-400">Total:</span>
+                  <span className="font-bold text-white">
+                    {stats.recent_activity.reduce((acc, curr) => acc + curr.plays, 0).toLocaleString()}
+                  </span>
+                </div>
+                <div className="px-3 py-1.5 rounded-lg bg-slate-800/80 border border-slate-700/60 text-slate-300 shadow-sm flex items-center gap-1.5">
+                  <span className="text-slate-400">Avg:</span>
+                  <span className="font-bold text-white">
+                    {Math.round(stats.recent_activity.reduce((acc, curr) => acc + curr.plays, 0) / stats.recent_activity.length)}
+                    <span className="text-[10px] text-slate-400 font-normal">/day</span>
+                  </span>
+                </div>
+                <div className="px-3 py-1.5 rounded-lg bg-viking-purple/20 border border-viking-purple/40 text-purple-200 shadow-sm flex items-center gap-1.5">
+                  <span className="text-purple-300">Peak:</span>
+                  <span className="font-bold text-white">
+                    {Math.max(...stats.recent_activity.map(d => d.plays)).toLocaleString()}
+                  </span>
+                </div>
+              </div>
+            )}
           </div>
+          <AreaChartResponsive data={stats.recent_activity} />
         </div>
+      </div>
 
-        {/* DONUT CHARTS - Tabbed (1/3) */}
-        <div className={VIKING_DESIGN.components.card}>
-          <DonutChartsTabbed
-            byPlayer={stats.breakdown_by_player || []}
-            byHour={stats.breakdown_by_hour || []}
-            byGenre={stats.breakdown_by_genre || []}
-          />
-        </div>
+      {/* 2. BREAKDOWN SECTION (Full Width with rich internal layout) */}
+      <div className={cn(VIKING_DESIGN.components.card, "w-full")}>
+        <DonutChartsTabbed
+          byPlayer={stats.breakdown_by_player || []}
+          byHour={stats.breakdown_by_hour || []}
+          byGenre={stats.breakdown_by_genre || []}
+        />
       </div>
     </div>
   )
@@ -549,34 +551,81 @@ function MetricCard({ label, value, valueStr, unit, trend }: MetricCardProps) {
   )
 }
 
-// ===== AREA CHART WITH AXES =====
-function AreaChartWithAxes({ data }: { data: Array<{ date: string; plays: number }> }) {
-  const [hoverIndex, setHoverIndex] = useState<number | null>(null)
+// Helper: Compute clean round numbers for Y-axis scale
+function getNiceYScale(maxValue: number, tickCount = 4) {
+  if (maxValue <= 0) return { max: 10, step: 2, ticks: [0, 2, 4, 6, 8, 10] }
+  const rawStep = maxValue / tickCount
+  const power = Math.pow(10, Math.floor(Math.log10(rawStep)))
+  const fraction = rawStep / power
+  let niceFraction = 1
+  if (fraction <= 1) niceFraction = 1
+  else if (fraction <= 2) niceFraction = 2
+  else if (fraction <= 2.5) niceFraction = 2.5
+  else if (fraction <= 5) niceFraction = 5
+  else niceFraction = 10
+
+  const step = niceFraction * power
+  const max = Math.ceil(maxValue / step) * step
+  const ticks: number[] = []
+  for (let val = 0; val <= max + 0.0001; val += step) {
+    ticks.push(Math.round(val))
+  }
+  return { max, step, ticks }
+}
+
+// ===== 1. RESPONSIVE AREA CHART (LISTENING ACTIVITY) =====
+function AreaChartResponsive({ data }: { data: Array<{ date: string; plays: number }> }) {
+  const containerRef = useRef<HTMLDivElement>(null)
   const svgRef = useRef<SVGSVGElement>(null)
+  const [width, setWidth] = useState<number>(900)
+  const [hoverIndex, setHoverIndex] = useState<number | null>(null)
+
+  // Track container width via ResizeObserver
+  useEffect(() => {
+    if (!containerRef.current) return
+    const updateWidth = () => {
+      if (containerRef.current && containerRef.current.clientWidth > 0) {
+        setWidth(containerRef.current.clientWidth)
+      }
+    }
+    updateWidth()
+
+    const ro = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        if (entry.contentRect.width > 0) {
+          setWidth(Math.floor(entry.contentRect.width))
+        }
+      }
+    })
+    ro.observe(containerRef.current)
+    return () => ro.disconnect()
+  }, [])
 
   if (!data || data.length === 0) {
     return (
-      <div className="h-[320px] flex items-center justify-center text-viking-text-tertiary">
+      <div className="h-[400px] flex items-center justify-center text-slate-400">
         No activity recorded for this period
       </div>
     )
   }
 
-  const maxPlays = Math.max(...data.map(d => d.plays), 1)
-  const peakIndex = data.findIndex(d => d.plays === maxPlays)
-  const ySteps = 4
-  const yInterval = Math.max(1, Math.ceil(maxPlays / ySteps))
-  const yMax = yInterval * ySteps
-
-  const chartWidth = 800
-  const chartHeight = 300
-  const paddingLeft = 45
-  const paddingRight = 20
+  const height = 400
+  const paddingLeft = 55
+  const paddingRight = 35
   const paddingTop = 25
-  const paddingBottom = 40
-  
-  const innerWidth = chartWidth - paddingLeft - paddingRight
-  const innerHeight = chartHeight - paddingTop - paddingBottom
+  const paddingBottom = 45
+
+  const innerWidth = Math.max(100, width - paddingLeft - paddingRight)
+  const innerHeight = height - paddingTop - paddingBottom
+
+  const maxPlays = Math.max(...data.map(d => d.plays), 1)
+  const { max: yMax, ticks: yTicks } = getNiceYScale(maxPlays, 4)
+  const peakIndex = data.findIndex(d => d.plays === maxPlays)
+
+  // Calculate average
+  const totalPlays = data.reduce((acc, curr) => acc + curr.plays, 0)
+  const avgPlays = Math.round(totalPlays / data.length)
+  const avgY = paddingTop + innerHeight - (avgPlays / yMax) * innerHeight
 
   const points = data.map((d, i) => {
     const x = paddingLeft + (data.length > 1 ? (i / (data.length - 1)) * innerWidth : innerWidth / 2)
@@ -614,8 +663,8 @@ function AreaChartWithAxes({ data }: { data: Array<{ date: string; plays: number
   const handleMouseMove = (e: React.MouseEvent<SVGSVGElement>) => {
     if (!svgRef.current || points.length === 0) return
     const rect = svgRef.current.getBoundingClientRect()
-    const svgX = ((e.clientX - rect.left) / rect.width) * chartWidth
-    
+    const svgX = ((e.clientX - rect.left) / rect.width) * width
+
     let closestIdx = 0
     let minDiff = Infinity
     for (let i = 0; i < points.length; i++) {
@@ -634,114 +683,139 @@ function AreaChartWithAxes({ data }: { data: Array<{ date: string; plays: number
 
   const activePoint = hoverIndex !== null ? points[hoverIndex] : null
 
+  // Calculate dynamic label frequency so text never collides
+  const maxLabels = Math.max(3, Math.floor(innerWidth / 95))
+  const labelStep = Math.max(1, Math.ceil(data.length / maxLabels))
+
   return (
-    <div className="w-full h-[300px] md:h-[320px] relative select-none">
-      <svg 
+    <div ref={containerRef} className="w-full h-[400px] md:h-[420px] relative select-none">
+      <svg
         ref={svgRef}
-        viewBox={`0 0 ${chartWidth} ${chartHeight}`} 
+        viewBox={`0 0 ${width} ${height}`}
         className="w-full h-full cursor-crosshair overflow-visible"
         onMouseMove={handleMouseMove}
         onMouseLeave={handleMouseLeave}
       >
         <defs>
           <linearGradient id="vikingAreaGradient" x1="0%" y1="0%" x2="0%" y2="100%">
-            <stop offset="0%" stopColor="rgb(168, 85, 247)" stopOpacity="0.45" />
-            <stop offset="60%" stopColor="rgb(99, 102, 241)" stopOpacity="0.12" />
-            <stop offset="100%" stopColor="rgb(99, 102, 241)" stopOpacity="0.0" />
+            <stop offset="0%" stopColor="#a855f7" stopOpacity="0.45" />
+            <stop offset="60%" stopColor="#6366f1" stopOpacity="0.12" />
+            <stop offset="100%" stopColor="#6366f1" stopOpacity="0.0" />
           </linearGradient>
           <linearGradient id="vikingLineGradient" x1="0%" y1="0%" x2="100%" y2="0%">
-            <stop offset="0%" stopColor="rgb(192, 132, 252)" />
-            <stop offset="50%" stopColor="rgb(168, 85, 247)" />
-            <stop offset="100%" stopColor="rgb(99, 102, 241)" />
+            <stop offset="0%" stopColor="#c084fc" />
+            <stop offset="50%" stopColor="#a855f7" />
+            <stop offset="100%" stopColor="#6366f1" />
           </linearGradient>
-          <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
-            <feGaussianBlur stdDeviation="3" result="blur" />
-            <feComposite in="SourceGraphic" in2="blur" operator="over" />
-          </filter>
         </defs>
-        
+
         {/* Y-axis grid lines and labels */}
-        {Array.from({ length: ySteps + 1 }, (_, i) => {
-          const value = yInterval * i
-          const y = paddingTop + innerHeight - (value / yMax) * innerHeight
-          
+        {yTicks.map((val, i) => {
+          const y = paddingTop + innerHeight - (val / yMax) * innerHeight
+          const isBase = val === 0
+
           return (
             <g key={i}>
               <line
                 x1={paddingLeft}
                 y1={y}
-                x2={chartWidth - paddingRight}
+                x2={width - paddingRight}
                 y2={y}
-                stroke="rgb(71, 85, 105)"
-                strokeOpacity={i === 0 ? "0.35" : "0.15"}
-                strokeDasharray={i === 0 ? "none" : "3 3"}
-                strokeWidth="1"
+                stroke="rgba(148, 163, 184, 0.15)"
+                strokeOpacity={isBase ? "0.4" : "0.15"}
+                strokeDasharray={isBase ? "none" : "4 4"}
+                strokeWidth={isBase ? "1.5" : "1"}
               />
               <text
-                x={paddingLeft - 10}
+                x={paddingLeft - 12}
                 y={y}
                 textAnchor="end"
                 dominantBaseline="middle"
-                className="fill-viking-text-tertiary"
-                style={{ fontSize: '11px', fontFamily: 'monospace' }}
+                className="fill-slate-400 font-mono font-medium"
+                style={{ fontSize: '12px' }}
               >
-                {value}
+                {val.toLocaleString()}
               </text>
             </g>
           )
         })}
-        
+
+        {/* Subtle Average Reference Line */}
+        {avgPlays > 0 && avgPlays < yMax && (
+          <g>
+            <line
+              x1={paddingLeft}
+              y1={avgY}
+              x2={width - paddingRight}
+              y2={avgY}
+              stroke="rgba(192, 132, 252, 0.35)"
+              strokeDasharray="2 4"
+              strokeWidth="1"
+            />
+            <text
+              x={width - paddingRight + 4}
+              y={avgY}
+              dominantBaseline="middle"
+              className="fill-purple-300 font-mono font-semibold"
+              style={{ fontSize: '10px' }}
+            >
+              Avg
+            </text>
+          </g>
+        )}
+
         {/* X-axis labels */}
         {data.map((item, i) => {
-          const showLabel = 
-            data.length <= 7 || 
-            i % Math.ceil(data.length / 6) === 0 || 
+          const showLabel =
+            data.length <= 7 ||
+            i % labelStep === 0 ||
             i === data.length - 1
 
           if (!showLabel) return null
-          
+
           const x = paddingLeft + (data.length > 1 ? (i / (data.length - 1)) * innerWidth : innerWidth / 2)
-          const y = chartHeight - paddingBottom + 20
-          
+          const y = height - paddingBottom + 25
+
           return (
             <text
               key={i}
               x={x}
               y={y}
               textAnchor="middle"
-              className="fill-viking-text-tertiary text-[11px]"
+              className="fill-slate-400 font-medium"
+              style={{ fontSize: '12px' }}
             >
               {formatXAxisDate(item.date)}
             </text>
           )
         })}
-        
+
         {/* Area fill */}
         <path
           d={generateSmoothAreaPath(points, innerHeight, paddingTop)}
           fill="url(#vikingAreaGradient)"
         />
-        
+
         {/* Line */}
         <path
           d={generateSmoothLinePath(points, innerHeight, paddingTop)}
           fill="none"
           stroke="url(#vikingLineGradient)"
-          strokeWidth="2.5"
+          strokeWidth="3"
           strokeLinecap="round"
           strokeLinejoin="round"
         />
 
-        {/* Peak Point Indicator (when not hovering or when peak) */}
+        {/* Peak Point Indicator (when not hovering) */}
         {peakIndex >= 0 && maxPlays > 0 && points[peakIndex] && (
           <g>
             <circle
               cx={points[peakIndex].x}
               cy={points[peakIndex].y}
-              r="4"
+              r="4.5"
               fill="#c084fc"
-              stroke="#1e1b4b"
-              strokeWidth="2"
+              stroke="#0f172a"
+              strokeWidth="2.5"
             />
           </g>
         )}
@@ -752,43 +826,42 @@ function AreaChartWithAxes({ data }: { data: Array<{ date: string; plays: number
             key={i}
             cx={p.x}
             cy={p.y}
-            r="3.5"
+            r="4"
             fill="rgb(168, 85, 247)"
             stroke="#0f172a"
-            strokeWidth="1.5"
+            strokeWidth="2"
           />
         ))}
 
         {/* Interactive Crosshair & Highlight Dot */}
         {activePoint && (
           <g>
-            {/* Vertical crosshair line */}
             <line
               x1={activePoint.x}
               y1={paddingTop}
               x2={activePoint.x}
-              y2={chartHeight - paddingBottom}
+              y2={height - paddingBottom}
               stroke="rgb(168, 85, 247)"
-              strokeOpacity="0.4"
+              strokeOpacity="0.45"
               strokeWidth="1.5"
-              strokeDasharray="3 3"
+              strokeDasharray="4 4"
             />
             {/* Glowing outer aura */}
             <circle
               cx={activePoint.x}
               cy={activePoint.y}
-              r="9"
+              r="11"
               fill="rgb(168, 85, 247)"
-              fillOpacity="0.3"
+              fillOpacity="0.35"
             />
             {/* Inner dot */}
             <circle
               cx={activePoint.x}
               cy={activePoint.y}
-              r="4.5"
+              r="5"
               fill="#ffffff"
               stroke="rgb(147, 51, 234)"
-              strokeWidth="2.5"
+              strokeWidth="3"
             />
           </g>
         )}
@@ -796,31 +869,31 @@ function AreaChartWithAxes({ data }: { data: Array<{ date: string; plays: number
 
       {/* Floating HTML Tooltip */}
       {activePoint && (
-        <div 
+        <div
           className={cn(
-            "pointer-events-none absolute z-20 px-3 py-2 rounded-lg",
-            "bg-viking-bg-secondary/95 backdrop-blur-md border border-white/10 shadow-xl shadow-purple-950/30",
+            "pointer-events-none absolute z-20 px-3.5 py-2.5 rounded-xl",
+            "bg-slate-900/95 backdrop-blur-md border border-slate-700/80 shadow-2xl shadow-purple-950/40",
             "text-xs transition-transform duration-75"
           )}
           style={{
-            left: `${(activePoint.x / chartWidth) * 100}%`,
-            top: `${Math.max((activePoint.y / chartHeight) * 100, 18)}%`,
-            transform: `translate(-50%, ${activePoint.y < 70 ? '16px' : '-115%'})`
+            left: `${(activePoint.x / width) * 100}%`,
+            top: `${Math.max((activePoint.y / height) * 100, 16)}%`,
+            transform: `translate(-50%, ${activePoint.y < 85 ? '20px' : '-118%'})`
           }}
         >
-          <div className="font-medium text-viking-text-secondary whitespace-nowrap">
+          <div className="font-medium text-slate-300 whitespace-nowrap">
             {formatTooltipDate(activePoint.date)}
           </div>
-          <div className="flex items-center gap-2 mt-1 whitespace-nowrap">
-            <span className="w-2 h-2 rounded-full bg-viking-purple shrink-0" />
+          <div className="flex items-center gap-2 mt-1.5 whitespace-nowrap">
+            <span className="w-2.5 h-2.5 rounded-full bg-purple-500 shrink-0 shadow-sm shadow-purple-500/50" />
             <span className="font-bold text-white text-sm">
-              {activePoint.plays}
+              {activePoint.plays.toLocaleString()}
             </span>
-            <span className="text-viking-text-tertiary">
+            <span className="text-slate-400">
               {activePoint.plays === 1 ? 'scrobble' : 'scrobbles'}
             </span>
             {activePoint.plays === maxPlays && maxPlays > 0 && (
-              <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 ml-1">
+              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 ml-1">
                 Peak
               </span>
             )}
@@ -875,7 +948,7 @@ function generateSmoothAreaPath(
   return `${linePath} L ${rightX.toFixed(1)},${bottomY} L ${leftX.toFixed(1)},${bottomY} Z`
 }
 
-// ===== DONUT CHARTS TABBED (Tremor Donut Chart #3) =====
+// ===== 2. MODERN DONUT CHARTS WITH CENTER KPI & BARS =====
 interface BreakdownData {
   name: string
   plays: number
@@ -888,8 +961,21 @@ interface DonutChartsTabbedProps {
   byGenre: BreakdownData[]
 }
 
+// High-contrast, distinguishable vibrant palette
+const BREAKDOWN_PALETTE = [
+  { hex: '#a855f7', bg: 'bg-purple-500' }, // Vivid Purple
+  { hex: '#06b6d4', bg: 'bg-cyan-500' },   // Bright Cyan
+  { hex: '#10b981', bg: 'bg-emerald-500' },// Emerald Green
+  { hex: '#f59e0b', bg: 'bg-amber-500' },  // Warm Amber
+  { hex: '#f43f5e', bg: 'bg-rose-500' },   // Coral Rose
+  { hex: '#6366f1', bg: 'bg-indigo-500' }, // Indigo
+  { hex: '#38bdf8', bg: 'bg-sky-400' },    // Sky Blue
+  { hex: '#ec4899', bg: 'bg-pink-500' },   // Pink
+]
+
 function DonutChartsTabbed({ byPlayer, byHour, byGenre }: DonutChartsTabbedProps) {
   const [activeTab, setActiveTab] = useState<'player' | 'hour' | 'genre'>('player')
+  const [hoveredIndex, setHoveredIndex] = useState<number | null>(null)
 
   const tabs = [
     { id: 'player' as const, label: 'By Player', data: byPlayer },
@@ -900,126 +986,237 @@ function DonutChartsTabbed({ byPlayer, byHour, byGenre }: DonutChartsTabbedProps
   const currentData = tabs.find(t => t.id === activeTab)?.data || []
 
   return (
-    <div className={VIKING_DESIGN.components.cardContent}>
-      <div className="mb-4">
-        <h2 className={VIKING_TYPOGRAPHY.heading.m}>Breakdown</h2>
-        <p className={cn(VIKING_TYPOGRAPHY.body.s, "mt-1")}>
-          Distribution of plays across different categories
-        </p>
-      </div>
-
-      {/* Tabs */}
-      <div className="flex gap-1 mb-6">
-        {tabs.map((tab) => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
-            className={cn(
-              "flex-1 text-xs font-semibold px-3 py-2 rounded-md transition-all",
-              activeTab === tab.id
-                ? "bg-viking-purple text-white"
-                : "text-viking-text-tertiary hover:text-viking-text-secondary hover:bg-viking-bg-tertiary"
-            )}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
-
-      {/* Donut Chart */}
-      <DonutChartSimple data={currentData} />
-
-      {/* Legend */}
-      <div className="mt-6 space-y-2">
-        <div className="flex items-center justify-between text-xs text-viking-text-tertiary mb-2">
-          <span>Category</span>
-          <span>Plays / Share</span>
+    <div className={cn(VIKING_DESIGN.components.cardContent, "p-6")}>
+      {/* Header with Title and Tab Buttons */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+        <div className="flex items-center gap-3">
+          <div className="p-2.5 rounded-xl bg-viking-purple/15 text-viking-purple border border-viking-purple/20">
+            <PieChart className="w-5 h-5" />
+          </div>
+          <div>
+            <h2 className={cn(VIKING_TYPOGRAPHY.heading.m, "text-white")}>Breakdown</h2>
+            <p className="text-xs text-slate-400">Distribution of plays across categories</p>
+          </div>
         </div>
-        {currentData.map((item, idx) => {
-          const colors = ['bg-viking-purple', 'bg-blue-500', 'bg-indigo-500', 'bg-violet-500', 'bg-fuchsia-500']
-          const color = colors[idx % colors.length]
-          
-          return (
-            <div key={item.name} className="flex items-center justify-between text-sm">
-              <div className="flex items-center gap-2 truncate">
-                <span className={cn(color, "w-2.5 h-2.5 rounded-sm shrink-0")} />
-                <span className="truncate">{item.name}</span>
-              </div>
-              <div className="flex items-center gap-2 shrink-0">
-                <span className="font-medium">{item.plays.toLocaleString()}</span>
-                <span className={cn(
-                  "px-1.5 py-0.5 rounded text-xs font-medium",
-                  "bg-viking-bg-tertiary text-viking-text-secondary"
-                )}>
-                  {item.share}
-                </span>
-              </div>
-            </div>
-          )
-        })}
+
+        {/* Tabs with distinct clickable appearance */}
+        <div className="flex gap-1.5 p-1 bg-slate-900/80 rounded-xl border border-slate-800">
+          {tabs.map((tab) => {
+            const isActive = activeTab === tab.id
+            return (
+              <button
+                key={tab.id}
+                onClick={() => {
+                  setActiveTab(tab.id)
+                  setHoveredIndex(null)
+                }}
+                className={cn(
+                  "text-xs font-semibold px-4 py-2 rounded-lg transition-all",
+                  isActive
+                    ? "bg-gradient-to-r from-viking-purple to-viking-purple-dark text-white shadow-md shadow-purple-950/40"
+                    : "text-slate-300 hover:text-white hover:bg-slate-800/80"
+                )}
+              >
+                {tab.label}
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* 2-Column Layout: Left = Large Donut with Center-KPI, Right = Rich Legend with Bars */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center pt-2">
+        {/* Left: Donut Chart with Center KPI */}
+        <div className="lg:col-span-5 flex justify-center py-2">
+          <DonutChartSimple
+            data={currentData}
+            hoveredIndex={hoveredIndex}
+            onHoverIndex={setHoveredIndex}
+          />
+        </div>
+
+        {/* Right: Legend with Progress Bars */}
+        <div className="lg:col-span-7 space-y-3">
+          <div className="flex items-center justify-between text-xs font-medium text-slate-400 pb-1 border-b border-slate-800/80">
+            <span>Category</span>
+            <span>Plays / Share</span>
+          </div>
+
+          <div className="space-y-3 max-h-[300px] overflow-y-auto pr-1">
+            {currentData.length === 0 ? (
+              <div className="text-center py-8 text-slate-400 text-sm">No data available</div>
+            ) : (
+              currentData.map((item, idx) => {
+                const color = BREAKDOWN_PALETTE[idx % BREAKDOWN_PALETTE.length]
+                const isHovered = hoveredIndex === idx
+
+                return (
+                  <div
+                    key={item.name}
+                    onMouseEnter={() => setHoveredIndex(idx)}
+                    onMouseLeave={() => setHoveredIndex(null)}
+                    className={cn(
+                      "p-2.5 rounded-xl transition-all cursor-pointer border",
+                      isHovered
+                        ? "bg-slate-800/80 border-slate-700 shadow-lg"
+                        : "bg-slate-900/40 border-slate-800/50 hover:bg-slate-800/40 hover:border-slate-700/50"
+                    )}
+                  >
+                    <div className="flex items-center justify-between text-sm mb-1.5">
+                      <div className="flex items-center gap-2.5 truncate">
+                        <span
+                          className="w-3 h-3 rounded-md shrink-0 shadow-sm"
+                          style={{ backgroundColor: color.hex }}
+                        />
+                        <span className={cn(
+                          "truncate font-medium transition-colors",
+                          isHovered ? "text-white" : "text-slate-200"
+                        )}>
+                          {item.name}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className="font-mono font-semibold text-white">
+                          {item.plays.toLocaleString()}
+                        </span>
+                        <span className={cn(
+                          "px-2 py-0.5 rounded-md text-xs font-bold",
+                          "bg-slate-800 border border-slate-700/60 text-purple-300"
+                        )}>
+                          {item.share}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Visual Progress Bar */}
+                    <div className="w-full h-1.5 rounded-full bg-slate-800/80 overflow-hidden">
+                      <div
+                        className="h-full rounded-full transition-all duration-500"
+                        style={{
+                          width: item.share,
+                          backgroundColor: color.hex
+                        }}
+                      />
+                    </div>
+                  </div>
+                )
+              })
+            )}
+          </div>
+        </div>
       </div>
     </div>
   )
 }
 
-// ===== SIMPLE DONUT CHART =====
-function DonutChartSimple({ data }: { data: BreakdownData[] }) {
+// ===== 3. ENLARGED DONUT CHART WITH CENTER KPI =====
+interface DonutChartSimpleProps {
+  data: BreakdownData[]
+  hoveredIndex: number | null
+  onHoverIndex: (idx: number | null) => void
+}
+
+function DonutChartSimple({ data, hoveredIndex, onHoverIndex }: DonutChartSimpleProps) {
   if (data.length === 0) {
     return (
-      <div className="h-40 flex items-center justify-center text-viking-text-tertiary">
+      <div className="h-60 flex items-center justify-center text-slate-400">
         No data available
       </div>
     )
   }
 
   const total = data.reduce((sum, item) => sum + item.plays, 0)
-  const colors = ['#6366f1', '#3b82f6', '#6366f1', '#8b5cf6', '#d946ef'] // viking-purple, blue, indigo, violet, fuchsia
+  const size = 260
+  const center = size / 2
+  const radius = 95
+  const strokeWidth = 32
+  const circumference = 2 * Math.PI * radius
 
+  // Calculate slice angles & stroke offsets
   let cumulativePercent = 0
 
+  const activeItem = hoveredIndex !== null ? data[hoveredIndex] : null
+  const activeColor = hoveredIndex !== null ? BREAKDOWN_PALETTE[hoveredIndex % BREAKDOWN_PALETTE.length].hex : '#a855f7'
+
   return (
-    <div className="flex justify-center">
-      <svg width="160" height="160" viewBox="0 0 160 160">
+    <div className="relative flex items-center justify-center select-none">
+      <svg
+        width={size}
+        height={size}
+        viewBox={`0 0 ${size} ${size}`}
+        className="transform -rotate-90"
+      >
+        {/* Track circle (background ring) */}
+        <circle
+          cx={center}
+          cy={center}
+          r={radius}
+          fill="none"
+          stroke="rgba(30, 41, 59, 0.6)"
+          strokeWidth={strokeWidth}
+        />
+
         {data.map((item, idx) => {
-          const percent = (item.plays / total) * 100
-          const startAngle = (cumulativePercent / 100) * 360
-          const endAngle = ((cumulativePercent + percent) / 100) * 360
-          
+          const percent = total > 0 ? (item.plays / total) * 100 : 0
+          const strokeLength = (percent / 100) * circumference
+          const strokeOffset = ((100 - cumulativePercent) / 100) * circumference
           cumulativePercent += percent
 
-          const startRad = (startAngle - 90) * (Math.PI / 180)
-          const endRad = (endAngle - 90) * (Math.PI / 180)
-          
-          const x1 = 80 + 60 * Math.cos(startRad)
-          const y1 = 80 + 60 * Math.sin(startRad)
-          const x2 = 80 + 60 * Math.cos(endRad)
-          const y2 = 80 + 60 * Math.sin(endRad)
-          
-          const largeArcFlag = percent > 50 ? 1 : 0
-          
-          const pathData = [
-            `M 80 80`,
-            `L ${x1} ${y1}`,
-            `A 60 60 0 ${largeArcFlag} 1 ${x2} ${y2}`,
-            `Z`
-          ].join(' ')
+          const color = BREAKDOWN_PALETTE[idx % BREAKDOWN_PALETTE.length].hex
+          const isHovered = hoveredIndex === idx
 
           return (
-            <path
+            <circle
               key={item.name}
-              d={pathData}
-              fill={colors[idx % colors.length]}
-              opacity={0.8}
-              className="hover:opacity-100 transition-opacity"
-            >
-              <title>{item.name}: {item.plays} plays ({item.share})</title>
-            </path>
+              cx={center}
+              cy={center}
+              r={radius}
+              fill="none"
+              stroke={color}
+              strokeWidth={isHovered ? strokeWidth + 6 : strokeWidth}
+              strokeDasharray={`${strokeLength} ${circumference}`}
+              strokeDashoffset={strokeOffset}
+              strokeLinecap="butt"
+              className="transition-all duration-300 cursor-pointer"
+              style={{
+                opacity: hoveredIndex === null || isHovered ? 1 : 0.45,
+                filter: isHovered ? `drop-shadow(0 0 8px ${color})` : 'none'
+              }}
+              onMouseEnter={() => onHoverIndex(idx)}
+              onMouseLeave={() => onHoverIndex(null)}
+            />
           )
         })}
-        
-        {/* Center hole */}
-        <circle cx="80" cy="80" r="40" fill="#0f172a" />
       </svg>
+
+      {/* Center KPI Display */}
+      <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none text-center p-4">
+        {activeItem ? (
+          <>
+            <span
+              className="text-3xl font-extrabold tracking-tight transition-colors duration-200"
+              style={{ color: activeColor }}
+            >
+              {activeItem.share}
+            </span>
+            <span className="text-xs font-bold text-white max-w-[120px] truncate mt-0.5">
+              {activeItem.name}
+            </span>
+            <span className="text-[11px] text-slate-400 font-mono mt-0.5">
+              {activeItem.plays.toLocaleString()} plays
+            </span>
+          </>
+        ) : (
+          <>
+            <span className="text-3xl font-extrabold text-white tracking-tight">
+              {total.toLocaleString()}
+            </span>
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">
+              Total Scrobbles
+            </span>
+          </>
+        )}
+      </div>
     </div>
   )
 }
