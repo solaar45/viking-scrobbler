@@ -42,11 +42,11 @@ defmodule AppApi.Listen do
 
   # Tier 2 Keys die aus additional_info in metadata JSONB extrahiert werden
   @tier2_keys [
-  "genres", "tags", "release_year", "label", "isrc",
-  "submission_client", "submission_client_version",
-  "artist_mbids", "artist_names", "total_tracks",
-  "navidrome_id", "cover_art", "coverArt"
-]
+    "genres", "tags", "release_year", "year", "album", "label", "isrc",
+    "submission_client", "submission_client_version",
+    "artist_mbids", "artist_names", "total_tracks",
+    "navidrome_id", "cover_art", "coverArt"
+  ]
 
   @doc false
   def changeset(listen, attrs) do

@@ -510,12 +510,12 @@ defmodule AppApi.NavidromeIntegration do
       |> Enum.reject(&(&1 == ""))
       |> Enum.uniq()
 
-    do_search_queries(navidrome_url, username, password, queries, artist, track)
+    do_search_queries(navidrome_url, username, password, queries, artist, track, album)
   end
 
-  defp do_search_queries(_url, _user, _pass, [], _artist, _track), do: {:error, :no_results}
+  defp do_search_queries(_url, _user, _pass, [], _artist, _track, _album), do: {:error, :no_results}
 
-  defp do_search_queries(url, user, pass, [query | rest], artist, track) do
+  defp do_search_queries(url, user, pass, [query | rest], artist, track, album) do
     params = %{
       "u" => user,
       "p" => pass,
@@ -531,48 +531,67 @@ defmodule AppApi.NavidromeIntegration do
 
     case HTTPoison.get(search_url, [], recv_timeout: 5000) do
       {:ok, %{status_code: 200, body: body}} ->
-        case parse_search_response(body, artist, track) do
+        case parse_search_response(body, artist, track, album) do
           {:ok, song} ->
             {:ok, song}
 
           _ ->
-            do_search_queries(url, user, pass, rest, artist, track)
+            do_search_queries(url, user, pass, rest, artist, track, album)
         end
 
       _ ->
-        do_search_queries(url, user, pass, rest, artist, track)
+        do_search_queries(url, user, pass, rest, artist, track, album)
     end
   end
 
-  defp parse_search_response(body, artist, track) do
+  defp parse_search_response(body, artist, track, album \\ nil) do
     case Jason.decode(body) do
       {:ok, %{"subsonic-response" => %{"searchResult3" => %{"song" => songs}}}}
       when is_list(songs) and length(songs) > 0 ->
         clean_track = clean_track_name(track) |> String.downcase()
         clean_artist = clean_artist_name(artist) |> String.downcase()
+        clean_album = if album, do: String.downcase(album), else: ""
         raw_track = String.downcase(track || "")
         raw_artist = String.downcase(artist || "")
 
         matched_song =
-          # 1. Exact match
+          # 1. Exact match with same album (Highest confidence)
+          (clean_album != "" &&
+             Enum.find(songs, fn song ->
+               s_art = String.downcase(song["artist"] || "")
+               s_title = String.downcase(song["title"] || "")
+               s_alb = String.downcase(song["album"] || "")
+               (s_art == raw_artist or s_art == clean_artist) and
+                 (s_title == raw_track or s_title == clean_track) and
+                 (s_alb == clean_album or String.contains?(s_alb, clean_album) or String.contains?(clean_album, s_alb))
+             end)) ||
+          # 2. Exact match on artist and title
           Enum.find(songs, fn song ->
             s_art = String.downcase(song["artist"] || "")
             s_title = String.downcase(song["title"] || "")
             s_art == raw_artist and s_title == raw_track
           end) ||
-          # 2. Normalized match (cleaned artist & track match)
+          # 3. Normalized match (cleaned artist & track match)
           Enum.find(songs, fn song ->
             s_art = clean_artist_name(song["artist"] || "") |> String.downcase()
             s_title = clean_track_name(song["title"] || "") |> String.downcase()
             (s_art == clean_artist or s_art == raw_artist) and
               (s_title == clean_track or s_title == raw_track)
           end) ||
-          # 3. Partial title match
+          # 4. Same album + partial title match
+          (clean_album != "" &&
+             Enum.find(songs, fn song ->
+               s_title = clean_track_name(song["title"] || "") |> String.downcase()
+               s_alb = String.downcase(song["album"] || "")
+               s_title == clean_track and
+                 (s_alb == clean_album or String.contains?(s_alb, clean_album))
+             end)) ||
+          # 5. Partial title match
           Enum.find(songs, fn song ->
             s_title = clean_track_name(song["title"] || "") |> String.downcase()
             s_title == clean_track
           end) ||
-          # 4. Fallback to first result
+          # 6. Fallback to first result
           List.first(songs)
 
         extract_metadata(matched_song)
@@ -623,7 +642,9 @@ defmodule AppApi.NavidromeIntegration do
     has_info =
       (genres && length(genres) > 0) ||
       navidrome_data["navidrome_id"] ||
-      navidrome_data["coverArt"]
+      navidrome_data["coverArt"] ||
+      navidrome_data["year"] ||
+      navidrome_data["album"]
 
     if has_info do
       # CRITICAL: Reload from DB to get latest additional_info (includes media_player etc.)
@@ -692,7 +713,7 @@ defmodule AppApi.NavidromeIntegration do
           {:error, :update_failed}
       end
     else
-      {:error, :no_genres}
+      {:error, :no_metadata_found}
     end
   end
 

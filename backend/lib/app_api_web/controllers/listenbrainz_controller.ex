@@ -389,14 +389,13 @@ defmodule AppApiWeb.ListenBrainzController do
 
         Task.start(fn ->
           Enum.each(listens_to_enrich, fn listen ->
-            # Enrich metadata (genres, bitrate, format, etc.)
-            case AppApi.NavidromeIntegration.enrich_listen_from_navidrome(listen) do
-              {:ok, _} ->
-                Logger.debug("✅ Enriched from Navidrome: #{listen.track_name}")
+            # Enrich metadata (genres, year, cover art) via Navidrome + album sibling inheritance
+            case AppApi.Enrichment.enrich_single_listen(listen) do
+              {:ok, :enriched} ->
+                Logger.debug("✅ Enriched listen: #{listen.track_name}")
 
-              {:error, _} ->
-                Logger.debug("⚠️ Navidrome failed, trying MusicBrainz: #{listen.track_name}")
-                Task.start(fn -> AppApi.GenreEnrichment.enrich_listen(listen) end)
+              _ ->
+                Logger.debug("⚠️ Navidrome/Sibling enrichment not found: #{listen.track_name}")
             end
 
             :timer.sleep(150)

@@ -692,8 +692,7 @@ defmodule AppApiWeb.StatsController do
       |> select([l], %{
         hour:
           fragment("CAST(strftime('%H', datetime(?, 'unixepoch')) AS INTEGER)", l.listened_at),
-        plays: count(l.id),
-        avg_per_day: fragment("ROUND(COUNT(*) * 1.0 / ?, 1)", ^days_divisor)
+        plays: count(l.id)
       })
       |> order_by([l], desc: count(l.id))
       |> limit(24)
@@ -709,9 +708,12 @@ defmodule AppApiWeb.StatsController do
             0.0
           end
 
+        avg_per_day = Float.round(stat.plays / max(days_divisor, 1), 1)
+
         stat
         |> Map.put(:rank, rank)
         |> Map.put(:percentage, percentage)
+        |> Map.put(:avg_per_day, avg_per_day)
         |> Map.put(
           :hour_range,
           "#{String.pad_leading(to_string(stat.hour), 2, "0")}:00-#{String.pad_leading(to_string(rem(stat.hour + 1, 24)), 2, "0")}:00"

@@ -8,13 +8,13 @@ defmodule AppApi.Enrichment do
   - Navidrome ID (navidrome_id)
 
   Strategy:
-  1. Try Navidrome first (primary source) via NavidromeIntegration
-  2. Fallback to MusicBrainz search if Navidrome fails
+  1. Try Navidrome Subsonic API (primary source) via NavidromeIntegration
+  2. Fallback to Album Sibling Inheritance (from other tracks on same album in local DB)
   """
 
   require Logger
   import Ecto.Query
-  alias AppApi.{Repo, Listen, GenreEnrichment, NavidromeIntegration}
+  alias AppApi.{Repo, Listen, NavidromeIntegration}
 
   @doc """
   Scan database for listens with granular missing metadata breakdown.
@@ -320,7 +320,7 @@ defmodule AppApi.Enrichment do
           "   Missing: #{Enum.join(missing_fields, ", ")}"
       )
 
-      # Try Navidrome first (provides all fields)
+      # Step 1: Try Navidrome lookup
       case NavidromeIntegration.enrich_listen_from_navidrome(listen) do
         {:ok, updated_listen} ->
           updated_metadata = parse_metadata(updated_listen.metadata)
@@ -334,26 +334,26 @@ defmodule AppApi.Enrichment do
           {:ok, :enriched}
 
         {:error, reason} ->
-          Logger.info("   ⚠️ Navidrome lookup failed: #{format_error(reason)}")
+          Logger.info("   ⚠️ Navidrome direct lookup failed: #{format_error(reason)}")
 
-          # Fallback to MusicBrainz (only genres + year)
-          case GenreEnrichment.enrich_listen(listen) do
+          # Step 2: Fallback to Album Sibling Inheritance (from other tracks of same album in user's DB)
+          case inherit_from_album_sibling(listen) do
             {:ok, updated_listen} ->
               updated_metadata = parse_metadata(updated_listen.metadata)
               added_fields = format_added_fields(current_metadata, updated_metadata)
 
               Logger.info(
-                "   ✅ Enriched from MusicBrainz\n" <>
+                "   ✅ Enriched from Album Sibling (local DB)\n" <>
                   "   Added: #{added_fields}"
               )
 
               {:ok, :enriched}
 
-            {:error, mb_reason} ->
+            {:error, sibling_reason} ->
               Logger.warning(
-                "   ❌ Not found in any source\n" <>
+                "   ❌ Not found in Navidrome or Album Siblings\n" <>
                   "   Navidrome: #{format_error(reason)}\n" <>
-                  "   MusicBrainz: #{format_error(mb_reason)}"
+                  "   Album Sibling: #{format_error(sibling_reason)}"
               )
 
               {:ok, :not_found}
@@ -445,4 +445,102 @@ defmodule AppApi.Enrichment do
   end
 
   defp parse_metadata(map) when is_map(map), do: map
+
+  # === ALBUM SIBLING INHERITANCE ===
+
+  defp inherit_from_album_sibling(%Listen{release_name: album, artist_name: artist} = listen)
+       when is_binary(album) and album != "" and is_binary(artist) and artist != "" do
+    # Search other listens from same album and artist that have metadata
+    sibling_query =
+      from l in Listen,
+        where: l.id != ^listen.id and l.user_name == ^listen.user_name,
+        where: l.release_name == ^album and l.artist_name == ^artist,
+        where:
+          not is_nil(l.metadata) and l.metadata != "{}" and l.metadata != "null" and l.metadata != "",
+        order_by: [desc: l.id]
+
+    siblings = Repo.all(sibling_query)
+
+    # Find the best sibling that has genres, year, or navidrome_id
+    best_donor =
+      Enum.find(siblings, fn s ->
+        meta = parse_metadata(s.metadata)
+        has_genres?(meta) or has_year?(meta) or has_navidrome_id?(meta)
+      end)
+
+    if best_donor do
+      donor_meta = parse_metadata(best_donor.metadata)
+      donor_info = best_donor.additional_info || %{}
+
+      fresh_listen = Repo.get!(Listen, listen.id)
+      current_meta = parse_metadata(fresh_listen.metadata)
+      current_info = fresh_listen.additional_info || %{}
+
+      # Inherit fields only if current listen does not have them
+      inherited_genres =
+        if !has_genres?(current_meta), do: donor_meta["genres"] || [donor_meta["genre"]], else: nil
+
+      inherited_year =
+        if !has_year?(current_meta),
+          do: donor_meta["year"] || donor_meta["release_year"] || donor_meta["mb_release_year"],
+          else: nil
+
+      inherited_nav_id =
+        if !has_navidrome_id?(current_meta),
+          do: donor_meta["navidrome_id"] || donor_meta["coverArt"] || donor_info["navidrome_id"],
+          else: nil
+
+      inherited_cover_art =
+        if !has_navidrome_id?(current_meta),
+          do: donor_meta["coverArt"] || donor_info["coverArt"],
+          else: nil
+
+      new_meta =
+        current_meta
+        |> maybe_put_field("genres", inherited_genres)
+        |> maybe_put_field("year", inherited_year)
+        |> maybe_put_field("release_year", inherited_year)
+        |> maybe_put_field("navidrome_id", inherited_nav_id)
+        |> maybe_put_field("coverArt", inherited_cover_art)
+        |> Map.put("source", "album_sibling")
+
+      new_info =
+        current_info
+        |> maybe_put_field("navidrome_id", inherited_nav_id)
+        |> maybe_put_field("coverArt", inherited_cover_art)
+
+      changeset =
+        fresh_listen
+        |> Ecto.Changeset.change(%{
+          metadata: Jason.encode!(new_meta),
+          additional_info: new_info
+        })
+
+      case Repo.update(changeset) do
+        {:ok, updated_listen} ->
+          try do
+            AppApiWeb.Endpoint.broadcast!("scrobbles:#{listen.user_name}", "listen_enriched", %{
+              listen_id: updated_listen.id,
+              track_name: updated_listen.track_name,
+              artist_name: updated_listen.artist_name
+            })
+          rescue
+            _ -> :ok
+          end
+
+          {:ok, updated_listen}
+
+        {:error, _} ->
+          {:error, :sibling_update_failed}
+      end
+    else
+      {:error, :no_sibling_with_metadata}
+    end
+  end
+
+  defp inherit_from_album_sibling(_), do: {:error, :missing_album_or_artist}
+
+  defp maybe_put_field(map, _key, nil), do: map
+  defp maybe_put_field(map, _key, []), do: map
+  defp maybe_put_field(map, key, val), do: Map.put(map, key, val)
 end
