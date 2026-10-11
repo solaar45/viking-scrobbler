@@ -50,6 +50,7 @@ defmodule AppApiWeb.Router do
     # ═══════════════════════════════════════════════════════════════
     get "/covers/:navidrome_id", CoverController, :show_by_navidrome_id
     get "/listens/:listen_id/cover", CoverController, :show_by_listen_id
+    delete "/listens/:id", StatsController, :delete_listen
 
     # ═══════════════════════════════════════════════════════════════
     # STATS ENDPOINTS

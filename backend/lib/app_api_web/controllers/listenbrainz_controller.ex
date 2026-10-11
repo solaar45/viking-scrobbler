@@ -648,6 +648,7 @@ defmodule AppApiWeb.ListenBrainzController do
       |> maybe_put("originalFormat", base_info["originalFormat"])
 
     %{
+      id: listen.id,
       listened_at: listen.listened_at,
       track_name: listen.track_name,
       artist_name: listen.artist_name,

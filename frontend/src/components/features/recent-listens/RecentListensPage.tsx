@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useMemo, useRef } from "react"
 import { TooltipProvider } from "@/components/ui/tooltip"
-import { Activity, RefreshCw, ChevronLeft, ChevronRight, Clock } from "lucide-react"
+import { Activity, RefreshCw, ChevronLeft, ChevronRight, Clock, Trash2 } from "lucide-react"
 import { DashboardSkeleton } from "@/components/layout"
 import { StatsCover } from '@/components/StatsCover'
 import { getCoverUrl } from '@/lib/cover-utils'
@@ -81,7 +81,29 @@ export function RecentListensPage() {
   const [username, setUsername] = useState<string>("viking_user")
   const [currentPage, setCurrentPage] = useState(1)
   const [pageSize, setPageSize] = useState(25)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
   const socketRef = useRef<WebSocket | null>(null)
+
+  const handleDelete = async (item: RecentListen) => {
+    if (!confirm(`Möchtest du den Scrobble "${item.track}" von ${item.artist} wirklich löschen?`)) {
+      return
+    }
+
+    setDeletingId(item.id)
+    try {
+      const response = await fetch(`/api/listens/${item.id}`, { method: "DELETE" })
+      if (response.ok) {
+        setAllRecent((prev) => prev.filter((l) => l.id !== item.id))
+      } else {
+        alert("Fehler beim Löschen des Eintrags.")
+      }
+    } catch (err) {
+      console.error("Delete failed", err)
+      alert("Netzwerkfehler beim Löschen.")
+    } finally {
+      setDeletingId(null)
+    }
+  }
 
   // Initial Data Fetch + Refetch bei Period-Wechsel
   useEffect(() => {
@@ -125,6 +147,11 @@ export function RecentListensPage() {
       if (message.event === "new_scrobble") {
         console.log("🎵 New scrobble detected!", message.payload)
         fetchRecentListens()
+      } else if (message.event === "listen_deleted") {
+        const deletedId = message.payload?.id
+        if (deletedId) {
+          setAllRecent((prev) => prev.filter((l) => l.id !== deletedId))
+        }
       }
     }
 
@@ -162,7 +189,7 @@ export function RecentListensPage() {
 
       const recentListens = (recentJson.payload?.listens || []).map(
         (listen: any) => ({
-          id: listen.listened_at?.toString() || Math.random().toString(),
+          id: listen.id?.toString() || listen.listened_at?.toString() || Math.random().toString(),
           track: listen.track_name || "Unknown Track",
           artist: listen.artist_name || "Unknown Artist",
           album: listen.release_name || "Unknown Album",
@@ -291,7 +318,8 @@ export function RecentListensPage() {
                         {/* USAGE METADATA GROUP */}
                         <th className="table-head-dense text-left w-[100px]">Player</th>
                         <th className="table-head-dense text-right w-[90px]">Date</th>
-                        <th className="table-head-dense text-right w-[60px] pr-6">Time</th>
+                        <th className="table-head-dense text-right w-[60px]">Time</th>
+                        <th className="table-head-dense text-center w-[40px] pr-6"></th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-viking-border-subtle">
@@ -360,8 +388,18 @@ export function RecentListensPage() {
                             <td className={`table-cell-dense w-[90px] text-right ${VIKING_TYPOGRAPHY.data.m}`}>
                               {formatDate(item.playedAt)}
                             </td>
-                            <td className={`table-cell-dense w-[60px] text-right pr-6 ${VIKING_TYPOGRAPHY.data.m}`}>
+                            <td className={`table-cell-dense w-[60px] text-right ${VIKING_TYPOGRAPHY.data.m}`}>
                               {formatTime(item.playedAt)}
+                            </td>
+                            <td className="table-cell-dense text-center w-[40px] pr-6">
+                              <button
+                                onClick={() => handleDelete(item)}
+                                disabled={deletingId === item.id}
+                                title="Eintrag löschen"
+                                className="p-1 rounded text-viking-text-tertiary hover:text-red-400 hover:bg-red-500/10 transition-colors disabled:opacity-40"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
                             </td>
                           </tr>
                         )

@@ -1362,4 +1362,33 @@ defmodule AppApiWeb.StatsController do
   rescue
     _ -> nil
   end
+
+  # DELETE /api/listens/:id
+  def delete_listen(conn, %{"id" => id}) do
+    case Repo.get(Listen, id) do
+      nil ->
+        conn
+        |> put_status(:not_found)
+        |> json(%{success: false, error: "Listen not found"})
+
+      listen ->
+        user_name = listen.user_name
+
+        case Repo.delete(listen) do
+          {:ok, _} ->
+            try do
+              AppApiWeb.Endpoint.broadcast!("scrobbles:#{user_name}", "listen_deleted", %{id: id})
+            rescue
+              _ -> :ok
+            end
+
+            json(conn, %{success: true, message: "Listen deleted successfully"})
+
+          {:error, _} ->
+            conn
+            |> put_status(:internal_server_error)
+            |> json(%{success: false, error: "Failed to delete listen"})
+        end
+    end
+  end
 end
