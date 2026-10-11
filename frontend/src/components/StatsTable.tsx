@@ -2,13 +2,12 @@ import { useEffect, useState } from 'react'
 import { Download, ChevronDown } from 'lucide-react'
 import { cn } from '@/lib/design-tokens'
 import { StatsCover } from './StatsCover'
+import { useTimeRange } from '@/context/TimeRangeContext'
 
 type StatType = 'artists' | 'tracks' | 'albums' | 'genres' | 'years' | 'dates' | 'times' | 'durations'
-type TimeRange = 'week' | 'month' | 'year' | 'all_time'
 
 interface StatsTableProps {
   type: StatType
-  timeRange: TimeRange
 }
 
 interface StatRow {
@@ -16,7 +15,8 @@ interface StatRow {
   [key: string]: any
 }
 
-export function StatsTable({ type, timeRange }: StatsTableProps) {
+export function StatsTable({ type }: StatsTableProps) {
+  const { timeRange, toQueryString, formatRangeLabel } = useTimeRange()
   const [data, setData] = useState<StatRow[]>([])
   const [loading, setLoading] = useState(true)
   const [limit, setLimit] = useState(50)
@@ -30,7 +30,8 @@ export function StatsTable({ type, timeRange }: StatsTableProps) {
   const loadData = async () => {
     setLoading(true)
     try {
-      const response = await fetch(`/api/stats/top-${type}?range=${timeRange}&limit=${limit}`)
+      const q = toQueryString()
+      const response = await fetch(`/api/stats/top-${type}?${q}&limit=${limit}`)
       const result = await response.json()
       setData(result.data || [])
     } catch (error) {
@@ -54,7 +55,10 @@ export function StatsTable({ type, timeRange }: StatsTableProps) {
     const url = window.URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `viking-stats-${type}-${timeRange}.csv`
+    const fileRangeLabel = timeRange.range === 'custom' 
+      ? `custom-${timeRange.customFrom || 'any'}_${timeRange.customTo || 'any'}` 
+      : timeRange.range
+    a.download = `viking-stats-${type}-${fileRangeLabel}.csv`
     a.click()
     window.URL.revokeObjectURL(url)
   }
@@ -104,7 +108,7 @@ export function StatsTable({ type, timeRange }: StatsTableProps) {
           </h3>
           <span className="text-viking-border-emphasis text-xl font-light">|</span>
           <span className="text-xs font-semibold text-viking-text-tertiary uppercase tracking-wider">
-            {timeRange.replace('_', ' ')}
+            {formatRangeLabel()}
           </span>
         </div>
 

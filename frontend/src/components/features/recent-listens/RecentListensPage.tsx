@@ -7,6 +7,8 @@ import { DashboardSkeleton } from "@/components/layout"
 import { StatsCover } from '@/components/StatsCover'
 import { getCoverUrl } from '@/lib/cover-utils'
 import { VIKING_DESIGN, VIKING_TYPOGRAPHY } from '@/lib/design-tokens'
+import { useTimeRange } from "@/context/TimeRangeContext"
+import { TimeRangeFilterBar } from "@/components/TimeRangeFilterBar"
 
 // --- TYPES ---
 export interface RecentListen {
@@ -73,7 +75,7 @@ function getFormatBadgeColor(format: string | undefined): string {
 
 // --- MAIN COMPONENT ---
 export function RecentListensPage() {
-  const [period, setPeriod] = useState<string>("all_time")
+  const { timeRange, formatRangeLabel } = useTimeRange()
   const [allRecent, setAllRecent] = useState<RecentListen[]>([])
   const [loading, setLoading] = useState(false)
   const [username, setUsername] = useState<string>("viking_user")
@@ -93,7 +95,7 @@ export function RecentListensPage() {
   // Reset page when filters change
   useEffect(() => {
     setCurrentPage(1)
-  }, [period, pageSize])
+  }, [timeRange, pageSize])
 
   // WebSocket Connection
   useEffect(() => {
@@ -188,9 +190,19 @@ export function RecentListensPage() {
   }
 
   const filteredRecent = useMemo(() => {
-    if (period === "all_time") return allRecent
+    if (timeRange.range === "all_time") return allRecent
 
-    const selectedPeriod = PERIODS.find((p) => p.id === period)
+    if (timeRange.range === "custom") {
+      const fromTs = timeRange.customFrom ? new Date(timeRange.customFrom + "T00:00:00Z").getTime() : 0
+      const toTs = timeRange.customTo ? new Date(timeRange.customTo + "T23:59:59Z").getTime() : Infinity
+
+      return allRecent.filter((listen) => {
+        const listenDate = new Date(listen.playedAt).getTime()
+        return listenDate >= fromTs && listenDate <= toTs
+      })
+    }
+
+    const selectedPeriod = PERIODS.find((p) => p.id === timeRange.range)
     if (!selectedPeriod?.days) return allRecent
 
     const cutoffDate = new Date()
@@ -201,7 +213,7 @@ export function RecentListensPage() {
       const listenDate = new Date(listen.playedAt).getTime()
       return listenDate >= cutoffTimestamp
     })
-  }, [allRecent, period])
+  }, [allRecent, timeRange])
 
   // Pagination calculations
   const totalPages = Math.ceil(filteredRecent.length / pageSize)
@@ -222,22 +234,8 @@ export function RecentListensPage() {
           <h1 className={VIKING_TYPOGRAPHY.heading.xl}>Recent Listens</h1>
         </div>
 
-        {/* Period Filter */}
-        <div className="flex gap-1 bg-viking-bg-tertiary p-1.5 rounded-lg border border-viking-border-default">
-          {PERIODS.map(({ id, label }) => (
-            <button
-              key={id}
-              onClick={() => setPeriod(id)}
-              className={`text-xs font-semibold px-4 py-2 rounded-md transition-all uppercase tracking-wide whitespace-nowrap ${
-                period === id
-                  ? "bg-gradient-to-r from-viking-purple to-viking-purple-dark text-white shadow-lg shadow-viking-purple/20"
-                  : "text-viking-text-tertiary hover:text-viking-text-secondary hover:bg-viking-bg-elevated"
-              }`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
+        {/* Unified Time Range Filter */}
+        <TimeRangeFilterBar />
       </div>
 
       {/* MAIN CONTENT */}
@@ -260,9 +258,9 @@ export function RecentListensPage() {
                         No Signal
                       </h3>
                       <p className="text-viking-text-secondary font-medium text-sm">
-                        {period === "all_time"
+                        {timeRange.range === "all_time"
                           ? "Listening activity will appear here."
-                          : `No listens found in ${PERIODS.find((p) => p.id === period)?.label.toLowerCase()}.`}
+                          : `No listens found for ${formatRangeLabel().toLowerCase()}.`}
                       </p>
                     </div>
                     <button

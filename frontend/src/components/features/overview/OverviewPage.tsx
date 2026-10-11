@@ -2,6 +2,8 @@ import { useEffect, useState, useRef } from 'react'
 import { BarChart3, Music, TrendingUp, TrendingDown, PieChart } from 'lucide-react'
 import { VIKING_DESIGN, VIKING_TYPOGRAPHY, cn } from '@/lib/design-tokens'
 import { getCoverUrl } from '@/lib/cover-utils'
+import { useTimeRange } from '@/context/TimeRangeContext'
+import { TimeRangeFilterBar } from '@/components/TimeRangeFilterBar'
 
 interface PeriodStats {
   totalScrobbles: number
@@ -108,9 +110,9 @@ function aggregateByPlayer(listens: RecentListen[]): Array<{ name: string; plays
 }
 
 export function OverviewPage() {
+  const { timeRange, toQueryString } = useTimeRange()
   const [stats, setStats] = useState<DashboardStats | null>(null)
   const [loading, setLoading] = useState(true)
-  const [timeRange, setTimeRange] = useState<'week' | 'month' | 'year' | 'all_time'>('all_time')
   const [username, setUsername] = useState<string>('viking_user')
 
   useEffect(() => {
@@ -129,15 +131,16 @@ export function OverviewPage() {
   const loadStats = async () => {
     setLoading(true)
     try {
+      const q = toQueryString()
       // API 1: Main metrics from /1/stats/user/{username}/totals
-      const statsResponse = await fetch(`/1/stats/user/${username}/totals?range=${timeRange}`)
+      const statsResponse = await fetch(`/1/stats/user/${username}/totals?${q}`)
       const statsJson = await statsResponse.json()
       const totals = statsJson.payload || {}
       
       console.log('📊 Stats API Response:', totals)
 
       // API 2: Overview data with listening time and top items
-      const overviewResponse = await fetch(`/api/stats/overview?range=${timeRange}`)
+      const overviewResponse = await fetch(`/api/stats/overview?${q}`)
       const overview = await overviewResponse.json()
       
       console.log('🎵 Overview API Response:', overview)
@@ -167,21 +170,30 @@ export function OverviewPage() {
       console.log(`📀 Loaded ${recentListens.length} recent listens`)
 
       // Filter recent listens by time range
-      const selectedPeriod = PERIODS.find((p) => p.id === timeRange)
       let filteredListens = recentListens
       
-      if (selectedPeriod?.days) {
-        const cutoffDate = new Date()
-        cutoffDate.setDate(cutoffDate.getDate() - selectedPeriod.days)
-        const cutoffTimestamp = cutoffDate.getTime()
-        
+      if (timeRange.range === 'custom') {
+        const fromTs = timeRange.customFrom ? new Date(timeRange.customFrom + 'T00:00:00Z').getTime() : 0
+        const toTs = timeRange.customTo ? new Date(timeRange.customTo + 'T23:59:59Z').getTime() : Infinity
         filteredListens = recentListens.filter((listen: RecentListen) => {
           const listenDate = new Date(listen.playedAt).getTime()
-          return listenDate >= cutoffTimestamp
+          return listenDate >= fromTs && listenDate <= toTs
         })
+      } else {
+        const selectedPeriod = PERIODS.find((p) => p.id === timeRange.range)
+        if (selectedPeriod?.days) {
+          const cutoffDate = new Date()
+          cutoffDate.setDate(cutoffDate.getDate() - selectedPeriod.days)
+          const cutoffTimestamp = cutoffDate.getTime()
+          
+          filteredListens = recentListens.filter((listen: RecentListen) => {
+            const listenDate = new Date(listen.playedAt).getTime()
+            return listenDate >= cutoffTimestamp
+          })
+        }
       }
 
-      console.log(`🔍 Filtered to ${filteredListens.length} listens for ${timeRange}`)
+      console.log(`🔍 Filtered to ${filteredListens.length} listens for ${timeRange.range}`)
 
       // Player, Hour, and Genre breakdowns (from backend API or fallback to recent listens)
       const breakdown_by_player = (overview.breakdown_by_player && overview.breakdown_by_player.length > 0)
@@ -252,7 +264,7 @@ export function OverviewPage() {
 
   const filtered = stats.filtered
   const lifetime = stats.lifetime
-  const trendLabel = getTrendLabel(timeRange)
+  const trendLabel = timeRange.range === 'custom' ? 'selected period' : getTrendLabel(timeRange.range)
   
   const formattedBestDay = filtered.peakDay && filtered.peakDay !== '' 
     ? formatDate(filtered.peakDay) 
@@ -276,22 +288,8 @@ export function OverviewPage() {
           <h1 className={VIKING_TYPOGRAPHY.heading.xl}>Overview</h1>
         </div>
 
-        {/* Time Range Filter - Button Group (like Recent Listens) */}
-        <div className="flex gap-1 bg-viking-bg-tertiary p-1.5 rounded-lg border border-viking-border-default">
-          {PERIODS.map(({ id, label }) => (
-            <button
-              key={id}
-              onClick={() => setTimeRange(id as any)}
-              className={`text-xs font-semibold px-4 py-2 rounded-md transition-all uppercase tracking-wide whitespace-nowrap ${
-                timeRange === id
-                  ? "bg-gradient-to-r from-viking-purple to-viking-purple-dark text-white shadow-lg shadow-viking-purple/20"
-                  : "text-viking-text-tertiary hover:text-viking-text-secondary hover:bg-viking-bg-elevated"
-              }`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
+        {/* Unified Time Range Filter */}
+        <TimeRangeFilterBar />
       </div>
 
       {/* HERO SECTION - 3 Equal Covers */}

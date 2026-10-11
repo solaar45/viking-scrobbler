@@ -2,9 +2,9 @@ import { useState } from 'react'
 import { TrendingUp, Users, Music, Disc, Guitar, Calendar, CalendarDays, Clock, Timer } from 'lucide-react'
 import { VIKING_DESIGN, VIKING_TYPOGRAPHY, cn } from '@/lib/design-tokens'
 import { StatsTable } from '@/components/StatsTable'
+import { TimeRangeFilterBar } from '@/components/TimeRangeFilterBar'
 
 type StatType = 'artists' | 'tracks' | 'albums' | 'genres' | 'years' | 'dates' | 'times' | 'durations'
-type TimeRange = 'week' | 'month' | 'year' | 'all_time'
 
 const STAT_CONFIGS = {
   artists: { icon: Users, label: 'Artists', emoji: '🎤' },
@@ -19,7 +19,6 @@ const STAT_CONFIGS = {
 
 export function StatisticsPage() {
   const [activeTab, setActiveTab] = useState<StatType>('artists')
-  const [timeRange, setTimeRange] = useState<TimeRange>('all_time')
 
   return (
     <div className="space-y-6">
@@ -30,30 +29,8 @@ export function StatisticsPage() {
           <h1 className={VIKING_TYPOGRAPHY.heading.xl}>Statistics</h1>
         </div>
 
-        {/* Time Range Filter */}
-        <div className="flex items-center gap-2">
-          <span className={VIKING_TYPOGRAPHY.label.default}>
-            Time Range:
-          </span>
-          <select
-            value={timeRange}
-            onChange={(e) => setTimeRange(e.target.value as TimeRange)}
-            className={cn(
-              "px-3 py-2 rounded-lg",
-              VIKING_TYPOGRAPHY.body.m,
-              VIKING_DESIGN.colors.card.elevated,
-              VIKING_DESIGN.colors.text.primary,
-              "border border-viking-border-default",
-              "focus:outline-none focus:ring-2 focus:ring-viking-purple",
-              VIKING_DESIGN.effects.transition.base
-            )}
-          >
-            <option value="week">Last 7 Days</option>
-            <option value="month">Last 30 Days</option>
-            <option value="year">Last Year</option>
-            <option value="all_time">All Time</option>
-          </select>
-        </div>
+        {/* Unified Time Range Filter */}
+        <TimeRangeFilterBar />
       </div>
 
       {/* TAB NAVIGATION */}
@@ -92,7 +69,7 @@ export function StatisticsPage() {
       </div>
 
       {/* ACTIVE TABLE */}
-      <StatsTable type={activeTab} timeRange={timeRange} />
+      <StatsTable type={activeTab} />
     </div>
   )
 }

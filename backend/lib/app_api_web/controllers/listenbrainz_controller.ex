@@ -258,7 +258,7 @@ defmodule AppApiWeb.ListenBrainzController do
   @doc "GET /1/stats/user/:user_name/totals"
   def get_user_totals(conn, %{"user_name" => user_name} = params) do
     range = params["range"] || "all_time"
-    query = build_time_range_query(Listen, user_name, range)
+    query = build_time_range_query(Listen, user_name, params)
 
     total_listens = Repo.aggregate(query, :count, :id)
 
@@ -296,7 +296,7 @@ defmodule AppApiWeb.ListenBrainzController do
       |> select([l], l.listened_at)
       |> Repo.one()
 
-    from_timestamp = get_range_timestamp(range)
+    from_timestamp = get_range_timestamp(params)
     {most_active_day, tracks_on_most_active} = Stats.most_active_day(user_name, from_timestamp)
     avg_per_day = Stats.avg_per_day(user_name, from_timestamp)
     peak_day_data = Stats.peak_day(user_name, from_timestamp)
@@ -680,7 +680,19 @@ defmodule AppApiWeb.ListenBrainzController do
   defp parse_timestamp(ts) when is_integer(ts), do: ts
   defp parse_timestamp(_), do: DateTime.utc_now() |> DateTime.to_unix()
 
-  defp build_time_range_query(query, user_name, range) do
+  defp build_time_range_query(query, user_name, %{"range" => "custom"} = params) do
+    from_ts = parse_boundary_timestamp(params["from"], :start_of_day)
+    to_ts = parse_boundary_timestamp(params["to"], :end_of_day)
+
+    base = from(l in query, where: l.user_name == ^user_name)
+    base = if from_ts, do: from(l in base, where: l.listened_at >= ^from_ts), else: base
+    if to_ts, do: from(l in base, where: l.listened_at <= ^to_ts), else: base
+  end
+
+  defp build_time_range_query(query, user_name, %{"range" => range}),
+    do: build_time_range_query(query, user_name, range)
+
+  defp build_time_range_query(query, user_name, range) when is_binary(range) do
     now = DateTime.utc_now() |> DateTime.to_unix()
 
     time_filter =
@@ -697,7 +709,13 @@ defmodule AppApiWeb.ListenBrainzController do
     )
   end
 
-  defp get_range_timestamp(range) do
+  defp get_range_timestamp(%{"range" => "custom"} = params) do
+    parse_boundary_timestamp(params["from"], :start_of_day)
+  end
+
+  defp get_range_timestamp(%{"range" => range}), do: get_range_timestamp(range)
+
+  defp get_range_timestamp(range) when is_binary(range) do
     now = DateTime.utc_now() |> DateTime.to_unix()
 
     case range do
@@ -708,4 +726,25 @@ defmodule AppApiWeb.ListenBrainzController do
       _ -> nil
     end
   end
+
+  defp parse_boundary_timestamp(val, boundary) when is_binary(val) do
+    case Integer.parse(val) do
+      {ts, ""} ->
+        ts
+      _ ->
+        case Date.from_iso8601(val) do
+          {:ok, date} ->
+            time = if boundary == :start_of_day, do: ~T[00:00:00], else: ~T[23:59:59]
+            {:ok, dt} = DateTime.new(date, time, "Etc/UTC")
+            DateTime.to_unix(dt)
+          _ ->
+            case DateTime.from_iso8601(val) do
+              {:ok, dt, _} -> DateTime.to_unix(dt)
+              _ -> nil
+            end
+        end
+    end
+  end
+  defp parse_boundary_timestamp(val, _) when is_integer(val), do: val
+  defp parse_boundary_timestamp(_, _), do: nil
 end

@@ -10,7 +10,7 @@ defmodule AppApiWeb.StatsController do
   # GET /api/stats/overview
   def overview(conn, params) do
     range = params["range"] || "month"
-    query = Listen |> apply_time_filter(range)
+    query = Listen |> apply_time_filter(params)
 
     total_plays = Repo.aggregate(query, :count, :id)
 
@@ -242,7 +242,7 @@ defmodule AppApiWeb.StatsController do
     limit = String.to_integer(params["limit"] || "50")
     range = params["range"] || "month"
 
-    query = Listen |> apply_time_filter(range)
+    query = Listen |> apply_time_filter(params)
     total_plays = Repo.aggregate(query, :count, :id)
 
     stats_query =
@@ -332,7 +332,7 @@ defmodule AppApiWeb.StatsController do
     limit = String.to_integer(params["limit"] || "50")
     range = params["range"] || "month"
 
-    query = Listen |> apply_time_filter(range)
+    query = Listen |> apply_time_filter(params)
     total_plays = Repo.aggregate(query, :count, :id)
 
     stats_query =
@@ -394,7 +394,7 @@ defmodule AppApiWeb.StatsController do
     limit = String.to_integer(params["limit"] || "50")
     range = params["range"] || "month"
 
-    query = Listen |> apply_time_filter(range)
+    query = Listen |> apply_time_filter(params)
     total_plays = Repo.aggregate(query, :count, :id)
 
     stats_query =
@@ -458,7 +458,7 @@ defmodule AppApiWeb.StatsController do
 
     query =
       Listen
-      |> apply_time_filter(range)
+      |> apply_time_filter(params)
       |> where([l], not is_nil(l.metadata))
       |> select([l], %{
         metadata: l.metadata,
@@ -549,7 +549,7 @@ defmodule AppApiWeb.StatsController do
 
     query =
       Listen
-      |> apply_time_filter(range)
+      |> apply_time_filter(params)
       |> where([l], not is_nil(l.metadata))
       |> select([l], %{
         metadata: l.metadata,
@@ -639,7 +639,7 @@ defmodule AppApiWeb.StatsController do
     limit = String.to_integer(params["limit"] || "50")
     range = params["range"] || "month"
 
-    query = Listen |> apply_time_filter(range)
+    query = Listen |> apply_time_filter(params)
     total_plays = Repo.aggregate(query, :count, :id)
 
     stats_query =
@@ -681,8 +681,10 @@ defmodule AppApiWeb.StatsController do
   def top_times(conn, params) do
     range = params["range"] || "month"
 
-    query = Listen |> apply_time_filter(range)
+    query = Listen |> apply_time_filter(params)
     total_plays = Repo.aggregate(query, :count, :id)
+
+    days_divisor = get_days_for_range(params)
 
     stats_query =
       query
@@ -691,7 +693,7 @@ defmodule AppApiWeb.StatsController do
         hour:
           fragment("CAST(strftime('%H', datetime(?, 'unixepoch')) AS INTEGER)", l.listened_at),
         plays: count(l.id),
-        avg_per_day: fragment("ROUND(COUNT(*) * 1.0 / ?, 1)", ^get_days_for_range(range))
+        avg_per_day: fragment("ROUND(COUNT(*) * 1.0 / ?, 1)", ^days_divisor)
       })
       |> order_by([l], desc: count(l.id))
       |> limit(24)
@@ -729,7 +731,7 @@ defmodule AppApiWeb.StatsController do
 
     query =
       Listen
-      |> apply_time_filter(range)
+      |> apply_time_filter(params)
       |> where([l], not is_nil(l.duration_ms))
       |> select([l], %{duration_ms: l.duration_ms})
 
@@ -792,6 +794,20 @@ defmodule AppApiWeb.StatsController do
   # HELPER FUNCTIONS
   # ═══════════════════════════════════════════════════════════════
 
+  defp apply_time_filter(query, %{"range" => "custom", "from" => from_param, "to" => to_param}) do
+    query
+    |> maybe_filter_from(from_param)
+    |> maybe_filter_to(to_param)
+  end
+
+  defp apply_time_filter(query, %{"range" => "custom"} = params) do
+    query
+    |> maybe_filter_from(params["from"])
+    |> maybe_filter_to(params["to"])
+  end
+
+  defp apply_time_filter(query, %{"range" => range}), do: apply_time_filter(query, range)
+
   defp apply_time_filter(query, "week") do
     ts = DateTime.utc_now() |> DateTime.add(-7, :day) |> DateTime.to_unix()
     where(query, [l], l.listened_at >= ^ts)
@@ -810,6 +826,47 @@ defmodule AppApiWeb.StatsController do
   defp apply_time_filter(query, "all_time"), do: query
   defp apply_time_filter(query, _), do: query
 
+  defp maybe_filter_from(query, nil), do: query
+  defp maybe_filter_from(query, ""), do: query
+  defp maybe_filter_from(query, from_val) do
+    ts = parse_boundary_timestamp(from_val, :start_of_day)
+    if ts, do: where(query, [l], l.listened_at >= ^ts), else: query
+  end
+
+  defp maybe_filter_to(query, nil), do: query
+  defp maybe_filter_to(query, ""), do: query
+  defp maybe_filter_to(query, to_val) do
+    ts = parse_boundary_timestamp(to_val, :end_of_day)
+    if ts, do: where(query, [l], l.listened_at <= ^ts), else: query
+  end
+
+  defp parse_boundary_timestamp(val, boundary) when is_binary(val) do
+    case Integer.parse(val) do
+      {ts, ""} ->
+        ts
+      _ ->
+        case Date.from_iso8601(val) do
+          {:ok, date} ->
+            time = if boundary == :start_of_day, do: ~T[00:00:00], else: ~T[23:59:59]
+            {:ok, dt} = DateTime.new(date, time, "Etc/UTC")
+            DateTime.to_unix(dt)
+          _ ->
+            case DateTime.from_iso8601(val) do
+              {:ok, dt, _} -> DateTime.to_unix(dt)
+              _ -> nil
+            end
+        end
+    end
+  end
+  defp parse_boundary_timestamp(val, _) when is_integer(val), do: val
+  defp parse_boundary_timestamp(_, _), do: nil
+
+  defp get_days_for_range(%{"range" => "custom", "from" => from_val, "to" => to_val}) do
+    from_ts = parse_boundary_timestamp(from_val, :start_of_day) || 0
+    to_ts = parse_boundary_timestamp(to_val, :end_of_day) || DateTime.to_unix(DateTime.utc_now())
+    max(div(to_ts - from_ts, 86400), 1)
+  end
+  defp get_days_for_range(%{"range" => range}), do: get_days_for_range(range)
   defp get_days_for_range("week"), do: 7
   defp get_days_for_range("month"), do: 30
   defp get_days_for_range("year"), do: 365
@@ -978,6 +1035,69 @@ defmodule AppApiWeb.StatsController do
             else
               start_date = Date.add(today, -29)
               dates = Enum.map(0..29, fn i -> Date.add(start_date, i) |> Date.to_iso8601() end)
+
+              counts =
+                Repo.all(
+                  from(l in query,
+                    where: not is_nil(l.listened_at),
+                    group_by: fragment("DATE(datetime(?, 'unixepoch'))", l.listened_at),
+                    select: %{
+                      date: fragment("DATE(datetime(?, 'unixepoch'))", l.listened_at),
+                      plays: count(l.id)
+                    }
+                  )
+                )
+                |> Enum.map(&{&1.date, &1.plays})
+                |> Map.new()
+
+              Enum.map(dates, fn d -> %{date: d, plays: Map.get(counts, d, 0)} end)
+            end
+
+      "custom" ->
+        # Calculate activity between earliest and latest listen in custom query
+        earliest_ts = Repo.one(from(l in query, where: not is_nil(l.listened_at), select: min(l.listened_at)))
+        latest_ts = Repo.one(from(l in query, where: not is_nil(l.listened_at), select: max(l.listened_at)))
+
+        case {earliest_ts && DateTime.from_unix(earliest_ts), latest_ts && DateTime.from_unix(latest_ts)} do
+          {{:ok, e_dt}, {:ok, l_dt}} ->
+            e_date = DateTime.to_date(e_dt)
+            l_date = DateTime.to_date(l_dt)
+            diff_days = Date.diff(l_date, e_date)
+
+            if diff_days > 60 do
+              # Group by month
+              raw_months =
+                Repo.all(
+                  from(l in query,
+                    where: not is_nil(l.listened_at),
+                    group_by: fragment("strftime('%Y-%m', datetime(?, 'unixepoch'))", l.listened_at),
+                    select: %{
+                      date: fragment("strftime('%Y-%m', datetime(?, 'unixepoch'))", l.listened_at),
+                      plays: count(l.id)
+                    },
+                    order_by: [asc: fragment("strftime('%Y-%m', datetime(?, 'unixepoch'))", l.listened_at)]
+                  )
+                )
+
+              counts = Enum.map(raw_months, &{&1.date, &1.plays}) |> Map.new()
+              first_m = (List.first(raw_months) || %{date: "#{e_date.year}-#{String.pad_leading(to_string(e_date.month), 2, "0")}"}).date
+              [start_y, start_m] = String.split(first_m, "-") |> Enum.map(&String.to_integer/1)
+
+              total_months = max((l_date.year - start_y) * 12 + (l_date.month - start_m), 0)
+
+              all_months =
+                Enum.map(0..total_months, fn offset ->
+                  m_total = start_m + offset
+                  y = start_y + div(m_total - 1, 12)
+                  m = rem(m_total - 1, 12) + 1
+                  "#{y}-#{String.pad_leading(to_string(m), 2, "0")}"
+                end)
+
+              Enum.map(all_months, fn m -> %{date: m, plays: Map.get(counts, m, 0)} end)
+            else
+              # Group by day
+              days_count = max(diff_days, 0)
+              dates = Enum.map(0..days_count, fn i -> Date.add(e_date, i) |> Date.to_iso8601() end)
 
               counts =
                 Repo.all(

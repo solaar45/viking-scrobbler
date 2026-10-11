@@ -1,6 +1,7 @@
 import { SidebarProvider, SidebarInset, SidebarTrigger } from '@/components/ui/sidebar'
 import { Separator } from '@/components/ui/separator'
 import { AppSidebar, OverviewPage, RecentListensPage, StatisticsPage, SettingsPage } from '@/components'
+import { TimeRangeProvider } from '@/context/TimeRangeContext'
 import { useEffect, useState } from 'react'
 
 export default function App() {
@@ -52,22 +53,24 @@ export default function App() {
   const title = getTitle()
 
   return (
-    <SidebarProvider defaultOpen={true}>
-      <AppSidebar />
+    <TimeRangeProvider>
+      <SidebarProvider defaultOpen={true}>
+        <AppSidebar />
 
-      <SidebarInset>
-        {/* Header */}
-        <header className="flex h-16 shrink-0 items-center gap-2 border-b px-4 bg-viking-bg-secondary border-viking-border-default">
-          <SidebarTrigger className="-ml-1 text-viking-text-secondary hover:text-viking-text-primary" />
-          <Separator orientation="vertical" className="mr-2 h-4 bg-viking-border-default" />
-          <span className="font-semibold text-lg text-viking-text-primary">{title}</span>
-        </header>
+        <SidebarInset>
+          {/* Header */}
+          <header className="flex h-16 shrink-0 items-center gap-2 border-b px-4 bg-viking-bg-secondary border-viking-border-default">
+            <SidebarTrigger className="-ml-1 text-viking-text-secondary hover:text-viking-text-primary" />
+            <Separator orientation="vertical" className="mr-2 h-4 bg-viking-border-default" />
+            <span className="font-semibold text-lg text-viking-text-primary">{title}</span>
+          </header>
 
-        {/* Main */}
-        <main className="flex flex-1 flex-col gap-4 p-4 lg:p-6 bg-viking-bg-primary">
-          {renderMain()}
-        </main>
-      </SidebarInset>
-    </SidebarProvider>
+          {/* Main */}
+          <main className="flex flex-1 flex-col gap-4 p-4 lg:p-6 bg-viking-bg-primary">
+            {renderMain()}
+          </main>
+        </SidebarInset>
+      </SidebarProvider>
+    </TimeRangeProvider>
   )
 }
