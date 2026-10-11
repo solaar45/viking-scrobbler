@@ -21,7 +21,8 @@ defmodule AppApi.NavidromeIntegration do
              navidrome_config.username,
              navidrome_config.password,
              listen.artist_name,
-             listen.track_name
+             listen.track_name,
+             listen.release_name
            ) do
       update_listen_with_navidrome_data(listen, song_data)
     else
@@ -467,29 +468,79 @@ defmodule AppApi.NavidromeIntegration do
     end
   end
 
-  defp search_song(navidrome_url, username, password, artist, track) do
+  @doc """
+  Clean track name by stripping featured artists, remastered tags, etc.
+  """
+  def clean_track_name(nil), do: ""
+  def clean_track_name(track) when is_binary(track) do
+    track
+    |> String.replace(~r/\s*[\(\[](?:feat\.?|ft\.?|featuring|with)\s+[^)\]]+[\)\]]/i, "")
+    |> String.replace(~r/\s*-\s*(?:feat\.?|ft\.?|featuring|with)\s+.+$/i, "")
+    |> String.replace(~r/\s*[\(\[](?:remaster(?:ed)?(?:\s+\d{4})?|live|mono|stereo|radio edit|original mix)[\)\]]/i, "")
+    |> String.trim()
+  end
+
+  @doc """
+  Clean artist name by stripping featured artists.
+  """
+  def clean_artist_name(nil), do: ""
+  def clean_artist_name(artist) when is_binary(artist) do
+    artist
+    |> String.replace(~r/\s*[\(\[](?:feat\.?|ft\.?|featuring|with)\s+[^)\]]+[\)\]]/i, "")
+    |> String.replace(~r/\s+(?:feat\.?|ft\.?|featuring|with)\s+.+$/i, "")
+    |> String.trim()
+  end
+
+  defp search_song(navidrome_url, username, password, artist, track, album \\ nil) do
+    clean_t = clean_track_name(track)
+    clean_a = clean_artist_name(artist)
+
+    queries =
+      [
+        # Query 1: Cleaned query (removes feat./noise which breaks Navidrome full-text search)
+        if(clean_t != track or clean_a != artist, do: "#{clean_a} #{clean_t}"),
+        # Query 2: Original query
+        "#{artist} #{track}",
+        # Query 3: Clean track alone
+        clean_t,
+        # Query 4: Clean track + album
+        if(album && album != "", do: "#{clean_t} #{album}")
+      ]
+      |> Enum.reject(&is_nil/1)
+      |> Enum.reject(&(&1 == ""))
+      |> Enum.uniq()
+
+    do_search_queries(navidrome_url, username, password, queries, artist, track)
+  end
+
+  defp do_search_queries(_url, _user, _pass, [], _artist, _track), do: {:error, :no_results}
+
+  defp do_search_queries(url, user, pass, [query | rest], artist, track) do
     params = %{
-      "u" => username,
-      "p" => password,
+      "u" => user,
+      "p" => pass,
       "v" => "1.16.1",
       "c" => "VikingScrobbler",
       "f" => "json",
-      "query" => "#{artist} #{track}",
-      "songCount" => 5
+      "query" => query,
+      "songCount" => 10
     }
 
     query_string = URI.encode_query(params)
-    url = "#{navidrome_url}/rest/search3?#{query_string}"
+    search_url = "#{url}/rest/search3?#{query_string}"
 
-    case HTTPoison.get(url, [], recv_timeout: 5000) do
+    case HTTPoison.get(search_url, [], recv_timeout: 5000) do
       {:ok, %{status_code: 200, body: body}} ->
-        parse_search_response(body, artist, track)
+        case parse_search_response(body, artist, track) do
+          {:ok, song} ->
+            {:ok, song}
 
-      {:ok, %{status_code: code}} ->
-        {:error, "Navidrome HTTP #{code}"}
+          _ ->
+            do_search_queries(url, user, pass, rest, artist, track)
+        end
 
-      {:error, reason} ->
-        {:error, "Request failed: #{inspect(reason)}"}
+      _ ->
+        do_search_queries(url, user, pass, rest, artist, track)
     end
   end
 
@@ -497,11 +548,32 @@ defmodule AppApi.NavidromeIntegration do
     case Jason.decode(body) do
       {:ok, %{"subsonic-response" => %{"searchResult3" => %{"song" => songs}}}}
       when is_list(songs) and length(songs) > 0 ->
+        clean_track = clean_track_name(track) |> String.downcase()
+        clean_artist = clean_artist_name(artist) |> String.downcase()
+        raw_track = String.downcase(track || "")
+        raw_artist = String.downcase(artist || "")
+
         matched_song =
+          # 1. Exact match
           Enum.find(songs, fn song ->
-            String.downcase(song["artist"] || "") == String.downcase(artist) and
-              String.downcase(song["title"] || "") == String.downcase(track)
-          end) || List.first(songs)
+            s_art = String.downcase(song["artist"] || "")
+            s_title = String.downcase(song["title"] || "")
+            s_art == raw_artist and s_title == raw_track
+          end) ||
+          # 2. Normalized match (cleaned artist & track match)
+          Enum.find(songs, fn song ->
+            s_art = clean_artist_name(song["artist"] || "") |> String.downcase()
+            s_title = clean_track_name(song["title"] || "") |> String.downcase()
+            (s_art == clean_artist or s_art == raw_artist) and
+              (s_title == clean_track or s_title == raw_track)
+          end) ||
+          # 3. Partial title match
+          Enum.find(songs, fn song ->
+            s_title = clean_track_name(song["title"] || "") |> String.downcase()
+            s_title == clean_track
+          end) ||
+          # 4. Fallback to first result
+          List.first(songs)
 
         extract_metadata(matched_song)
 

@@ -148,7 +148,8 @@ defmodule AppApi.Enrichment do
         where: l.user_name == ^user_name,
         where:
           fragment("json_extract(?, '$.year') IS NULL", l.metadata) and
-            fragment("json_extract(?, '$.release_year') IS NULL", l.metadata),
+            fragment("json_extract(?, '$.release_year') IS NULL", l.metadata) and
+            fragment("json_extract(?, '$.mb_release_year') IS NULL", l.metadata),
         select: count(l.id)
 
     Repo.one(query)
@@ -158,7 +159,10 @@ defmodule AppApi.Enrichment do
     query =
       from l in Listen,
         where: l.user_name == ^user_name,
-        where: fragment("json_extract(?, '$.navidrome_id') IS NULL", l.metadata),
+        where:
+          fragment("json_extract(?, '$.navidrome_id') IS NULL", l.metadata) and
+            fragment("json_extract(?, '$.coverArt') IS NULL", l.metadata) and
+            fragment("json_extract(?, '$.navidrome_id') IS NULL", l.additional_info),
         select: count(l.id)
 
     Repo.one(query)
@@ -179,9 +183,12 @@ defmodule AppApi.Enrichment do
              )) or
             # Missing year
             (fragment("json_extract(?, '$.year') IS NULL", l.metadata) and
-               fragment("json_extract(?, '$.release_year') IS NULL", l.metadata)) or
+               fragment("json_extract(?, '$.release_year') IS NULL", l.metadata) and
+               fragment("json_extract(?, '$.mb_release_year') IS NULL", l.metadata)) or
             # Missing navidrome_id
-            fragment("json_extract(?, '$.navidrome_id') IS NULL", l.metadata),
+            (fragment("json_extract(?, '$.navidrome_id') IS NULL", l.metadata) and
+               fragment("json_extract(?, '$.coverArt') IS NULL", l.metadata) and
+               fragment("json_extract(?, '$.navidrome_id') IS NULL", l.additional_info)),
         select: count(l.id)
 
     Repo.one(query)
@@ -213,7 +220,8 @@ defmodule AppApi.Enrichment do
         where: l.user_name == ^user_name,
         where:
           fragment("json_extract(?, '$.year') IS NULL", l.metadata) and
-            fragment("json_extract(?, '$.release_year') IS NULL", l.metadata),
+            fragment("json_extract(?, '$.release_year') IS NULL", l.metadata) and
+            fragment("json_extract(?, '$.mb_release_year') IS NULL", l.metadata),
         order_by: [desc: l.listened_at],
         limit: ^limit
 
@@ -224,7 +232,10 @@ defmodule AppApi.Enrichment do
     query =
       from l in Listen,
         where: l.user_name == ^user_name,
-        where: fragment("json_extract(?, '$.navidrome_id') IS NULL", l.metadata),
+        where:
+          fragment("json_extract(?, '$.navidrome_id') IS NULL", l.metadata) and
+            fragment("json_extract(?, '$.coverArt') IS NULL", l.metadata) and
+            fragment("json_extract(?, '$.navidrome_id') IS NULL", l.additional_info),
         order_by: [desc: l.listened_at],
         limit: ^limit
 
@@ -250,9 +261,12 @@ defmodule AppApi.Enrichment do
                )) or
             # Missing year
             (fragment("json_extract(?, '$.year') IS NULL", l.metadata) and
-               fragment("json_extract(?, '$.release_year') IS NULL", l.metadata)) or
+               fragment("json_extract(?, '$.release_year') IS NULL", l.metadata) and
+               fragment("json_extract(?, '$.mb_release_year') IS NULL", l.metadata)) or
             # Missing navidrome_id
-            fragment("json_extract(?, '$.navidrome_id') IS NULL", l.metadata),
+            (fragment("json_extract(?, '$.navidrome_id') IS NULL", l.metadata) and
+               fragment("json_extract(?, '$.coverArt') IS NULL", l.metadata) and
+               fragment("json_extract(?, '$.navidrome_id') IS NULL", l.additional_info)),
         order_by: [desc: l.listened_at],
         limit: ^limit
 
@@ -362,11 +376,12 @@ defmodule AppApi.Enrichment do
   end
 
   defp has_year?(metadata) do
-    metadata["release_year"] || metadata["year"]
+    metadata["release_year"] || metadata["year"] || metadata["mb_release_year"]
   end
 
   defp has_navidrome_id?(metadata) do
-    metadata["navidrome_id"] && metadata["navidrome_id"] != ""
+    (metadata["navidrome_id"] && metadata["navidrome_id"] != "") ||
+      (metadata["coverArt"] && metadata["coverArt"] != "")
   end
 
   defp get_missing_fields(metadata) do
@@ -392,7 +407,7 @@ defmodule AppApi.Enrichment do
 
     fields =
       if !has_year?(old_metadata) && has_year?(new_metadata) do
-        year = new_metadata["year"] || new_metadata["release_year"]
+        year = new_metadata["year"] || new_metadata["release_year"] || new_metadata["mb_release_year"]
         ["year=#{year}" | fields]
       else
         fields
@@ -400,7 +415,8 @@ defmodule AppApi.Enrichment do
 
     fields =
       if !has_navidrome_id?(old_metadata) && has_navidrome_id?(new_metadata) do
-        ["navidrome_id=#{new_metadata["navidrome_id"]}" | fields]
+        id = new_metadata["navidrome_id"] || new_metadata["coverArt"]
+        ["navidrome_id=#{id}" | fields]
       else
         fields
       end
