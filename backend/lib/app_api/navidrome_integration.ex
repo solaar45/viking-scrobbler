@@ -469,14 +469,16 @@ defmodule AppApi.NavidromeIntegration do
   end
 
   @doc """
-  Clean track name by stripping featured artists, remastered tags, etc.
+  Clean track name by stripping quotes, featured artists, remastered tags, etc.
   """
   def clean_track_name(nil), do: ""
   def clean_track_name(track) when is_binary(track) do
     track
+    |> String.replace(~r/^[\s"'“”„«»]+|[\s"'“”„«»]+$/, "")
     |> String.replace(~r/\s*[\(\[](?:feat\.?|ft\.?|featuring|with)\s+[^)\]]+[\)\]]/i, "")
     |> String.replace(~r/\s*-\s*(?:feat\.?|ft\.?|featuring|with)\s+.+$/i, "")
     |> String.replace(~r/\s*[\(\[](?:remaster(?:ed)?(?:\s+\d{4})?|live|mono|stereo|radio edit|original mix)[\)\]]/i, "")
+    |> String.replace(~r/^[\s"'“”„«»]+|[\s"'“”„«»]+$/, "")
     |> String.trim()
   end
 
@@ -486,8 +488,10 @@ defmodule AppApi.NavidromeIntegration do
   def clean_artist_name(nil), do: ""
   def clean_artist_name(artist) when is_binary(artist) do
     artist
+    |> String.replace(~r/^[\s"'“”„«»]+|[\s"'“”„«»]+$/, "")
     |> String.replace(~r/\s*[\(\[](?:feat\.?|ft\.?|featuring|with)\s+[^)\]]+[\)\]]/i, "")
     |> String.replace(~r/\s+(?:feat\.?|ft\.?|featuring|with)\s+.+$/i, "")
+    |> String.replace(~r/^[\s"'“”„«»]+|[\s"'“”„«»]+$/, "")
     |> String.trim()
   end
 
@@ -495,15 +499,25 @@ defmodule AppApi.NavidromeIntegration do
     clean_t = clean_track_name(track)
     clean_a = clean_artist_name(artist)
 
+    stripped_t =
+      clean_t
+      |> String.replace(~r/[^\p{L}\p{N}\s]/u, " ")
+      |> String.replace(~r/\s+/, " ")
+      |> String.trim()
+
     queries =
       [
-        # Query 1: Cleaned query (removes feat./noise which breaks Navidrome full-text search)
-        if(clean_t != track or clean_a != artist, do: "#{clean_a} #{clean_t}"),
+        # Query 1: Cleaned artist + clean track
+        if(clean_t != "" and clean_a != "", do: "#{clean_a} #{clean_t}"),
         # Query 2: Original query
         "#{artist} #{track}",
-        # Query 3: Clean track alone
+        # Query 3: Punctuation-stripped track (e.g. "Ce Sont Des Agitateurs !" -> "Assassin Ce Sont Des Agitateurs")
+        if(stripped_t != "" and stripped_t != clean_t, do: "#{clean_a} #{stripped_t}"),
+        # Query 4: Clean track alone
         clean_t,
-        # Query 4: Clean track + album
+        # Query 5: Stripped track alone
+        if(stripped_t != "" and stripped_t != clean_t, do: stripped_t),
+        # Query 6: Clean track + album
         if(album && album != "", do: "#{clean_t} #{album}")
       ]
       |> Enum.reject(&is_nil/1)
@@ -546,64 +560,76 @@ defmodule AppApi.NavidromeIntegration do
 
   defp parse_search_response(body, artist, track, album \\ nil) do
     case Jason.decode(body) do
-      {:ok, %{"subsonic-response" => %{"searchResult3" => %{"song" => songs}}}}
-      when is_list(songs) and length(songs) > 0 ->
-        clean_track = clean_track_name(track) |> String.downcase()
-        clean_artist = clean_artist_name(artist) |> String.downcase()
-        clean_album = if album, do: String.downcase(album), else: ""
-        raw_track = String.downcase(track || "")
-        raw_artist = String.downcase(artist || "")
+      {:ok, %{"subsonic-response" => %{"searchResult3" => result}}} ->
+        songs =
+          case result["song"] do
+            nil -> []
+            list when is_list(list) -> list
+            single when is_map(single) -> [single]
+          end
 
-        matched_song =
-          # 1. Exact match with same album (Highest confidence)
-          (clean_album != "" &&
-             Enum.find(songs, fn song ->
-               s_art = String.downcase(song["artist"] || "")
-               s_title = String.downcase(song["title"] || "")
-               s_alb = String.downcase(song["album"] || "")
-               (s_art == raw_artist or s_art == clean_artist) and
-                 (s_title == raw_track or s_title == clean_track) and
-                 (s_alb == clean_album or String.contains?(s_alb, clean_album) or String.contains?(clean_album, s_alb))
-             end)) ||
-          # 2. Exact match on artist and title
-          Enum.find(songs, fn song ->
-            s_art = String.downcase(song["artist"] || "")
-            s_title = String.downcase(song["title"] || "")
-            s_art == raw_artist and s_title == raw_track
-          end) ||
-          # 3. Normalized match (cleaned artist & track match)
-          Enum.find(songs, fn song ->
-            s_art = clean_artist_name(song["artist"] || "") |> String.downcase()
-            s_title = clean_track_name(song["title"] || "") |> String.downcase()
-            (s_art == clean_artist or s_art == raw_artist) and
-              (s_title == clean_track or s_title == raw_track)
-          end) ||
-          # 4. Same album + partial title match
-          (clean_album != "" &&
-             Enum.find(songs, fn song ->
-               s_title = clean_track_name(song["title"] || "") |> String.downcase()
-               s_alb = String.downcase(song["album"] || "")
-               s_title == clean_track and
-                 (s_alb == clean_album or String.contains?(s_alb, clean_album))
-             end)) ||
-          # 5. Partial title match
-          Enum.find(songs, fn song ->
-            s_title = clean_track_name(song["title"] || "") |> String.downcase()
-            s_title == clean_track
-          end) ||
-          # 6. Fallback to first result
-          List.first(songs)
+        if length(songs) > 0 do
+          clean_track = clean_track_name(track) |> String.downcase()
+          clean_artist = clean_artist_name(artist) |> String.downcase()
+          clean_album = if album, do: String.downcase(album), else: ""
+          raw_track = String.downcase(track || "")
+          raw_artist = String.downcase(artist || "")
 
-        extract_metadata(matched_song)
+          stripped_track =
+            clean_track
+            |> String.replace(~r/[^\p{L}\p{N}\s]/u, " ")
+            |> String.replace(~r/\s+/, " ")
+            |> String.trim()
 
-      {:ok, %{"subsonic-response" => %{"searchResult3" => %{}}}} ->
-        {:error, :no_results}
+          matched_song =
+            # 1. Exact match with same album (Highest confidence)
+            (clean_album != "" &&
+               Enum.find(songs, fn song ->
+                 s_art = String.downcase(song["artist"] || "")
+                 s_title = String.downcase(song["title"] || "")
+                 s_alb = String.downcase(song["album"] || "")
+                 (s_art == raw_artist or s_art == clean_artist) and
+                   (s_title == raw_track or s_title == clean_track or (stripped_track != "" and String.contains?(s_title, stripped_track))) and
+                   (s_alb == clean_album or String.contains?(s_alb, clean_album) or String.contains?(clean_album, s_alb))
+               end)) ||
+            # 2. Exact match on artist and title
+            Enum.find(songs, fn song ->
+              s_art = String.downcase(song["artist"] || "")
+              s_title = String.downcase(song["title"] || "")
+              (s_art == raw_artist or s_art == clean_artist) and
+                (s_title == raw_track or s_title == clean_track)
+            end) ||
+            # 3. Normalized match (cleaned artist & track match)
+            Enum.find(songs, fn song ->
+              s_art = clean_artist_name(song["artist"] || "") |> String.downcase()
+              s_title = clean_track_name(song["title"] || "") |> String.downcase()
+              (s_art == clean_artist or s_art == raw_artist) and
+                (s_title == clean_track or s_title == raw_track or
+                 (stripped_track != "" and (String.contains?(s_title, stripped_track) or String.contains?(stripped_track, s_title))))
+            end) ||
+            # 4. Same album + partial title match
+            (clean_album != "" &&
+               Enum.find(songs, fn song ->
+                 s_title = clean_track_name(song["title"] || "") |> String.downcase()
+                 s_alb = String.downcase(song["album"] || "")
+                 (s_title == clean_track or (stripped_track != "" and String.contains?(s_title, stripped_track))) and
+                   (s_alb == clean_album or String.contains?(s_alb, clean_album))
+               end)) ||
+            # 5. Partial title match
+            Enum.find(songs, fn song ->
+              s_title = clean_track_name(song["title"] || "") |> String.downcase()
+              s_title == clean_track or (stripped_track != "" and String.contains?(s_title, stripped_track))
+            end) ||
+            # 6. Fallback to first result
+            List.first(songs)
 
-      {:ok, _other} ->
+          extract_metadata(matched_song)
+        else
+          {:error, :no_results}
+        end
+
+      _ ->
         {:error, :invalid_response}
-
-      {:error, reason} ->
-        {:error, {:json_decode, reason}}
     end
   end
 

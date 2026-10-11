@@ -389,13 +389,13 @@ defmodule AppApiWeb.ListenBrainzController do
 
         Task.start(fn ->
           Enum.each(listens_to_enrich, fn listen ->
-            # Enrich metadata (genres, year, cover art) via Navidrome + album sibling inheritance
+            # Enrich metadata (genres, year, bitrate, format, cover art) via Navidrome + album sibling inheritance
             case AppApi.Enrichment.enrich_single_listen(listen) do
-              {:ok, :enriched} ->
-                Logger.debug("✅ Enriched listen: #{listen.track_name}")
+              {:ok, _} ->
+                Logger.info("✅ Enriched listen: #{listen.track_name}")
 
-              _ ->
-                Logger.debug("⚠️ Navidrome/Sibling enrichment not found: #{listen.track_name}")
+              {:error, reason} ->
+                Logger.warning("⚠️ Could not enrich listen #{listen.track_name}: #{inspect(reason)}")
             end
 
             :timer.sleep(150)

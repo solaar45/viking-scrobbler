@@ -273,6 +273,31 @@ defmodule AppApi.Enrichment do
     Repo.all(query)
   end
 
+  # === PUBLIC SINGLE LISTEN ENRICHMENT ===
+
+  @doc """
+  Enrich a single listen (used for live scrobbles):
+  1. Primary: Direct Navidrome Subsonic API lookup (genres, year, bitrate, format, cover)
+  2. Fallback: Album sibling inheritance from other tracks in local database
+  """
+  def enrich_single_listen(%Listen{} = listen) do
+    case NavidromeIntegration.enrich_listen_from_navidrome(listen) do
+      {:ok, updated_listen} ->
+        {:ok, updated_listen}
+
+      {:error, reason} ->
+        Logger.info("⚠️ Navidrome direct lookup failed for #{listen.track_name}: #{inspect(reason)}, checking album siblings...")
+        case inherit_from_album_sibling(listen) do
+          {:ok, updated_listen} ->
+            {:ok, updated_listen}
+
+          {:error, sib_reason} ->
+            Logger.debug("Album sibling inheritance failed for #{listen.track_name}: #{inspect(sib_reason)}")
+            {:error, {:not_found, navidrome: reason, sibling: sib_reason}}
+        end
+    end
+  end
+
   # === PRIVATE: BATCH PROCESSING ===
 
   defp process_batch(listens_with_index, field, total_count) do
@@ -448,22 +473,33 @@ defmodule AppApi.Enrichment do
 
   # === ALBUM SIBLING INHERITANCE ===
 
-  defp inherit_from_album_sibling(%Listen{release_name: album, artist_name: artist} = listen)
-       when is_binary(album) and album != "" and is_binary(artist) and artist != "" do
-    # Search other listens from same album and artist that have metadata
+  @doc """
+  Inherits metadata from other tracks of the same album already stored in the local database.
+  """
+  def inherit_from_album_sibling(%Listen{release_name: album} = listen)
+      when is_binary(album) and album != "" do
+    # Search other listens from same album that have metadata (try same artist first, or any from same album)
+    artist = listen.artist_name || ""
+
     sibling_query =
       from l in Listen,
         where: l.id != ^listen.id and l.user_name == ^listen.user_name,
-        where: l.release_name == ^album and l.artist_name == ^artist,
+        where: l.release_name == ^album,
         where:
           not is_nil(l.metadata) and l.metadata != "{}" and l.metadata != "null" and l.metadata != "",
         order_by: [desc: l.id]
 
     siblings = Repo.all(sibling_query)
 
-    # Find the best sibling that has genres, year, or navidrome_id
+    # Prioritize siblings with same artist if possible, else any sibling on this album
+    sorted_siblings =
+      Enum.sort_by(siblings, fn s ->
+        if artist != "" and s.artist_name == artist, do: 0, else: 1
+      end)
+
+    # Find the best sibling that has genres, year, navidrome_id, or coverArt
     best_donor =
-      Enum.find(siblings, fn s ->
+      Enum.find(sorted_siblings, fn s ->
         meta = parse_metadata(s.metadata)
         has_genres?(meta) or has_year?(meta) or has_navidrome_id?(meta)
       end)
@@ -495,6 +531,16 @@ defmodule AppApi.Enrichment do
           do: donor_meta["coverArt"] || donor_info["coverArt"],
           else: nil
 
+      inherited_bitrate =
+        if is_nil(current_info["originalBitRate"]),
+          do: donor_info["originalBitRate"] || donor_meta["bitrate"],
+          else: nil
+
+      inherited_format =
+        if is_nil(current_info["originalFormat"]),
+          do: donor_info["originalFormat"] || donor_meta["format"],
+          else: nil
+
       new_meta =
         current_meta
         |> maybe_put_field("genres", inherited_genres)
@@ -502,12 +548,16 @@ defmodule AppApi.Enrichment do
         |> maybe_put_field("release_year", inherited_year)
         |> maybe_put_field("navidrome_id", inherited_nav_id)
         |> maybe_put_field("coverArt", inherited_cover_art)
+        |> maybe_put_field("bitrate", inherited_bitrate)
+        |> maybe_put_field("format", inherited_format)
         |> Map.put("source", "album_sibling")
 
       new_info =
         current_info
         |> maybe_put_field("navidrome_id", inherited_nav_id)
         |> maybe_put_field("coverArt", inherited_cover_art)
+        |> maybe_put_field("originalBitRate", inherited_bitrate)
+        |> maybe_put_field("originalFormat", inherited_format)
 
       changeset =
         fresh_listen
@@ -538,7 +588,7 @@ defmodule AppApi.Enrichment do
     end
   end
 
-  defp inherit_from_album_sibling(_), do: {:error, :missing_album_or_artist}
+  def inherit_from_album_sibling(_), do: {:error, :missing_album}
 
   defp maybe_put_field(map, _key, nil), do: map
   defp maybe_put_field(map, _key, []), do: map
