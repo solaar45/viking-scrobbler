@@ -1055,6 +1055,10 @@ defmodule AppApiWeb.StatsController do
               Enum.map(dates, fn d -> %{date: d, plays: Map.get(counts, d, 0)} end)
             end
 
+          _ ->
+            []
+        end
+
       "custom" ->
         # Calculate activity between earliest and latest listen in custom query
         earliest_ts = Repo.one(from(l in query, where: not is_nil(l.listened_at), select: min(l.listened_at)))
